@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { query } = require('../db');
+const dbLoader = require('../db-loader');
 
 /**
  * GET /records?run_id=...&filter=...
@@ -13,67 +13,49 @@ const { query } = require('../db');
  */
 router.get('/records', async (req, res) => {
   try {
-    const { run_id, filter, true_type, pred_type, true_subtype, pred_subtype, limit = 100, offset = 0 } = req.query;
+    const {
+      run_id,
+      run_id1,
+      run_id2,
+      filter,
+      true_type,
+      pred_type,
+      true_subtype,
+      pred_subtype,
+      run1_pred_subtype,
+      run2_pred_subtype,
+      run1_true_subtype,
+      run2_true_subtype,
+      limit = 100,
+      offset = 0,
+    } = req.query;
 
-    if (!run_id) {
-      return res.status(400).json({ error: 'run_id is required' });
+    if (!run_id && !run_id1) {
+      return res.status(400).json({ error: 'run_id or run_id1 is required' });
     }
 
-    let sql = `SELECT * FROM run_results WHERE run_id = $1`;
-    const params = [run_id];
-    let paramIndex = 2;
+    const filters = {
+      run_id: run_id ? parseInt(run_id) : undefined,
+      run_id1: run_id1 ? parseInt(run_id1) : undefined,
+      run_id2: run_id2 ? parseInt(run_id2) : undefined,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    };
 
-    // Apply filters
-    if (filter === 'incorrect') {
-      sql += ` AND (true_type != pred_type OR true_subtype != pred_subtype)`;
-    }
+    if (true_type) filters.true_type = true_type;
+    if (pred_type) filters.pred_type = pred_type;
+    if (true_subtype) filters.true_subtype = true_subtype;
+    if (pred_subtype) filters.pred_subtype = pred_subtype;
+    if (run1_pred_subtype) filters.run1_pred_subtype = run1_pred_subtype;
+    if (run2_pred_subtype) filters.run2_pred_subtype = run2_pred_subtype;
+    if (run1_true_subtype) filters.run1_true_subtype = run1_true_subtype;
+    if (run2_true_subtype) filters.run2_true_subtype = run2_true_subtype;
 
-    if (true_type) {
-      sql += ` AND true_type = $${paramIndex}`;
-      params.push(true_type);
-      paramIndex++;
-    }
+    console.log('Records API called with filters:', JSON.stringify(filters, null, 2));
 
-    if (pred_type) {
-      sql += ` AND pred_type = $${paramIndex}`;
-      params.push(pred_type);
-      paramIndex++;
-    }
+    const result = await dbLoader.getRecords(filters);
 
-    if (true_subtype) {
-      sql += ` AND true_subtype = $${paramIndex}`;
-      params.push(true_subtype);
-      paramIndex++;
-    }
-
-    if (pred_subtype) {
-      sql += ` AND pred_subtype = $${paramIndex}`;
-      params.push(pred_subtype);
-      paramIndex++;
-    }
-
-    // Count total
-    const countResult = await query(
-      sql.replace(/SELECT \*/, 'SELECT COUNT(*) as total'),
-      params
-    );
-    const total = parseInt(countResult.rows[0].total);
-
-    // Fetch paginated results
-    sql += ` ORDER BY id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    params.push(limit, offset);
-
-    const result = await query(sql, params);
-
-    res.json({
-      data: result.rows,
-      pagination: {
-        total,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        count: result.rows.length,
-      },
-    });
+    res.json(result);
   } catch (error) {
     console.error('Error fetching records:', error);
     res.status(500).json({ error: 'Failed to fetch records' });
@@ -87,17 +69,15 @@ router.get('/records', async (req, res) => {
 router.get('/records/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const result = await dbLoader.getRecords({ limit: 1, offset: 0 });
+    const allRecords = result.data;
+    const record = allRecords.find(r => r.id === parseInt(id));
 
-    const result = await query(
-      `SELECT * FROM run_results WHERE id = $1`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
+    if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(record);
   } catch (error) {
     console.error('Error fetching record:', error);
     res.status(500).json({ error: 'Failed to fetch record' });

@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { query } = require('../db');
+const dbLoader = require('../db-loader');
 
 /**
  * GET /leaderboard?benchmark_id=...
@@ -19,24 +19,8 @@ router.get('/leaderboard', async (req, res) => {
       return res.status(400).json({ error: 'benchmark_id is required' });
     }
 
-    const result = await query(
-      `SELECT 
-        l.run_id,
-        r.run_name,
-        r.model_version,
-        l.benchmark_length,
-        l.subtype_accuracy,
-        l.subtype_f1_weighted,
-        l.type_f1_weighted,
-        l.created_at
-      FROM leaderboard l
-      JOIN runs r ON l.run_id = r.id
-      WHERE l.benchmark_id = $1
-      ORDER BY l.subtype_accuracy DESC, l.created_at DESC`,
-      [benchmark_id]
-    );
-
-    res.json(result.rows);
+    const data = await dbLoader.getLeaderboardByBenchmarkId(parseInt(benchmark_id));
+    res.json(data);
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
@@ -49,10 +33,8 @@ router.get('/leaderboard', async (req, res) => {
  */
 router.get('/benchmarks', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT id, name, created_at FROM benchmarks ORDER BY name ASC`
-    );
-    res.json(result.rows);
+    const data = await dbLoader.getAllBenchmarks();
+    res.json(data);
   } catch (error) {
     console.error('Error fetching benchmarks:', error);
     res.status(500).json({ error: 'Failed to fetch benchmarks' });

@@ -1,11 +1,12 @@
 /**
  * Seed Database with Mock Data
  * Generates and inserts 2-3 benchmarks with realistic mock data
+ * Creates transitions between runs by using same records with different predictions
  */
 
 require('dotenv').config();
 const { query, getClient } = require('../db');
-const { generateBenchmarkData, calculateMetrics, generateTaxonomy } = require('./mockDataGenerator');
+const { generateBenchmarkData, calculateMetrics, generateTaxonomy, generateTransitionVariant } = require('./mockDataGenerator');
 
 async function seedDatabase() {
   const client = await getClient();
@@ -33,13 +34,15 @@ async function seedDatabase() {
 
     // Generate taxonomy once
     const taxonomy = generateTaxonomy();
+    const { subtypeMap } = taxonomy;
 
     // Create runs and insert data for each benchmark
     for (let bIdx = 0; bIdx < benchmarkIds.length; bIdx++) {
       const benchmarkId = benchmarkIds[bIdx];
 
       // Create 2-3 runs per benchmark
-      const runsPerBenchmark = bIdx === 2 ? 2 : 3;
+      const runsPerBenchmark = bIdx === 2 ? 3 : 3;  // Test benchmark gets 3 runs too
+      let baselineData = null;
 
       for (let rIdx = 0; rIdx < runsPerBenchmark; rIdx++) {
         const runName = `model_v${rIdx + 1}`;
@@ -52,8 +55,17 @@ async function seedDatabase() {
         );
         const runId = runResult.rows[0].id;
 
-        // Generate mock data
-        const mockData = generateBenchmarkData(taxonomy, 2000);
+        // Generate or modify mock data
+        let mockData;
+        if (rIdx === 0) {
+          // First run: generate baseline data
+          mockData = generateBenchmarkData(taxonomy, 2000);
+          baselineData = mockData;
+        } else {
+          // Subsequent runs: create variants of baseline data to generate transitions
+          mockData = baselineData.map(record => generateTransitionVariant(record, subtypeMap, 0.50));
+        }
+
         const metrics = calculateMetrics(mockData);
 
         console.log(

@@ -34,7 +34,7 @@ cp .env.example .env
 # Edit .env with your database credentials
 
 # Create database and schema
-psql -U postgres -f db/schema.sql
+sudo -u postgres psql -f db/schema.sql
 
 # Seed database with mock data
 npm run mock-seed

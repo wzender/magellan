@@ -151,6 +151,23 @@ function generateBenchmarkData(taxonomy, numRecords = 2000) {
 }
 
 /**
+ * Generate variation of predictions for a record to create transitions
+ * Keeps base record but modifies predictions
+ */
+function generateTransitionVariant(record, subtypeMap, variationStrength = 0.3) {
+  const variant = { ...record };
+
+  // Occasionally change the prediction (based on variationStrength)
+  if (Math.random() < variationStrength) {
+    const types = Object.keys(subtypeMap);
+    variant.pred_type = types[Math.floor(Math.random() * types.length)];
+    variant.pred_subtype = subtypeMap[variant.pred_type][Math.floor(Math.random() * subtypeMap[variant.pred_type].length)];
+  }
+
+  return variant;
+}
+
+/**
  * Calculate leaderboard metrics from results
  */
 function calculateMetrics(records) {
@@ -242,4 +259,5 @@ module.exports = {
   calculateMetrics,
   generateAttributes,
   generateMetadata,
+  generateTransitionVariant,
 };
