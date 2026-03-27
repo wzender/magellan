@@ -19,13 +19,8 @@ router.get('/confusion-matrix', async (req, res) => {
       return res.status(400).json({ error: 'run_id is required' });
     }
 
-    const typeMatrix = await dbLoader.getConfusionMatrix(parseInt(run_id), 'type');
-    const subtypeMatrix = await dbLoader.getConfusionMatrix(parseInt(run_id), 'subtype');
-
-    res.json({
-      type_matrix: typeMatrix,
-      subtype_matrix: subtypeMatrix,
-    });
+    const data = await dbLoader.getConfusionMatrix(parseInt(run_id));
+    res.json(data);
   } catch (error) {
     console.error('Error calculating confusion matrix:', error);
     res.status(500).json({ error: 'Failed to calculate confusion matrix' });

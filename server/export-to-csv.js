@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { stringify } = require('csv-stringify/sync');
 const dbLoader = require('./db-loader');
+const { query } = require('./db');
 
 async function exportToCSV() {
   const dataDir = path.join(__dirname, '../data');
@@ -45,11 +46,11 @@ async function exportToCSV() {
     fs.writeFileSync(path.join(dataDir, 'leaderboard.csv'), leaderboardCsv);
     console.log(`✓ Exported ${leaderboard.length} leaderboard entries`);
 
-    // Export run_results (assuming there's a function)
-    // For now, create empty or skip if not implemented
-    const runResultsCsv = 'id,run_id,true_type,true_subtype,pred_type,pred_subtype,attributes\n';
+    // Export run_results
+    const runResultsResult = await query('SELECT * FROM run_results ORDER BY id');
+    const runResultsCsv = stringify(runResultsResult.rows, { header: true });
     fs.writeFileSync(path.join(dataDir, 'run_results.csv'), runResultsCsv);
-    console.log('✓ Created empty run_results.csv (implement if needed)');
+    console.log(`✓ Exported ${runResultsResult.rows.length} run results`);
 
     console.log('✓ Export completed successfully');
   } catch (error) {

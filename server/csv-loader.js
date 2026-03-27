@@ -274,6 +274,32 @@ function getRecords(filters = {}) {
   };
 }
 
+function getSubtypeMatrixForTypePair(runId, trueType, predType) {
+  const data = loadData();
+  const results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType && r.pred_type === predType);
+
+  const subtypes = new Set();
+  results.forEach(r => {
+    subtypes.add(r.true_subtype);
+    subtypes.add(r.pred_subtype);
+  });
+  const subtypeArray = Array.from(subtypes).sort();
+
+  const matrixData = {};
+  subtypeArray.forEach(t => {
+    matrixData[t] = {};
+    subtypeArray.forEach(p => {
+      matrixData[t][p] = results.filter(r => r.true_subtype === t && r.pred_subtype === p).length;
+    });
+  });
+
+  return {
+    rows: subtypeArray,
+    cols: subtypeArray,
+    data: matrixData,
+  };
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -282,6 +308,7 @@ module.exports = {
   getRun,
   getLeaderboardByBenchmarkId,
   getConfusionMatrix,
+  getSubtypeMatrixForTypePair,
   getTransitionMatrix,
   getRecords,
 };
