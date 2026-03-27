@@ -250,15 +250,79 @@ function getTransitionMatrix(runId1, runId2, minCount = 1) {
 
 function getRecords(filters = {}) {
   const data = loadData();
-  let results = data.run_results;
 
+  // Transition mode (two runs): join by record_id and include run2 fields
+  if (filters.run_id2) {
+    const runId1 = filters.run_id1 || filters.run_id;
+    const runId2 = filters.run_id2;
+
+    let run1Records = data.run_results.filter(r => r.run_id === runId1);
+    const run2Map = data.run_results
+      .filter(r => r.run_id === runId2)
+      .reduce((acc, r) => {
+        acc[r.record_id] = r;
+        return acc;
+      }, {});
+
+    let combined = run1Records
+      .map(r1 => {
+        const r2 = run2Map[r1.record_id];
+        if (!r2) return null;
+        return {
+          ...r1,
+          run2_true_type: r2.true_type,
+          run2_pred_type: r2.pred_type,
+          run2_true_subtype: r2.true_subtype,
+          run2_pred_subtype: r2.pred_subtype,
+        };
+      })
+      .filter(r => r !== null);
+
+    // Default transition matrix intent: changed subtype
+    combined = combined.filter(r => r.pred_subtype !== r.run2_pred_subtype);
+
+    if (filters.run1_pred_subtype) {
+      combined = combined.filter(r => r.pred_subtype === filters.run1_pred_subtype);
+    }
+    if (filters.run2_pred_subtype) {
+      combined = combined.filter(r => r.run2_pred_subtype === filters.run2_pred_subtype);
+    }
+    if (filters.run1_true_subtype) {
+      combined = combined.filter(r => r.true_subtype === filters.run1_true_subtype);
+    }
+    if (filters.run2_true_subtype) {
+      combined = combined.filter(r => r.run2_true_subtype === filters.run2_true_subtype);
+    }
+    if (filters.true_type) {
+      combined = combined.filter(r => r.true_type === filters.true_type);
+    }
+    if (filters.pred_type) {
+      combined = combined.filter(r => r.pred_type === filters.pred_type);
+    }
+
+    const limit = filters.limit || 100;
+    const offset = filters.offset || 0;
+    const total = combined.length;
+    const pageData = combined.slice(offset, offset + limit);
+
+    return {
+      data: pageData,
+      pagination: {
+        total,
+        limit,
+        offset,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  // Single-run mode
+  let results = data.run_results;
   if (filters.run_id) results = results.filter(r => r.run_id === filters.run_id);
   if (filters.true_type) results = results.filter(r => r.true_type === filters.true_type);
   if (filters.pred_type) results = results.filter(r => r.pred_type === filters.pred_type);
-  if (filters.true_subtype)
-    results = results.filter(r => r.true_subtype === filters.true_subtype);
-  if (filters.pred_subtype)
-    results = results.filter(r => r.pred_subtype === filters.pred_subtype);
+  if (filters.true_subtype) results = results.filter(r => r.true_subtype === filters.true_subtype);
+  if (filters.pred_subtype) results = results.filter(r => r.pred_subtype === filters.pred_subtype);
 
   const limit = filters.limit || 100;
   const offset = filters.offset || 0;
