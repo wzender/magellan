@@ -34,28 +34,38 @@ cp .env.example .env
 # Edit .env with your database credentials
 
 # Create database and schema
-sudo -u postgres psql -f db/schema.sql
+# sudo -u postgres psql -f db/schema.sql
+node setup-db.js
 
 # Seed database with mock data
 npm run mock-seed
 
-# Start development server
-npm run dev
+# create client
+cd client
+npm run build
 
-# Start frontend (in separate terminal)
-npm run dev:frontend
-```
+# run sevrer
+# from root dir
+npm start
 
-### Running Tests
-```bash
-# Run all tests
-npm test
 
-# Run backend tests only
-npm run test:backend
+# # Start development server
+# npm run dev
 
-# Run frontend tests only
-npm run test:frontend
+# # Start frontend (in separate terminal)
+# npm run dev:frontend
+# ```
+
+# ### Running Tests
+# ```bash
+# # Run all tests
+# npm test
+
+# # Run backend tests only
+# npm run test:backend
+
+# # Run frontend tests only
+# npm run test:frontend
 ```
 
 ## Project Structure
