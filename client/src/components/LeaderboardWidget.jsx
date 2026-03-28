@@ -171,20 +171,29 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
             >
               {columns.map(col => {
                 switch (col.key) {
-                  case 'select':
+                  case 'select': {
+                    const isChecked = selectedRuns.includes(row.run_id);
+                    const isDisabled = selectedRuns.length >= 2 && !isChecked;
                     return (
-                      <td key={`${row.run_id}-${col.key}`}>
+                      <td
+                        key={`${row.run_id}-${col.key}`}
+                        className={`select-cell ${isDisabled ? 'select-cell-disabled' : ''}`}
+                        title={isDisabled ? 'Uncheck one of the selected runs first — comparison is limited to 2 runs' : undefined}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (!isDisabled) onRunToggle && onRunToggle(row.run_id);
+                        }}
+                      >
                         <input
                           type="checkbox"
-                          checked={selectedRuns.includes(row.run_id)}
-                          disabled={selectedRuns.length >= 2 && !selectedRuns.includes(row.run_id)}
-                          onChange={(event) => {
-                            event.stopPropagation();
-                            onRunToggle && onRunToggle(row.run_id);
-                          }}
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          readOnly
+                          tabIndex={-1}
                         />
                       </td>
                     );
+                  }
                   case 'rank':
                     return <td key={`${row.run_id}-${col.key}`}>{idx + 1}</td>;
                   case 'run_name':
@@ -207,6 +216,9 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
           ))}
         </tbody>
       </table>
+      <div className="leaderboard-hint">
+        Click a row to view its <strong>Confusion Matrix</strong>. Check up to 2 runs to compare them in the <strong>Transition Matrix</strong>.
+      </div>
     </div>
   );
 }

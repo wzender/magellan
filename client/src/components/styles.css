@@ -223,6 +223,25 @@ select:focus {
   letter-spacing: 0.08em;
 }
 
+.leaderboard-hint {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.select-cell {
+  cursor: pointer;
+  text-align: center;
+  user-select: none;
+}
+.select-cell input[type="checkbox"] {
+  pointer-events: none;
+}
+.select-cell-disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .leaderboard-table {
   width: 100%;
   border-collapse: collapse;
