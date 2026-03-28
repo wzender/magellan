@@ -8,3 +8,4 @@ id,run_id,benchmark_id,benchmark_length,subtype_accuracy,subtype_f1_weighted,typ
 7,7,3,2000,0.0585,0.0585,0.7455,model_v1,1.0.0
 8,8,3,2000,0.0345,0.0345,0.3990,model_v2,1.1.0
 9,9,3,2000,0.0320,0.0320,0.4010,model_v3,1.2.0
+10,10,3,2000,1.0,1.0,1.0,perfect model,perfect

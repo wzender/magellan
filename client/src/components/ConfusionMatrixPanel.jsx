@@ -1,7 +1,28 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
 function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData }) {
+  const [shameFilter, setShameFilter] = useState(null);
+
+  const shameList = useMemo(() => {
+    if (!recordsData?.data) return [];
+    const counts = {};
+    recordsData.data.forEach(r => {
+      if (r.pred_subtype !== r.true_subtype) {
+        counts[r.true_subtype] = (counts[r.true_subtype] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [recordsData]);
+
+  const displayRecords = useMemo(() => {
+    if (!shameFilter || !recordsData?.data) return recordsData;
+    const rows = recordsData.data.filter(r =>
+      r.true_subtype === shameFilter && r.pred_subtype !== r.true_subtype
+    );
+    return { ...recordsData, data: rows, pagination: { ...recordsData.pagination, total: rows.length } };
+  }, [recordsData, shameFilter]);
+
   if (loading) return <div className="loading">Loading confusion matrix...</div>;
   if (!data) return <div className="no-data">No data available</div>;
 
@@ -37,6 +58,18 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
     return { cursor: 'pointer', backgroundColor: row === col ? `rgba(40,167,69,${alpha})` : `rgba(0,102,204,${alpha})` };
   };
 
+  const LOW_SUPPORT = 10;
+
+  const getRowTotal = (matrixData, row, cols) =>
+    cols.reduce((sum, col) => sum + (matrixData[row]?.[col] ?? 0), 0);
+
+  const isAsymmetric = (matrixData, row, col) => {
+    if (row === col) return false;
+    const fwd = matrixData[row]?.[col] ?? 0;
+    const rev = matrixData[col]?.[row] ?? 0;
+    return fwd >= 3 && fwd > rev * 2;
+  };
+
   return (
     <div className="matrix-view">
 
@@ -60,29 +93,37 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
               </tr>
             </thead>
             <tbody>
-              {data.type_matrix.rows.map(row => (
+              {data.type_matrix.rows.map(row => {
+                const rowTotal = getRowTotal(data.type_matrix.data, row, data.type_matrix.cols);
+                const lowSupport = rowTotal > 0 && rowTotal < LOW_SUPPORT;
+                return (
                 <tr key={row}>
-                  <th>
+                  <th title={lowSupport ? `Low support: only ${rowTotal} samples` : undefined}>
                     <span className="matrix-th-label" data-tooltip={row}>
                       {row.length > 10 ? row.substring(0, 10) + '…' : row}
                     </span>
+                    {lowSupport && <span className="low-support-warn" title={`Low support: only ${rowTotal} samples`}>⚠</span>}
                   </th>
                   {data.type_matrix.cols.map(col => {
                     const value = data.type_matrix.data[row][col];
                     const isSelected = selectedTypePair?.true === row && selectedTypePair?.pred === col;
+                    const asymmetric = isAsymmetric(data.type_matrix.data, row, col);
                     return (
                       <td
                         key={`${row}-${col}`}
                         className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'} ${row === col ? 'diagonal-cell' : ''}`}
                         onClick={() => value > 0 && handleTypeClick(row, col)}
                         style={getCellStyle(value, row, col, isSelected, typeMaxValue)}
+                        title={asymmetric ? `Asymmetric: ${value} (${row}→${col}) vs ${data.type_matrix.data[col]?.[row] ?? 0} (${col}→${row})` : undefined}
                       >
                         {value}
+                        {asymmetric && <span className="asymmetry-arrow">→</span>}
                       </td>
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -119,29 +160,37 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                 </tr>
               </thead>
               <tbody>
-                {subtypeMatrix.rows.map(row => (
+                {subtypeMatrix.rows.map(row => {
+                  const rowTotal = getRowTotal(subtypeMatrix.data, row, subtypeMatrix.cols);
+                  const lowSupport = rowTotal > 0 && rowTotal < LOW_SUPPORT;
+                  return (
                   <tr key={row}>
-                    <th>
+                    <th title={lowSupport ? `Low support: only ${rowTotal} samples` : undefined}>
                       <span className="matrix-th-label" data-tooltip={row}>
                         {row.length > 15 ? row.substring(0, 15) + '…' : row}
                       </span>
+                      {lowSupport && <span className="low-support-warn" title={`Low support: only ${rowTotal} samples`}>⚠</span>}
                     </th>
                     {subtypeMatrix.cols.map(col => {
                       const value = subtypeMatrix.data[row][col];
                       const isSelected = selectedCell?.trueSubtype === row && selectedCell?.predSubtype === col;
+                      const asymmetric = isAsymmetric(subtypeMatrix.data, row, col);
                       return (
                         <td
                           key={`${row}-${col}`}
                           className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'} ${row === col ? 'diagonal-cell' : ''}`}
                           onClick={() => value > 0 && onSubtypeCellClick(row, col)}
                           style={getCellStyle(value, row, col, isSelected, subtypeMaxValue)}
+                          title={asymmetric ? `Asymmetric: ${value} (${row}→${col}) vs ${subtypeMatrix.data[col]?.[row] ?? 0} (${col}→${row})` : undefined}
                         >
                           {value}
+                          {asymmetric && <span className="asymmetry-arrow">→</span>}
                         </td>
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           ) : (
@@ -153,13 +202,39 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
       {/* ── Records section ── */}
       {recordsData && (
         <div className="records-section">
+          {shameList.length > 0 && (
+            <div className="persistent-errors-bar">
+              <span className="persistent-errors-label">Most misclassified:</span>
+              {shameList.map(([subtype, count]) => (
+                <span
+                  key={subtype}
+                  className={`persistent-errors-badge ${shameFilter === subtype ? 'persistent-errors-active' : ''}`}
+                  title={shameFilter === subtype ? 'Click to clear filter' : `Click to see ${count} misclassified "${subtype}" records`}
+                  onClick={() => setShameFilter(shameFilter === subtype ? null : subtype)}
+                >
+                  {subtype} ({count})
+                </span>
+              ))}
+              {shameFilter && (
+                <span className="persistent-errors-clear" onClick={() => setShameFilter(null)}>✕ clear</span>
+              )}
+            </div>
+          )}
           <div className="records-section-header">
             <span className="records-section-title">Record Details</span>
-            {selectedCell && (
-              <span className="drawer-filter">{selectedCell.trueSubtype} → {selectedCell.predSubtype}</span>
+            {(selectedCell || shameFilter) && (
+              <span className="drawer-filter">
+                {selectedCell ? `${selectedCell.trueSubtype} → ${selectedCell.predSubtype}` : ''}
+                {shameFilter && ` · misclassified: ${shameFilter}`}
+              </span>
             )}
           </div>
-          <RowLevelTable data={recordsData} showRun2Columns={false} selectedCell={selectedCell} />
+          <RowLevelTable
+            key={`${selectedCell?.trueSubtype || 'none'}-${shameFilter || ''}`}
+            data={displayRecords}
+            showRun2Columns={false}
+            selectedCell={selectedCell}
+          />
         </div>
       )}
 

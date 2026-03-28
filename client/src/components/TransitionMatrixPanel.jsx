@@ -3,23 +3,47 @@ import RowLevelTable from './RowLevelTable';
 
 function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [] }) {
   const [indicatorFilter, setIndicatorFilter] = useState(null);
+  const [persistentFilter, setPersistentFilter] = useState(null);
 
   useEffect(() => {
     setIndicatorFilter(null);
+    setPersistentFilter(null);
   }, [data]);
 
   const displayRecords = useMemo(() => {
-    if (!indicatorFilter || !recordsData?.data) return recordsData;
-    const filteredRows = recordsData.data.filter(row => {
-      const r1Correct = row.pred_subtype === row.true_subtype;
-      const r2Correct = row.run2_pred_subtype === row.true_subtype;
-      if (indicatorFilter === 'run1-correct') return r1Correct && !r2Correct;
-      if (indicatorFilter === 'run2-correct') return r2Correct && !r1Correct;
-      if (indicatorFilter === 'both-wrong') return !r1Correct && !r2Correct;
-      return true;
+    if (!recordsData?.data) return recordsData;
+    let rows = recordsData.data;
+    if (indicatorFilter) {
+      rows = rows.filter(row => {
+        const r1Correct = row.pred_subtype === row.true_subtype;
+        const r2Correct = row.run2_pred_subtype === row.true_subtype;
+        if (indicatorFilter === 'run1-correct') return r1Correct && !r2Correct;
+        if (indicatorFilter === 'run2-correct') return r2Correct && !r1Correct;
+        if (indicatorFilter === 'both-wrong') return !r1Correct && !r2Correct;
+        return true;
+      });
+    }
+    if (persistentFilter) {
+      rows = rows.filter(row =>
+        row.true_subtype === persistentFilter &&
+        row.pred_subtype !== row.true_subtype &&
+        row.run2_pred_subtype !== row.true_subtype
+      );
+    }
+    return { ...recordsData, data: rows, pagination: { ...recordsData.pagination, total: rows.length } };
+  }, [recordsData, indicatorFilter, persistentFilter]);
+
+  // #9: persistent errors — true subtypes most frequently wrong in both models
+  const persistentErrors = useMemo(() => {
+    if (!recordsData?.data) return [];
+    const counts = {};
+    recordsData.data.forEach(r => {
+      if (r.pred_subtype !== r.true_subtype && r.run2_pred_subtype !== r.true_subtype) {
+        counts[r.true_subtype] = (counts[r.true_subtype] || 0) + 1;
+      }
     });
-    return { ...recordsData, data: filteredRows, pagination: { ...recordsData.pagination, total: filteredRows.length } };
-  }, [recordsData, indicatorFilter]);
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  }, [recordsData]);
 
   if (loading) return <div className="loading">Loading transition matrix...</div>;
   if (!data || !data.data) return <div className="no-data">No data available</div>;
@@ -85,7 +109,16 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
       {/* ── Transition Matrix Panel ── */}
       <div className="matrix-panel">
         <div className="matrix-panel-header">
-          <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
+          <div className="matrix-panel-title-row">
+            <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
+            {indicatorTotals.total > 0 && (() => {
+              const delta = indicatorTotals.run2Correct - indicatorTotals.run1Correct;
+              const cls = delta > 0 ? 'net-positive' : delta < 0 ? 'net-negative' : 'net-neutral';
+              const label = delta > 0 ? `▲ +${delta} net improvement` : delta < 0 ? `▼ ${delta} net regression` : '= no net change';
+              const title = `${runNameRight} correct: ${indicatorTotals.run2Correct}, ${runNameLeft} correct: ${indicatorTotals.run1Correct}`;
+              return <span className={`net-delta-badge ${cls}`} title={title}>{label}</span>;
+            })()}
+          </div>
           <div className="correctness-legend inline-legend">
             <span className={`legend-item ${indicatorFilter === null ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(null)}>
               All ({indicatorTotals.total})
@@ -162,19 +195,38 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
       {/* ── Records section (full-height, below drawer) ── */}
       {recordsData && (
         <div className="records-section">
+          {persistentErrors.length > 0 && (
+            <div className="persistent-errors-bar">
+              <span className="persistent-errors-label">Persistent failures (both models):</span>
+              {persistentErrors.map(([subtype, count]) => (
+                <span
+                  key={subtype}
+                  className={`persistent-errors-badge ${persistentFilter === subtype ? 'persistent-errors-active' : ''}`}
+                  title={persistentFilter === subtype ? 'Click to clear filter' : `Click to inspect ${count} records where both models failed on "${subtype}"`}
+                  onClick={() => setPersistentFilter(persistentFilter === subtype ? null : subtype)}
+                >
+                  {subtype} ({count})
+                </span>
+              ))}
+              {persistentFilter && (
+                <span className="persistent-errors-clear" onClick={() => setPersistentFilter(null)}>✕ clear</span>
+              )}
+            </div>
+          )}
           <div className="records-section-header">
             <span className="records-section-title">Record Details</span>
-            {(selectedCell || indicatorFilter) && (
+            {(selectedCell || indicatorFilter || persistentFilter) && (
               <span className="drawer-filter">
                 {selectedCell ? `${selectedCell.run1}${selectedCell.run2 ? ` → ${selectedCell.run2}` : ''}` : ''}
                 {indicatorFilter === 'run1-correct' && ` · ${selectedRunNames[0] || 'Run 1'} correct only`}
                 {indicatorFilter === 'run2-correct' && ` · ${selectedRunNames[1] || 'Run 2'} correct only`}
                 {indicatorFilter === 'both-wrong' && ' · both wrong'}
+                {persistentFilter && ` · persistent: ${persistentFilter}`}
               </span>
             )}
           </div>
           <RowLevelTable
-            key={`${selectedCell?.run1 || 'none'}-${selectedCell?.run2 || 'none'}-${indicatorFilter || 'all'}`}
+            key={`${selectedCell?.run1 || 'none'}-${selectedCell?.run2 || 'none'}-${indicatorFilter || 'all'}-${persistentFilter || ''}`}
             data={displayRecords}
             showRun2Columns={true}
             selectedCell={selectedCell}

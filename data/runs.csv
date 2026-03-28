@@ -8,3 +8,4 @@ id,benchmark_id,run_name,model_version,created_at
 7,3,model_v1,1.0.0,1774629224946
 8,3,model_v2,1.1.0,1774629225173
 9,3,model_v3,1.2.0,1774629225336
+10,3,perfect model,perfect,1774629225500

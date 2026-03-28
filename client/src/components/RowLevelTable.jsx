@@ -83,14 +83,16 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setColumns(getDefaultColumns(showRun2Columns, run1Name, run2Name));
   }, [showRun2Columns, run1Name, run2Name]);
 
-  // Reset pagination, sorting, and expanded rows when data changes
+  // Reset pagination, sorting, filters and expanded rows when data changes
   useEffect(() => {
     setCurrentPage(0);
     setSortConfig({ key: null, direction: 'asc' });
     setExpandedRows(new Set());
     setPageSize(20);
+    setColumnFilters({});
   }, [data]);
 
+  const [columnFilters, setColumnFilters] = useState({});
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
   const [resizeStartX, setResizeStartX] = useState(0);
@@ -113,7 +115,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     });
   };
 
-  const sortedData = getSortedData();
+  const sortedData = getSortedData().filter(record =>
+    Object.entries(columnFilters).every(([key, val]) =>
+      !val || String(record[key] ?? '').toLowerCase().includes(val.toLowerCase())
+    )
+  );
   const effectivePageSize = pageSize === 'All' ? sortedData.length : pageSize;
   const pageData = sortedData.slice(currentPage * effectivePageSize, (currentPage + 1) * effectivePageSize);
   const totalPages = pageSize === 'All' ? 1 : Math.ceil(sortedData.length / effectivePageSize);
@@ -290,6 +296,24 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                 })}
               </tr>
             ))}
+            <tr className="column-filter-row">
+              {columns.columns.map((col, i) => (
+                <th key={`filter-${i}`}>
+                  {col.key && col.key !== '_expand' ? (
+                    <input
+                      className="column-filter-input"
+                      type="text"
+                      placeholder="filter…"
+                      value={columnFilters[col.key] || ''}
+                      onChange={e => {
+                        setCurrentPage(0);
+                        setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }));
+                      }}
+                    />
+                  ) : null}
+                </th>
+              ))}
+            </tr>
           </thead>
           <tbody>
             {pageData.map(record => {
