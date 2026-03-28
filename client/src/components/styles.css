@@ -798,33 +798,27 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   background: #f8faff;
 }
 
-/* Expand toggle */
-.expand-toggle-cell {
-  padding: 0 0.2rem !important;
-  text-align: center;
-  vertical-align: middle;
-  width: 28px;
+/* JSON inline cell */
+.json-td {
+  vertical-align: top;
+  padding: 0.3rem 0.4rem !important;
 }
 
-.expand-toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--text-faint);
-  padding: 0.15rem 0.25rem;
-  border-radius: 3px;
-  line-height: 1;
-  transition: color 0.12s, background 0.12s;
+.json-cell-wrapper {
+  position: relative;
 }
 
-.expand-toggle:hover {
-  color: var(--primary);
-  background: var(--primary-light);
+.json-cell-wrapper .copy-json-btn {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
 
-.expand-toggle.expanded {
-  color: var(--primary);
+.json-td:hover .copy-json-btn {
+  opacity: 1;
 }
 
 /* Correctness badge */
@@ -847,47 +841,6 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .legend-badge { margin-right: 2px; vertical-align: middle; }
 .legend-badge + .legend-badge { margin-right: 5px; }
 
-/* Expanded detail row */
-.record-row-expanded td {
-  background: #f8faff;
-}
-
-.record-detail-row td {
-  padding: 0 !important;
-  border-top: none !important;
-  background: #f8faff;
-}
-
-.record-detail-cell {
-  padding: 0 !important;
-}
-
-.record-detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid var(--border);
-}
-
-.record-detail-section {
-  padding: 0.6rem 1rem;
-  border-right: 1px solid var(--border);
-}
-
-.record-detail-section:last-child {
-  border-right: none;
-}
-
-.record-detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.35rem;
-  font-size: 0.67rem;
-  font-weight: 700;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
 
 .copy-json-btn {
   padding: 0.1rem 0.4rem;
@@ -957,6 +910,52 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .column-filter-input::placeholder {
   color: var(--text-faint);
 }
+
+/* ── Table toolbar (title + row-height control) ── */
+.table-toolbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+.table-toolbar h3 {
+  margin: 0;
+  flex: 1;
+}
+.row-height-control {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+.row-height-label {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  margin-right: 0.15rem;
+}
+.row-height-btn {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+.row-height-btn:hover { background: var(--bg); }
+.row-height-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ── Row height — controls JSON panel size only ── */
+.row-height-1 .json-pretty { max-height: 72px; }
+.row-height-2 .json-pretty { max-height: 140px; }
+.row-height-3 .json-pretty { max-height: 280px; }
+.row-height-auto .json-pretty { max-height: none; overflow: visible; }
 
 /* Group header (transition two-run mode) */
 .group-header {
@@ -1104,7 +1103,6 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   line-height: 1.65;
   white-space: pre;
   overflow: auto;
-  max-height: 280px;
 }
 
 .json-empty {
