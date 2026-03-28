@@ -322,11 +322,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                                 <>
                                   <span
                                     className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`}
-                                    title={`Run 1: ${run1Correct ? 'Correct' : 'Incorrect'}`}
+                                    title={`${run1Name}: ${run1Correct ? 'Correct' : 'Incorrect'}`}
                                   />
                                   <span
                                     className={`correctness-badge ${run2Correct ? 'badge-correct' : 'badge-incorrect'}`}
-                                    title={`Run 2: ${run2Correct ? 'Correct' : 'Incorrect'}`}
+                                    title={`${run2Name}: ${run2Correct ? 'Correct' : 'Incorrect'}`}
                                   />
                                 </>
                               ) : (

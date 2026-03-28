@@ -88,7 +88,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
           <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
           <div className="correctness-legend inline-legend">
             <span className={`legend-item ${indicatorFilter === null ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(null)}>
-              <span className="correctness-badge badge-correct legend-badge" /><span className="correctness-badge badge-correct legend-badge" />All ({indicatorTotals.total})
+              All ({indicatorTotals.total})
             </span>
             <span className={`legend-item ${indicatorFilter === 'run1-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run1-correct' ? null : 'run1-correct')}>
               <span className="correctness-badge badge-correct legend-badge" /><span className="correctness-badge badge-incorrect legend-badge" />{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
@@ -144,7 +144,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
                           className={`matrix-cell ${isSelected ? 'selected' : ''} ${total > 0 ? 'populated' : 'empty'} ${getCorrectnessCssClass(cell)} ${row === col ? 'diagonal-cell' : ''}`}
                           onClick={() => total > 0 && onCellClick(row, col)}
                           style={getTransitionCellStyle(cell, row, col, isSelected)}
-                          title={cell ? `Run1: ${cell.run1Correct || 0} correct, Run2: ${cell.run2Correct || 0} correct, Both wrong: ${cell.bothWrong || 0}` : ''}
+                          title={cell ? `${runNameLeft}: ${cell.run1Correct || 0} correct, ${runNameRight}: ${cell.run2Correct || 0} correct, Both wrong: ${cell.bothWrong || 0}` : ''}
                         >
                           <div className="cell-content"><div className="cell-total">{total}</div></div>
                         </td>
