@@ -3,6 +3,18 @@ import React, { useState, useRef, useEffect } from 'react';
 function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2' }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [pageSize, setPageSize] = useState(20);
+  const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
+
+  const toggleRow = (id) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const getDefaultColumns = (showRun2, run1Label, run2Label) => {
     if (showRun2) {
@@ -13,16 +25,14 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           [
             { label: '', colspan: 1, isGroup: false },
             { label: '', colspan: 1, isGroup: false },
-            { label: '', colspan: 1, isGroup: false },
             { label: 'True', colspan: 2, isGroup: true },
             { label: run1Label, colspan: 2, isGroup: true },
             { label: run2Label, colspan: 2, isGroup: true }
           ],
           // Second header row - individual column headers
           [
+            { key: '_expand', label: '', width: 32, isGroup: false },
             { key: 'record_id', label: 'Record ID', width: 100, isGroup: false },
-            { key: 'attributes', label: 'Attributes', width: 450, isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: 450, isGroup: false },
             { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
             { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
             { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
@@ -32,9 +42,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ]
         ],
         columns: [
+          { key: '_expand', label: '', width: 32 },
           { key: 'record_id', label: 'Record ID', width: 100 },
-          { key: 'attributes', label: 'Attributes', width: 450 },
-          { key: 'metadata', label: 'Metadata', width: 450 },
           { key: 'true_type', label: 'True Type', width: 100 },
           { key: 'true_subtype', label: 'True Subtype', width: 120 },
           { key: 'pred_type', label: 'Pred Type', width: 100 },
@@ -48,23 +57,21 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
       return {
         headerRows: [
           [
+            { key: '_expand', label: '', width: 32, isGroup: false },
             { key: 'record_id', label: 'Record ID', width: 100, isGroup: false },
-            { key: 'true_type', label: 'Run1 True Type', width: 100, isGroup: false },
-            { key: 'pred_type', label: 'Run1 Pred Type', width: 100, isGroup: false },
-            { key: 'true_subtype', label: 'Run1 True Subtype', width: 120, isGroup: false },
-            { key: 'pred_subtype', label: 'Run1 Pred Subtype', width: 120, isGroup: false },
-            { key: 'attributes', label: 'Attributes', width: 450, isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: 450, isGroup: false }
+            { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
+            { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
+            { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
+            { key: 'pred_subtype', label: 'Pred Subtype', width: 120, isGroup: false }
           ]
         ],
         columns: [
+          { key: '_expand', label: '', width: 32 },
           { key: 'record_id', label: 'Record ID', width: 100 },
-          { key: 'true_type', label: 'Run1 True Type', width: 100 },
-          { key: 'pred_type', label: 'Run1 Pred Type', width: 100 },
-          { key: 'true_subtype', label: 'Run1 True Subtype', width: 120 },
-          { key: 'pred_subtype', label: 'Run1 Pred Subtype', width: 120 },
-          { key: 'attributes', label: 'Attributes', width: 450 },
-          { key: 'metadata', label: 'Metadata', width: 450 }
+          { key: 'true_type', label: 'True Type', width: 100 },
+          { key: 'pred_type', label: 'Pred Type', width: 100 },
+          { key: 'true_subtype', label: 'True Subtype', width: 120 },
+          { key: 'pred_subtype', label: 'Pred Subtype', width: 120 }
         ]
       };
     }
@@ -76,10 +83,12 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setColumns(getDefaultColumns(showRun2Columns, run1Name, run2Name));
   }, [showRun2Columns, run1Name, run2Name]);
 
-  // Reset pagination and sorting when data changes
+  // Reset pagination, sorting, and expanded rows when data changes
   useEffect(() => {
     setCurrentPage(0);
     setSortConfig({ key: null, direction: 'asc' });
+    setExpandedRows(new Set());
+    setPageSize(20);
   }, [data]);
 
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
@@ -105,9 +114,9 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   };
 
   const sortedData = getSortedData();
-  const PAGE_SIZE = 10;
-  const pageData = sortedData.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const totalPages = Math.ceil(sortedData.length / PAGE_SIZE);
+  const effectivePageSize = pageSize === 'All' ? sortedData.length : pageSize;
+  const pageData = sortedData.slice(currentPage * effectivePageSize, (currentPage + 1) * effectivePageSize);
+  const totalPages = pageSize === 'All' ? 1 : Math.ceil(sortedData.length / effectivePageSize);
 
   const moveColumn = (fromIndex, toIndex) => {
     setColumns(prev => {
@@ -288,19 +297,54 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             ))}
           </thead>
           <tbody>
-            {pageData.map(record => (
+            {pageData.map(record => {
+              const isExpanded = expandedRows.has(record.id);
+              const colSpan = columns.columns.length;
+              return (
               <React.Fragment key={record.id}>
-                <tr className="record-row">
+                <tr className={`record-row${isExpanded ? ' record-row-expanded' : ''}`}>
                   {columns.columns.map(col => {
                     switch (col.key) {
-                      case 'record_id':
+                      case '_expand':
+                        return (
+                          <td key={`${record.id}-expand`} className="expand-toggle-cell">
+                            <button
+                              className={`expand-toggle${isExpanded ? ' expanded' : ''}`}
+                              onClick={() => toggleRow(record.id)}
+                              title={isExpanded ? 'Collapse details' : 'Expand details'}
+                            >
+                              {isExpanded ? '▾' : '▸'}
+                            </button>
+                          </td>
+                        );
+                      case 'record_id': {
+                        const run1Correct = record.true_type === record.pred_type && record.true_subtype === record.pred_subtype;
+                        const run2Correct = record.true_type === record.run2_pred_type && record.true_subtype === record.run2_pred_subtype;
                         return (
                           <td key={`${record.id}-${col.key}`}>
                             <div className="record-id-cell">
+                              {showRun2Columns ? (
+                                <>
+                                  <span
+                                    className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`}
+                                    title={`Run 1: ${run1Correct ? 'Correct' : 'Incorrect'}`}
+                                  />
+                                  <span
+                                    className={`correctness-badge ${run2Correct ? 'badge-correct' : 'badge-incorrect'}`}
+                                    title={`Run 2: ${run2Correct ? 'Correct' : 'Incorrect'}`}
+                                  />
+                                </>
+                              ) : (
+                                <span
+                                  className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`}
+                                  title={run1Correct ? 'Correct' : 'Incorrect'}
+                                />
+                              )}
                               <span>{record.record_id}</span>
                             </div>
                           </td>
                         );
+                      }
                       case 'true_type':
                         return <td key={`${record.id}-${col.key}`}>{record.true_type}</td>;
                       case 'pred_type':
@@ -313,51 +357,46 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                         return <td key={`${record.id}-${col.key}`}>{record.run2_pred_type || '-'}</td>;
                       case 'run2_pred_subtype':
                         return <td key={`${record.id}-${col.key}`}>{record.run2_pred_subtype || '-'}</td>;
-                      case 'attributes':
-                        return (
-                          <td
-                            key={`${record.id}-${col.key}`}
-                            className="json-cell"
-                            style={{ cursor: 'pointer', position: 'relative' }}
-                            onClick={e => {
-                              e.stopPropagation();
-                              copyCellJsonToClipboard(record.attributes, 'Attributes', `${record.id}-attributes`);
-                            }}
-                          >
-                            <div className="json-inline">
-                              {renderPrettyJson(record.attributes)}
-                            </div>
-                            {copiedCell === `${record.id}-attributes` && (
-                              <span className="copied-chip">Copied✔</span>
-                            )}
-                          </td>
-                        );
-                      case 'metadata':
-                        return (
-                          <td
-                            key={`${record.id}-${col.key}`}
-                            className="json-cell"
-                            style={{ cursor: 'pointer', position: 'relative' }}
-                            onClick={e => {
-                              e.stopPropagation();
-                              copyCellJsonToClipboard(record.metadata, 'Metadata', `${record.id}-metadata`);
-                            }}
-                          >
-                            <div className="json-inline">
-                              {renderPrettyJson(record.metadata)}
-                            </div>
-                            {copiedCell === `${record.id}-metadata` && (
-                              <span className="copied-chip">Copied✔</span>
-                            )}
-                          </td>
-                        );
                       default:
                         return <td key={`${record.id}-${col.key}`}>-</td>;
                     }
                   })}
                 </tr>
+                {isExpanded && (
+                  <tr className="record-detail-row">
+                    <td colSpan={colSpan} className="record-detail-cell">
+                      <div className="record-detail-grid">
+                        <div className="record-detail-section">
+                          <div className="record-detail-header">
+                            <span>Attributes</span>
+                            <button
+                              className="copy-json-btn"
+                              onClick={() => copyCellJsonToClipboard(record.attributes, 'Attributes', `${record.id}-attributes`)}
+                            >
+                              {copiedCell === `${record.id}-attributes` ? 'Copied ✔' : 'Copy'}
+                            </button>
+                          </div>
+                          {renderPrettyJson(record.attributes)}
+                        </div>
+                        <div className="record-detail-section">
+                          <div className="record-detail-header">
+                            <span>Metadata</span>
+                            <button
+                              className="copy-json-btn"
+                              onClick={() => copyCellJsonToClipboard(record.metadata, 'Metadata', `${record.id}-metadata`)}
+                            >
+                              {copiedCell === `${record.id}-metadata` ? 'Copied ✔' : 'Copy'}
+                            </button>
+                          </div>
+                          {renderPrettyJson(record.metadata)}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </React.Fragment>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -365,19 +404,32 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
       <div className="pagination">
         <button
           onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-          disabled={currentPage === 0}
+          disabled={currentPage === 0 || pageSize === 'All'}
         >
-          Previous
+          ‹ Prev
         </button>
-        <span>
-          Page {currentPage + 1} of {totalPages}
+        <span className="pagination-info">
+          {pageSize === 'All'
+            ? `${sortedData.length} rows`
+            : `${currentPage * effectivePageSize + 1}–${Math.min((currentPage + 1) * effectivePageSize, sortedData.length)} of ${sortedData.length}`}
         </span>
         <button
           onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-          disabled={currentPage === totalPages - 1}
+          disabled={currentPage >= totalPages - 1 || pageSize === 'All'}
         >
-          Next
+          Next ›
         </button>
+        <div className="page-size-controls">
+          {PAGE_SIZE_OPTIONS.map(opt => (
+            <button
+              key={opt}
+              className={`page-size-btn${pageSize === opt ? ' active' : ''}`}
+              onClick={() => { setPageSize(opt); setCurrentPage(0); }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

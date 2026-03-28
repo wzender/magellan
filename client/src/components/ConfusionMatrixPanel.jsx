@@ -1,126 +1,134 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import RowLevelTable from './RowLevelTable';
 
 function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData }) {
+  const [typeOpen, setTypeOpen] = useState(true);
+  const [subtypeOpen, setSubtypeOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedTypePair) setSubtypeOpen(true);
+  }, [selectedTypePair]);
+
   if (loading) return <div className="loading">Loading confusion matrix...</div>;
   if (!data) return <div className="no-data">No data available</div>;
 
   const handleTypeClick = (trueType, predType) => {
-    const isCurrentlySelected =
-      selectedTypePair &&
-      selectedTypePair.true === trueType &&
-      selectedTypePair.pred === predType;
-
-    if (isCurrentlySelected) {
-      onCellClick(null, null);
-    } else {
-      onCellClick(trueType, predType);
-    }
+    const isSame = selectedTypePair?.true === trueType && selectedTypePair?.pred === predType;
+    onCellClick(isSame ? null : trueType, isSame ? null : predType);
   };
 
-  // Build subtype matrix from API data
-  // Filter out empty rows and columns for cleaner display
   const buildSubtypeMatrix = () => {
-    if (!subtypeMatrixData || !subtypeMatrixData.rows) return null;
-
-    const data = subtypeMatrixData;
-
-    if (data.rows.length === 0) {
-      return null;
-    }
-
-    // Filter out empty rows (rows with all zeros)
-    const nonEmptyRows = data.rows.filter(row => {
-      return data.cols.some(col => (data.data[row]?.[col] ?? 0) > 0);
-    });
-
-    // Filter out empty columns (columns with all zeros)
-    const nonEmptyCols = data.cols.filter(col => {
-      return data.rows.some(row => (data.data[row]?.[col] ?? 0) > 0);
-    });
-
-    return {
-      rows: nonEmptyRows,
-      cols: nonEmptyCols,
-      data: data.data
-    };
+    if (!subtypeMatrixData?.rows?.length) return null;
+    const nonEmptyRows = subtypeMatrixData.rows.filter(row =>
+      subtypeMatrixData.cols.some(col => (subtypeMatrixData.data[row]?.[col] ?? 0) > 0)
+    );
+    const nonEmptyCols = subtypeMatrixData.cols.filter(col =>
+      subtypeMatrixData.rows.some(row => (subtypeMatrixData.data[row]?.[col] ?? 0) > 0)
+    );
+    return { rows: nonEmptyRows, cols: nonEmptyCols, data: subtypeMatrixData.data };
   };
 
   const subtypeMatrix = buildSubtypeMatrix();
 
-  return (
-    <div className="confusion-matrix-container">
-      {/* Type Confusion Matrix */}
-      <div className="confusion-matrix-panel">
-        <h2>Type Confusion Matrix</h2>
-        <div className="matrix-container">
-          <table className="confusion-matrix">
-            <thead>
-              <tr>
-                <th>True \ Pred</th>
-                {data.type_matrix.cols.map(col => (
-                  <th key={col} title={col}>
-                    {col.substring(0, 10)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.type_matrix.rows.map(row => (
-                <tr key={row}>
-                  <th title={row}>{row.substring(0, 10)}</th>
-                  {data.type_matrix.cols.map(col => {
-                    const value = data.type_matrix.data[row][col];
-                    const isSelected =
-                      selectedTypePair && selectedTypePair.true === row && selectedTypePair.pred === col;
-                    return (
-                      <td
-                        key={`${row}-${col}`}
-                        className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'}`}
-                        onClick={() => value > 0 && handleTypeClick(row, col)}
-                        style={{ cursor: value > 0 ? 'pointer' : 'default' }}
-                      >
-                        {value}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+  const typeMaxValue = Math.max(1, ...data.type_matrix.rows.flatMap(row =>
+    data.type_matrix.cols.map(col => data.type_matrix.data[row]?.[col] ?? 0)
+  ));
+  const subtypeMaxValue = subtypeMatrix
+    ? Math.max(1, ...subtypeMatrix.rows.flatMap(row =>
+        subtypeMatrix.cols.map(col => subtypeMatrix.data[row]?.[col] ?? 0)))
+    : 1;
 
-      {/* Subtype Confusion Matrix */}
-      <div className="subtype-confusion-panel">
-        <h2>Subtype Confusion Matrix</h2>
-        {!selectedTypePair ? (
-          <div className="no-selection-message">
-            <p>No type cell was selected</p>
-            <p className="hint">Click on a cell in the Type Confusion Matrix above to view subtypes</p>
+  const getCellStyle = (value, row, col, isSelected, maxVal) => {
+    if (isSelected || value === 0) return { cursor: value > 0 ? 'pointer' : 'default' };
+    const alpha = Math.min(0.1 + (value / maxVal) * 0.55, 0.65);
+    return { cursor: 'pointer', backgroundColor: row === col ? `rgba(40,167,69,${alpha})` : `rgba(0,102,204,${alpha})` };
+  };
+
+  return (
+    <div className="matrix-view">
+
+      {/* ── Matrix drawers ── */}
+      <div className="panel-stack">
+
+        {/* Type Confusion Matrix */}
+        <div className="matrix-drawer">
+          <div className="matrix-drawer-handle" onClick={() => setTypeOpen(o => !o)}>
+            <span className="drawer-chevron">{typeOpen ? '▾' : '▸'}</span>
+            <span>Type Confusion Matrix</span>
           </div>
-        ) : (
-          <>
-            <p className="selection-info">
-              Showing subtypes for: <strong>{selectedTypePair.true}</strong> → <strong>{selectedTypePair.pred}</strong>
-              <button
-                className="clear-selection-btn"
-                onClick={() => {
-                  onCellClick(null, null);
-                }}
-              >
-                ✕ Clear
-              </button>
-            </p>
-            {subtypeMatrix && subtypeMatrix.rows.length > 0 ? (
-              <div className="matrix-container">
+          {typeOpen && (
+            <div className="matrix-drawer-body">
+              <table className="confusion-matrix">
+                <thead>
+                  <tr>
+                    <th>True \ Pred</th>
+                    {data.type_matrix.cols.map(col => (
+                      <th key={col}>
+                        <span className="matrix-th-label" data-tooltip={col}>
+                          {col.length > 10 ? col.substring(0, 10) + '…' : col}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.type_matrix.rows.map(row => (
+                    <tr key={row}>
+                      <th>
+                        <span className="matrix-th-label" data-tooltip={row}>
+                          {row.length > 10 ? row.substring(0, 10) + '…' : row}
+                        </span>
+                      </th>
+                      {data.type_matrix.cols.map(col => {
+                        const value = data.type_matrix.data[row][col];
+                        const isSelected = selectedTypePair?.true === row && selectedTypePair?.pred === col;
+                        return (
+                          <td
+                            key={`${row}-${col}`}
+                            className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'} ${row === col ? 'diagonal-cell' : ''}`}
+                            onClick={() => value > 0 && handleTypeClick(row, col)}
+                            style={getCellStyle(value, row, col, isSelected, typeMaxValue)}
+                          >
+                            {value}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Subtype Confusion Matrix */}
+        <div className="matrix-drawer">
+          <div className="matrix-drawer-handle" onClick={() => setSubtypeOpen(o => !o)}>
+            <span className="drawer-chevron">{subtypeOpen ? '▾' : '▸'}</span>
+            <span>Subtype Confusion Matrix</span>
+            {selectedTypePair && (
+              <span className="drawer-filter">
+                {selectedTypePair.true} → {selectedTypePair.pred}
+                <button className="clear-selection-btn inline" onClick={e => { e.stopPropagation(); onCellClick(null, null); }}>✕</button>
+              </span>
+            )}
+          </div>
+          {subtypeOpen && (
+            <div className="matrix-drawer-body">
+              {!selectedTypePair ? (
+                <div className="no-selection-message compact">
+                  Click a cell in the Type Confusion Matrix above to view subtypes.
+                </div>
+              ) : subtypeMatrix?.rows.length > 0 ? (
                 <table className="confusion-matrix subtype-confusion-matrix">
                   <thead>
                     <tr>
                       <th>True \ Pred</th>
                       {subtypeMatrix.cols.map(col => (
-                        <th key={col} title={col}>
-                          {col.substring(0, 15)}
+                        <th key={col}>
+                          <span className="matrix-th-label" data-tooltip={col}>
+                            {col.length > 15 ? col.substring(0, 15) + '…' : col}
+                          </span>
                         </th>
                       ))}
                     </tr>
@@ -128,19 +136,20 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                   <tbody>
                     {subtypeMatrix.rows.map(row => (
                       <tr key={row}>
-                        <th title={row}>{row.substring(0, 15)}</th>
+                        <th>
+                          <span className="matrix-th-label" data-tooltip={row}>
+                            {row.length > 15 ? row.substring(0, 15) + '…' : row}
+                          </span>
+                        </th>
                         {subtypeMatrix.cols.map(col => {
                           const value = subtypeMatrix.data[row][col];
-                          const isSelected =
-                            selectedCell &&
-                            selectedCell.trueSubtype === row &&
-                            selectedCell.predSubtype === col;
+                          const isSelected = selectedCell?.trueSubtype === row && selectedCell?.predSubtype === col;
                           return (
                             <td
                               key={`${row}-${col}`}
-                              className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'}`}
+                              className={`matrix-cell ${isSelected ? 'selected' : ''} ${value > 0 ? 'populated' : 'empty'} ${row === col ? 'diagonal-cell' : ''}`}
                               onClick={() => value > 0 && onSubtypeCellClick(row, col)}
-                              style={{ cursor: value > 0 ? 'pointer' : 'default' }}
+                              style={getCellStyle(value, row, col, isSelected, subtypeMaxValue)}
                             >
                               {value}
                             </td>
@@ -150,28 +159,28 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ) : (
-              <div className="no-selection-message">
-                <p>No subtype data available for this type pair</p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+              ) : (
+                <div className="no-selection-message compact">No subtype data for this type pair.</div>
+              )}
+            </div>
+          )}
+        </div>
 
-      {/* Record Details */}
-      {recordsData ? (
-        <div className="records-panel">
+      </div>{/* end panel-stack */}
+
+      {/* ── Records section (full-height, below drawers) ── */}
+      {recordsData && (
+        <div className="records-section">
+          <div className="records-section-header">
+            <span className="records-section-title">Record Details</span>
+            {selectedCell && (
+              <span className="drawer-filter">{selectedCell.trueSubtype} → {selectedCell.predSubtype}</span>
+            )}
+          </div>
           <RowLevelTable data={recordsData} showRun2Columns={false} selectedCell={selectedCell} />
         </div>
-      ) : (
-        <div className="records-panel">
-          <div className="no-selection-message">
-            <p>No records to display. Click on a cell in the matrix above.</p>
-          </div>
-        </div>
       )}
+
     </div>
   );
 }

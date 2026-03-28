@@ -363,46 +363,48 @@ function Dashboard() {
         <h1>Classification Evaluation & Analysis System</h1>
       </header>
 
-      <div className="benchmark-button-row">
-        {benchmarks.map(b => (
-          <button
-            key={b.id}
-            className={`benchmark-btn ${selectedBenchmark === b.id ? 'active' : ''}`}
-            onClick={() => {
-              setSelectedBenchmark(b.id);
-              setSelectedRuns([]); // Clear run selection when switching benchmark
-              setSelectedCell(null);
-              setSelectedTypePair(null);
-              setSelectedSubtypePair(null);
-            }}
-          >
-            {b.name || b.id}
-          </button>
-        ))}
-      </div>
-
-      <div className="dashboard-controls">
-        <div className="filter-controls">
-          <label>Filter: </label>
-          <select value={filter} onChange={e => setFilter(e.target.value)}>
-            <option value="all">All Predictions</option>
-            <option value="incorrect">Incorrect Only</option>
-          </select>
+      <div className="toolbar-row">
+        <div className="benchmark-buttons">
+          {benchmarks.map(b => (
+            <button
+              key={b.id}
+              className={`benchmark-btn ${selectedBenchmark === b.id ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedBenchmark(b.id);
+                setSelectedRuns([]);
+                setSelectedCell(null);
+                setSelectedTypePair(null);
+                setSelectedSubtypePair(null);
+              }}
+            >
+              {b.name || b.id}
+            </button>
+          ))}
         </div>
 
-        {isTransitionMode && (
-          <div className="transition-controls">
-            <label>Min Changed Records: </label>
-            <input
-              type="range"
-              min="1"
-              max="50"
-              value={minCount}
-              onChange={e => setMinCount(parseInt(e.target.value))}
-            />
-            <span>{minCount}</span>
+        <div className="toolbar-controls">
+          <div className="filter-controls">
+            <label>Filter:</label>
+            <select value={filter} onChange={e => setFilter(e.target.value)}>
+              <option value="all">All Predictions</option>
+              <option value="incorrect">Incorrect Only</option>
+            </select>
           </div>
-        )}
+
+          {isTransitionMode && (
+            <div className="transition-controls">
+              <label>Min Changed:</label>
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={minCount}
+                onChange={e => setMinCount(parseInt(e.target.value))}
+              />
+              <span className="slider-value">{minCount}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {error && <div className="error-message">{error}</div>}
