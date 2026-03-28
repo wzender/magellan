@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const dbLoader = require('../csv-loader');
+const dbLoader = require('../loader');
 
 /**
  * GET /transition-matrix?run_id1=...&run_id2=...&min_count=...

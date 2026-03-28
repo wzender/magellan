@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const dbLoader = require('../csv-loader');
+const dbLoader = require('../loader');
 
 /**
  * GET /runs?benchmark_id=...

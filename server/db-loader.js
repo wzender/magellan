@@ -1,459 +1,350 @@
 /**
- * Database Loader
- * Provides same interface as csv-loader but reads from PostgreSQL database
- * This allows the API to work with the database-seeded data
+ * PostgreSQL Data Loader
+ * Same interface as csv-loader.js but reads from PostgreSQL.
+ *
+ * Schema
+ * ------
+ * leaderboard table columns:
+ *   benchmark_id, benchmark_name, run_name, model_name,
+ *   subtype_accuracy, subtype_f1_weighted
+ *
+ * Per-run tables named:  "{benchmark_id}_{sanitized(run_name)}"
+ *   e.g. "1_model_v1", "3_perfect_model"
+ *   columns: benchmark_id, rec_id, true_type, true_subtype,
+ *            pred_type, pred_subtype, attributes, metadata
  */
 
 const { query } = require('./db');
 
-/**
- * Load all benchmarks
- */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function sanitize(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function runTableName(benchmarkId, runName) {
+  return `${benchmarkId}_${sanitize(runName)}`;
+}
+
+function parseJsonFields(row) {
+  return {
+    ...row,
+    attributes: typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {}),
+    metadata:   typeof row.metadata   === 'string' ? JSON.parse(row.metadata)   : (row.metadata   || {}),
+  };
+}
+
+// ── Run index (cached) ────────────────────────────────────────────────────────
+// Assigns stable synthetic run_ids (row order from leaderboard) so the rest
+// of the app can use integer IDs without knowing about table names.
+
+let _runIndex = null;
+
+async function getRunIndex() {
+  if (_runIndex) return _runIndex;
+
+  const result = await query(
+    `SELECT benchmark_id, benchmark_name, run_name, model_name,
+            subtype_accuracy, subtype_f1_weighted
+     FROM leaderboard
+     ORDER BY benchmark_id ASC, run_name ASC`
+  );
+
+  const benchmarks = [];
+  const seenBenchmarks = new Set();
+  const runs = [];
+  const leaderboard = [];
+
+  result.rows.forEach((row, i) => {
+    const runId       = i + 1;
+    const benchmarkId = parseInt(row.benchmark_id);
+
+    if (!seenBenchmarks.has(benchmarkId)) {
+      seenBenchmarks.add(benchmarkId);
+      benchmarks.push({ id: benchmarkId, name: row.benchmark_name });
+    }
+
+    runs.push({
+      id:            runId,
+      benchmark_id:  benchmarkId,
+      run_name:      row.run_name,
+      model_version: row.model_name,
+    });
+
+    leaderboard.push({
+      id:                  runId,
+      run_id:              runId,
+      benchmark_id:        benchmarkId,
+      run_name:            row.run_name,
+      model_version:       row.model_name,
+      subtype_accuracy:    parseFloat(row.subtype_accuracy),
+      subtype_f1_weighted: parseFloat(row.subtype_f1_weighted),
+    });
+  });
+
+  _runIndex = { benchmarks, runs, leaderboard };
+  return _runIndex;
+}
+
+function runById(runs, id) {
+  return runs.find(r => r.id === id);
+}
+
+// ── Query functions ───────────────────────────────────────────────────────────
+
 async function getAllBenchmarks() {
-  try {
-    const result = await query(
-      'SELECT id, name, created_at FROM benchmarks ORDER BY id'
-    );
-    return result.rows;
-  } catch (error) {
-    console.error('Error loading benchmarks:', error);
-    return [];
-  }
+  const { benchmarks } = await getRunIndex();
+  return benchmarks;
 }
 
-/**
- * Get a specific benchmark
- */
 async function getBenchmark(id) {
-  try {
-    const result = await query(
-      'SELECT id, name, created_at FROM benchmarks WHERE id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
-  } catch (error) {
-    console.error('Error loading benchmark:', error);
-    return null;
-  }
+  const { benchmarks } = await getRunIndex();
+  return benchmarks.find(b => b.id === id) || null;
 }
 
-/**
- * Get all runs for a benchmark
- */
 async function getRunsByBenchmarkId(benchmarkId) {
-  try {
-    const result = await query(
-      'SELECT id, benchmark_id, run_name, model_version, created_at FROM runs WHERE benchmark_id = $1 ORDER BY id',
-      [benchmarkId]
-    );
-    return result.rows;
-  } catch (error) {
-    console.error('Error loading runs:', error);
-    return [];
-  }
+  const { runs } = await getRunIndex();
+  return runs.filter(r => r.benchmark_id === benchmarkId);
 }
 
-/**
- * Get a specific run
- */
 async function getRun(id) {
-  try {
-    const result = await query(
-      'SELECT id, benchmark_id, run_name, model_version, created_at FROM runs WHERE id = $1',
-      [id]
-    );
-    return result.rows[0] || null;
-  } catch (error) {
-    console.error('Error loading run:', error);
-    return null;
-  }
+  const { runs } = await getRunIndex();
+  return runById(runs, id) || null;
 }
 
-/**
- * Get leaderboard for a benchmark
- */
 async function getLeaderboardByBenchmarkId(benchmarkId) {
-  try {
-    const result = await query(
-      `SELECT l.id, l.run_id, l.benchmark_id, l.benchmark_length, 
-              l.subtype_accuracy, l.subtype_f1_weighted, l.type_f1_weighted,
-              r.run_name, r.model_version
-       FROM leaderboard l
-       JOIN runs r ON l.run_id = r.id
-       WHERE l.benchmark_id = $1
-       ORDER BY l.subtype_f1_weighted DESC`,
-      [benchmarkId]
-    );
-    return result.rows;
-  } catch (error) {
-    console.error('Error loading leaderboard:', error);
-    return [];
-  }
+  const { leaderboard, runs } = await getRunIndex();
+  const rows = leaderboard.filter(l => l.benchmark_id === benchmarkId);
+
+  // Fetch benchmark_length from each run table in parallel
+  await Promise.all(rows.map(async l => {
+    const run = runById(runs, l.run_id);
+    const tbl = runTableName(l.benchmark_id, run.run_name);
+    try {
+      const r = await query(`SELECT COUNT(*) AS cnt FROM "${tbl}"`);
+      l.benchmark_length = parseInt(r.rows[0].cnt);
+    } catch {
+      l.benchmark_length = 0;
+    }
+  }));
+
+  return rows.sort((a, b) => b.subtype_f1_weighted - a.subtype_f1_weighted);
 }
 
-/**
- * Get confusion matrix for a run
- */
-async function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {
-  try {
-    const typeCol = matrixType === 'type' ? 'true_type' : 'true_subtype';
-    const predCol = matrixType === 'type' ? 'pred_type' : 'pred_subtype';
-    const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
+async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = false) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return { type_matrix: { rows: [], cols: [], data: {} }, subtype_matrix: [] };
 
-    const result = await query(
-      `SELECT DISTINCT ${typeCol}, ${predCol} FROM run_results WHERE run_id = $1${incorrectClause}`,
-      [runId]
-    );
+  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
-    // Build matrix structure
-    const types = new Set();
-    const matrixData = {};
+  const result = await query(
+    `SELECT true_type, pred_type, true_subtype, pred_subtype, COUNT(*) AS cnt
+     FROM "${tbl}"
+     WHERE 1=1${incorrectClause}
+     GROUP BY true_type, pred_type, true_subtype, pred_subtype`
+  );
 
-    result.rows.forEach(row => {
-      const trueVal = row[typeCol];
-      const predVal = row[predCol];
-      types.add(trueVal);
-      types.add(predVal);
+  const types = new Set();
+  const typeMatrix = {};
+  const seenPairs = new Set();
+  const subtypeData = [];
 
-      if (!matrixData[trueVal]) matrixData[trueVal] = {};
-      matrixData[trueVal][predVal] = 0;
-    });
+  result.rows.forEach(row => {
+    const tt = row.true_type, pt = row.pred_type;
+    const ts = row.true_subtype, ps = row.pred_subtype;
+    const cnt = parseInt(row.cnt);
 
-    // Count occurrences
-    const countResult = await query(
-      `SELECT ${typeCol} as true_val, ${predCol} as pred_val, COUNT(*) as count
-       FROM run_results
-       WHERE run_id = $1${incorrectClause}
-       GROUP BY ${typeCol}, ${predCol}`,
-      [runId]
-    );
+    types.add(tt); types.add(pt);
+    if (!typeMatrix[tt]) typeMatrix[tt] = {};
+    typeMatrix[tt][pt] = (typeMatrix[tt][pt] || 0) + cnt;
 
-    countResult.rows.forEach(row => {
-      if (!matrixData[row.true_val]) matrixData[row.true_val] = {};
-      matrixData[row.true_val][row.pred_val] = parseInt(row.count);
-    });
+    const key = `${tt}|${pt}|${ts}|${ps}`;
+    if (!seenPairs.has(key)) {
+      seenPairs.add(key);
+      subtypeData.push({ true_type: tt, pred_type: pt, true_subtype: ts, pred_subtype: ps, count: cnt });
+    }
+  });
 
-    const typeArray = Array.from(types).sort();
+  const typeArray = Array.from(types).sort();
+  typeArray.forEach(t => {
+    if (!typeMatrix[t]) typeMatrix[t] = {};
+    typeArray.forEach(p => { if (typeMatrix[t][p] === undefined) typeMatrix[t][p] = 0; });
+  });
 
-    return {
-      rows: typeArray,
-      cols: typeArray,
-      data: matrixData,
-    };
-  } catch (error) {
-    console.error('Error loading confusion matrix:', error);
-    return { rows: [], cols: [], data: {} };
-  }
+  return {
+    type_matrix: { rows: typeArray, cols: typeArray, data: typeMatrix },
+    subtype_matrix: subtypeData.sort((a, b) => b.count - a.count),
+  };
 }
 
-/**
- * Get subtype confusion matrix filtered by a specific type pair
- */
 async function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectOnly = false) {
-  try {
-    const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return { rows: [], cols: [], data: {} };
 
-    // Get all subtype transitions for this specific type pair
-    const result = await query(
-      `SELECT DISTINCT true_subtype, pred_subtype FROM run_results
-       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3${incorrectClause}`,
-      [runId, trueType, predType]
-    );
+  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
-    // Build matrix structure
-    const subtypes = new Set();
-    const matrixData = {};
+  const result = await query(
+    `SELECT true_subtype, pred_subtype, COUNT(*) AS cnt
+     FROM "${tbl}"
+     WHERE true_type = $1 AND pred_type = $2${incorrectClause}
+     GROUP BY true_subtype, pred_subtype`,
+    [trueType, predType]
+  );
 
-    result.rows.forEach(row => {
-      const trueVal = row.true_subtype;
-      const predVal = row.pred_subtype;
-      subtypes.add(trueVal);
-      subtypes.add(predVal);
+  const subtypes = new Set();
+  const matrixData = {};
 
-      if (!matrixData[trueVal]) matrixData[trueVal] = {};
-      matrixData[trueVal][predVal] = 0;
-    });
+  result.rows.forEach(row => {
+    const ts = row.true_subtype, ps = row.pred_subtype;
+    subtypes.add(ts); subtypes.add(ps);
+    if (!matrixData[ts]) matrixData[ts] = {};
+    matrixData[ts][ps] = parseInt(row.cnt);
+  });
 
-    // Count occurrences for this type pair
-    const countResult = await query(
-      `SELECT true_subtype, pred_subtype, COUNT(*) as count
-       FROM run_results
-       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3${incorrectClause}
-       GROUP BY true_subtype, pred_subtype`,
-      [runId, trueType, predType]
-    );
+  const subtypeArray = Array.from(subtypes).sort();
+  subtypeArray.forEach(t => {
+    if (!matrixData[t]) matrixData[t] = {};
+    subtypeArray.forEach(p => { if (matrixData[t][p] === undefined) matrixData[t][p] = 0; });
+  });
 
-    countResult.rows.forEach(row => {
-      if (!matrixData[row.true_subtype]) matrixData[row.true_subtype] = {};
-      matrixData[row.true_subtype][row.pred_subtype] = parseInt(row.count);
-    });
-
-    const subtypeArray = Array.from(subtypes).sort();
-
-    return {
-      rows: subtypeArray,
-      cols: subtypeArray,
-      data: matrixData,
-    };
-  } catch (error) {
-    console.error('Error loading subtype matrix for type pair:', error);
-    return { rows: [], cols: [], data: {} };
-  }
+  return { rows: subtypeArray, cols: subtypeArray, data: matrixData };
 }
 
-/**
- * Get transition matrix for two runs
- */
 async function getTransitionMatrix(runId1, runId2, minCount = 1) {
-  try {
-    // Get all records from both runs
-    const run1Result = await query(
-      `SELECT record_id, pred_subtype, true_subtype, true_type FROM run_results WHERE run_id = $1`,
-      [runId1]
-    );
+  const { runs } = await getRunIndex();
+  const run1 = runById(runs, runId1);
+  const run2 = runById(runs, runId2);
+  if (!run1 || !run2) return { rows: [], cols: [], data: {} };
 
-    const run2Result = await query(
-      `SELECT record_id, pred_subtype, true_subtype, true_type FROM run_results WHERE run_id = $1`,
-      [runId2]
-    );
+  const tbl1 = runTableName(run1.benchmark_id, run1.run_name);
+  const tbl2 = runTableName(run2.benchmark_id, run2.run_name);
 
-    // Build maps
-    const run1Map = {};
-    run1Result.rows.forEach(row => {
-      run1Map[row.record_id] = {
-        pred_subtype: row.pred_subtype,
-        true_subtype: row.true_subtype,
-        true_type: row.true_type,
-        isCorrect: row.pred_subtype === row.true_subtype
-      };
-    });
+  // Single query: join on rec_id, group by pred pairs + true_subtype
+  const result = await query(
+    `SELECT r1.pred_subtype AS run1_pred,
+            r2.pred_subtype AS run2_pred,
+            r1.true_subtype AS true_subtype,
+            COUNT(*)        AS cnt
+     FROM "${tbl1}" r1
+     JOIN "${tbl2}" r2 ON r1.rec_id = r2.rec_id
+     WHERE r1.pred_subtype <> r2.pred_subtype
+     GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
+  );
 
-    const transitionData = {};
-    const subtypes = new Set();
+  const transitionData = {};
 
-    run2Result.rows.forEach(row => {
-      const run1Data = run1Map[row.record_id];
-      if (run1Data && run1Data.pred_subtype !== row.pred_subtype) {
-        const run1Pred = run1Data.pred_subtype;
-        const run2Pred = row.pred_subtype;
-        const trueSubtype = run1Data.true_subtype;
+  result.rows.forEach(row => {
+    const run1Pred = row.run1_pred;
+    const run2Pred = row.run2_pred;
+    const trueSub  = row.true_subtype;
+    const cnt      = parseInt(row.cnt);
 
-        if (!transitionData[run1Pred]) transitionData[run1Pred] = {};
-        if (!transitionData[run1Pred][run2Pred]) {
-          transitionData[run1Pred][run2Pred] = {
-            total: 0,
-            run1Correct: 0,
-            run2Correct: 0,
-            bothWrong: 0
-          };
-        }
+    if (!transitionData[run1Pred]) transitionData[run1Pred] = {};
+    if (!transitionData[run1Pred][run2Pred]) {
+      transitionData[run1Pred][run2Pred] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
 
-        const cell = transitionData[run1Pred][run2Pred];
-        cell.total++;
+    const cell = transitionData[run1Pred][run2Pred];
+    cell.total += cnt;
+    const r1c = run1Pred === trueSub;
+    const r2c = run2Pred === trueSub;
+    if      (r1c && !r2c)  cell.run1Correct += cnt;
+    else if (!r1c && r2c)  cell.run2Correct += cnt;
+    else if (!r1c && !r2c) cell.bothWrong   += cnt;
+  });
 
-        const run1IsCorrect = run1Pred === trueSubtype;
-        const run2IsCorrect = run2Pred === trueSubtype;
-
-        if (run1IsCorrect && !run2IsCorrect) {
-          cell.run1Correct++;
-        } else if (!run1IsCorrect && run2IsCorrect) {
-          cell.run2Correct++;
-        } else if (!run1IsCorrect && !run2IsCorrect) {
-          cell.bothWrong++;
-        }
-
-        subtypes.add(run1Pred);
-        subtypes.add(run2Pred);
+  const filteredData = {};
+  const filteredSubtypes = new Set();
+  Object.keys(transitionData).forEach(r1 => {
+    Object.keys(transitionData[r1]).forEach(r2 => {
+      if (transitionData[r1][r2].total >= minCount) {
+        if (!filteredData[r1]) filteredData[r1] = {};
+        filteredData[r1][r2] = transitionData[r1][r2];
+        filteredSubtypes.add(r1);
+        filteredSubtypes.add(r2);
       }
     });
+  });
 
-    // Filter by minCount
-    const filteredTransitionData = {};
-    const filteredSubtypes = new Set();
-
-    Object.keys(transitionData).forEach(run1Subtype => {
-      Object.keys(transitionData[run1Subtype]).forEach(run2Subtype => {
-        const cell = transitionData[run1Subtype][run2Subtype];
-        if (cell.total >= minCount) {
-          if (!filteredTransitionData[run1Subtype]) {
-            filteredTransitionData[run1Subtype] = {};
-          }
-          filteredTransitionData[run1Subtype][run2Subtype] = cell;
-          filteredSubtypes.add(run1Subtype);
-          filteredSubtypes.add(run2Subtype);
-        }
-      });
-    });
-
-    const subtypeArray = Array.from(filteredSubtypes).sort();
-
-    return {
-      rows: subtypeArray,
-      cols: subtypeArray,
-      data: filteredTransitionData,
-    };
-  } catch (error) {
-    console.error('Error loading transition matrix:', error);
-    return { rows: [], cols: [], data: {} };
-  }
+  const subtypeArray = Array.from(filteredSubtypes).sort();
+  return { rows: subtypeArray, cols: subtypeArray, data: filteredData };
 }
 
-/**
- * Get records with optional filtering
- */
 async function getRecords(filters = {}) {
-  try {
-    let sql;
+  const { runs } = await getRunIndex();
+  const limit  = filters.limit  || 100;
+  const offset = filters.offset || 0;
+
+  if (filters.run_id2) {
+    const run1 = runById(runs, filters.run_id1 || filters.run_id);
+    const run2 = runById(runs, filters.run_id2);
+    if (!run1 || !run2) return { data: [], pagination: { total: 0, limit, offset, pages: 0 } };
+
+    const tbl1 = runTableName(run1.benchmark_id, run1.run_name);
+    const tbl2 = runTableName(run2.benchmark_id, run2.run_name);
+
     const params = [];
-    let paramCount = 1;
-    let countSql;
-    const countParams = [];
-    let countParamCount = 1;
+    let p = 1;
+    let where = 'r1.pred_subtype <> r2.pred_subtype';
 
-    if (filters.run_id2) {
-      // Join run1 and run2 records by record_id to show both sides
-      const incorrectClause = filters.incorrectOnly ? ' AND r1.pred_subtype != r1.true_subtype' : '';
-      sql = `SELECT DISTINCT ON (r1.record_id) r1.id, r1.run_id, r1.record_id, r1.attributes, r1.metadata,
-                     r1.true_type, r1.pred_type, r1.true_subtype, r1.pred_subtype,
-                     r2.true_type as run2_true_type, r2.pred_type as run2_pred_type,
-                     r2.true_subtype as run2_true_subtype, r2.pred_subtype as run2_pred_subtype
-              FROM run_results r1
-              JOIN run_results r2 ON r1.record_id = r2.record_id
-              WHERE r1.run_id = $1 AND r2.run_id = $2
-                AND r1.pred_subtype <> r2.pred_subtype${incorrectClause}`;
-      params.push(filters.run_id1 || filters.run_id);
-      params.push(filters.run_id2);
+    if (filters.run1_pred_subtype) { where += ` AND r1.pred_subtype = $${p++}`; params.push(filters.run1_pred_subtype); }
+    if (filters.run2_pred_subtype) { where += ` AND r2.pred_subtype = $${p++}`; params.push(filters.run2_pred_subtype); }
+    if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
+    if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
 
-      // After binding run IDs, start dynamic params from 3.
-      paramCount = 3;
-      countParamCount = 3;
+    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.rec_id = r2.rec_id WHERE ${where}`;
 
-      if (filters.run1_pred_subtype) {
-        sql += ` AND r1.pred_subtype = $${paramCount++}`;
-        params.push(filters.run1_pred_subtype);
-      }
-      if (filters.run2_pred_subtype) {
-        sql += ` AND r2.pred_subtype = $${paramCount++}`;
-        params.push(filters.run2_pred_subtype);
-      }
-      if (filters.run1_true_subtype) {
-        sql += ` AND r1.true_subtype = $${paramCount++}`;
-        params.push(filters.run1_true_subtype);
-      }
-      if (filters.run2_true_subtype) {
-        sql += ` AND r2.true_subtype = $${paramCount++}`;
-        params.push(filters.run2_true_subtype);
-      }
+    const [dataResult, countResult] = await Promise.all([
+      query(`SELECT r1.rec_id AS record_id,
+                    r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
+                    r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
+                    r1.attributes, r1.metadata
+             ${baseSQL} ORDER BY r1.rec_id LIMIT $${p} OFFSET $${p + 1}`,
+        [...params, limit, offset]),
+      query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+    ]);
 
-      countSql = `SELECT COUNT(DISTINCT r1.record_id) as total FROM run_results r1 JOIN run_results r2 ON r1.record_id = r2.record_id WHERE r1.run_id = $1 AND r2.run_id = $2 AND r1.pred_subtype <> r2.pred_subtype${incorrectClause}`;
-      countParams.push(filters.run_id1 || filters.run_id);
-      countParams.push(filters.run_id2);
-
-      // countParamCount already set to 3 earlier for dynamic search filters
-      if (filters.run1_pred_subtype) {
-        countSql += ` AND r1.pred_subtype = $${countParamCount++}`;
-        countParams.push(filters.run1_pred_subtype);
-      }
-      if (filters.run2_pred_subtype) {
-        countSql += ` AND r2.pred_subtype = $${countParamCount++}`;
-        countParams.push(filters.run2_pred_subtype);
-      }
-      if (filters.run1_true_subtype) {
-        countSql += ` AND r1.true_subtype = $${countParamCount++}`;
-        countParams.push(filters.run1_true_subtype);
-      }
-      if (filters.run2_true_subtype) {
-        countSql += ` AND r2.true_subtype = $${countParamCount++}`;
-        countParams.push(filters.run2_true_subtype);
-      }
-
-    } else {
-      sql = 'SELECT id, run_id, record_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype FROM run_results WHERE 1=1';
-
-      if (filters.run_id) {
-        sql += ` AND run_id = $${paramCount++}`;
-        params.push(filters.run_id);
-      }
-      if (filters.true_type) {
-        sql += ` AND true_type = $${paramCount++}`;
-        params.push(filters.true_type);
-      }
-      if (filters.pred_type) {
-        sql += ` AND pred_type = $${paramCount++}`;
-        params.push(filters.pred_type);
-      }
-      if (filters.true_subtype) {
-        sql += ` AND true_subtype = $${paramCount++}`;
-        params.push(filters.true_subtype);
-      }
-      if (filters.pred_subtype) {
-        sql += ` AND pred_subtype = $${paramCount++}`;
-        params.push(filters.pred_subtype);
-      }
-      if (filters.incorrectOnly) {
-        sql += ' AND pred_subtype != true_subtype';
-      }
-
-      countSql = 'SELECT COUNT(*) as total FROM run_results WHERE 1=1';
-      if (filters.run_id) {
-        countSql += ` AND run_id = $${countParamCount++}`;
-        countParams.push(filters.run_id);
-      }
-      if (filters.true_type) {
-        countSql += ` AND true_type = $${countParamCount++}`;
-        countParams.push(filters.true_type);
-      }
-      if (filters.pred_type) {
-        countSql += ` AND pred_type = $${countParamCount++}`;
-        countParams.push(filters.pred_type);
-      }
-      if (filters.true_subtype) {
-        countSql += ` AND true_subtype = $${countParamCount++}`;
-        countParams.push(filters.true_subtype);
-      }
-      if (filters.pred_subtype) {
-        countSql += ` AND pred_subtype = $${countParamCount++}`;
-        countParams.push(filters.pred_subtype);
-      }
-      if (filters.incorrectOnly) {
-        countSql += ' AND pred_subtype != true_subtype';
-      }
-    }
-
-    if (filters.run_id2) {
-      sql += ' ORDER BY r1.record_id, r1.id LIMIT $' + paramCount + ' OFFSET $' + (paramCount + 1);
-    } else {
-      sql += ' ORDER BY record_id, id LIMIT $' + paramCount + ' OFFSET $' + (paramCount + 1);
-    }
-    params.push(filters.limit || 100);
-    params.push(filters.offset || 0);
-
-    const result = await query(sql, params);
-
-    // Parse JSON fields
-    const data = result.rows.map(row => ({
-      ...row,
-      attributes: typeof row.attributes === 'string' ? JSON.parse(row.attributes) : row.attributes,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-    }));
-
-    // Get total count for pagination
-    const countResult = await query(countSql, countParams);
     const total = parseInt(countResult.rows[0].total);
-
     return {
-      data,
-      pagination: {
-        total,
-        limit: filters.limit || 100,
-        offset: filters.offset || 0,
-        pages: Math.ceil(total / (filters.limit || 100)),
-      },
+      data: dataResult.rows.map(parseJsonFields),
+      pagination: { total, limit, offset, pages: Math.ceil(total / limit) },
     };
-  } catch (error) {
-    console.error('Error loading records:', error);
-    return { data: [], pagination: { total: 0, limit: 100, offset: 0, pages: 0 } };
   }
+
+  // Single-run mode
+  const run = runById(runs, filters.run_id);
+  if (!run) return { data: [], pagination: { total: 0, limit, offset, pages: 0 } };
+
+  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const params = [];
+  let p = 1;
+  let where = '1=1';
+
+  if (filters.true_type)     { where += ` AND true_type    = $${p++}`; params.push(filters.true_type); }
+  if (filters.pred_type)     { where += ` AND pred_type    = $${p++}`; params.push(filters.pred_type); }
+  if (filters.true_subtype)  { where += ` AND true_subtype = $${p++}`; params.push(filters.true_subtype); }
+  if (filters.pred_subtype)  { where += ` AND pred_subtype = $${p++}`; params.push(filters.pred_subtype); }
+  if (filters.incorrectOnly) { where += ` AND pred_subtype != true_subtype`; }
+
+  const baseSQL = `FROM "${tbl}" WHERE ${where}`;
+
+  const [dataResult, countResult] = await Promise.all([
+    query(`SELECT rec_id AS record_id, true_type, true_subtype, pred_type, pred_subtype,
+                  attributes, metadata
+           ${baseSQL} ORDER BY rec_id LIMIT $${p} OFFSET $${p + 1}`,
+      [...params, limit, offset]),
+    query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+  ]);
+
+  const total = parseInt(countResult.rows[0].total);
+  return {
+    data: dataResult.rows.map(parseJsonFields),
+    pagination: { total, limit, offset, pages: Math.ceil(total / limit) },
+  };
 }
 
 module.exports = {
