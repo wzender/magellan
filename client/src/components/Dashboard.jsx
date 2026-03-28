@@ -398,14 +398,18 @@ function Dashboard() {
           {isTransitionMode && (
             <div className="transition-controls">
               <label>Min Changed:</label>
-              <input
-                type="range"
-                min="1"
-                max="50"
-                value={minCount}
-                onChange={e => setMinCount(parseInt(e.target.value))}
-              />
-              <span className="slider-value">{minCount}</span>
+              <div className="stepper">
+                <button className="stepper-btn" onClick={() => setMinCount(v => Math.max(1, v - 1))} disabled={minCount <= 1}>−</button>
+                <input
+                  className="stepper-input"
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={minCount}
+                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setMinCount(v); }}
+                />
+                <button className="stepper-btn" onClick={() => setMinCount(v => v + 1)}>+</button>
+              </div>
             </div>
           )}
         </div>

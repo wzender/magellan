@@ -1,8 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
 function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [] }) {
   const [indicatorFilter, setIndicatorFilter] = useState(null);
+
+  useEffect(() => {
+    setIndicatorFilter(null);
+  }, [data]);
+
+  const displayRecords = useMemo(() => {
+    if (!indicatorFilter || !recordsData?.data) return recordsData;
+    const filteredRows = recordsData.data.filter(row => {
+      const r1Correct = row.pred_subtype === row.true_subtype;
+      const r2Correct = row.run2_pred_subtype === row.true_subtype;
+      if (indicatorFilter === 'run1-correct') return r1Correct && !r2Correct;
+      if (indicatorFilter === 'run2-correct') return r2Correct && !r1Correct;
+      if (indicatorFilter === 'both-wrong') return !r1Correct && !r2Correct;
+      return true;
+    });
+    return { ...recordsData, data: filteredRows, pagination: { ...recordsData.pagination, total: filteredRows.length } };
+  }, [recordsData, indicatorFilter]);
 
   if (loading) return <div className="loading">Loading transition matrix...</div>;
   if (!data || !data.data) return <div className="no-data">No data available</div>;
@@ -31,16 +48,14 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
     return null;
   };
 
-  const indicatorTotals = { run1Correct: 0, run2Correct: 0, bothWrong: 0, mixed: 0, total: 0 };
+  const indicatorTotals = { run1Correct: 0, run2Correct: 0, bothWrong: 0, total: 0 };
   allRows.forEach(row => cols.forEach(col => {
     const cell = matrixData[row]?.[col];
     if (!cell?.total) return;
-    const type = getCellIndicatorType(cell);
-    if (type === 'run1-correct') indicatorTotals.run1Correct += cell.total;
-    else if (type === 'run2-correct') indicatorTotals.run2Correct += cell.total;
-    else if (type === 'both-wrong') indicatorTotals.bothWrong += cell.total;
-    else indicatorTotals.mixed += cell.total;
-    indicatorTotals.total += cell.total;
+    indicatorTotals.run1Correct += cell.run1Correct || 0;
+    indicatorTotals.run2Correct += cell.run2Correct || 0;
+    indicatorTotals.bothWrong  += cell.bothWrong  || 0;
+    indicatorTotals.total      += cell.total;
   }));
 
   const maxTotal = Math.max(1, ...allRows.flatMap(row => cols.map(col => matrixData[row]?.[col]?.total || 0)));
@@ -72,6 +87,9 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
         <div className="matrix-panel-header">
           <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
           <div className="correctness-legend inline-legend">
+            <span className={`legend-item ${indicatorFilter === null ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(null)}>
+              <span className="legend-box legend-clear">●</span>All ({indicatorTotals.total})
+            </span>
             <span className={`legend-item ${indicatorFilter === 'run1-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run1-correct' ? null : 'run1-correct')}>
               <span className="legend-box legend-run1">✓₁</span>{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
             </span>
@@ -80,9 +98,6 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
             </span>
             <span className={`legend-item ${indicatorFilter === 'both-wrong' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'both-wrong' ? null : 'both-wrong')}>
               <span className="legend-box legend-both">✗</span>Both wrong ({indicatorTotals.bothWrong})
-            </span>
-            <span className="legend-item" onClick={() => setIndicatorFilter(null)}>
-              <span className="legend-box legend-clear">●</span>All ({indicatorTotals.total})
             </span>
           </div>
         </div>
@@ -106,9 +121,15 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => (
-                  <tr key={row}>
-                    <th>
+                {rows.map(row => {
+                  const isRowSelected = selectedCell?.run1 === row && !selectedCell?.run2;
+                  return (
+                  <tr key={row} className={isRowSelected ? 'row-selected' : ''}>
+                    <th
+                      className="matrix-row-header clickable"
+                      onClick={() => onCellClick(row, null)}
+                      title={`Show all records where ${runNameLeft} predicted: ${row}`}
+                    >
                       <span className="matrix-th-label" data-tooltip={row}>
                         {row.length > 8 ? row.substring(0, 8) + '…' : row}
                       </span>
@@ -130,7 +151,8 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -142,13 +164,18 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
         <div className="records-section">
           <div className="records-section-header">
             <span className="records-section-title">Record Details</span>
-            {selectedCell && (
-              <span className="drawer-filter">{selectedCell.run1} → {selectedCell.run2}</span>
+            {(selectedCell || indicatorFilter) && (
+              <span className="drawer-filter">
+                {selectedCell ? `${selectedCell.run1}${selectedCell.run2 ? ` → ${selectedCell.run2}` : ''}` : ''}
+                {indicatorFilter === 'run1-correct' && ` · ${selectedRunNames[0] || 'Run 1'} correct only`}
+                {indicatorFilter === 'run2-correct' && ` · ${selectedRunNames[1] || 'Run 2'} correct only`}
+                {indicatorFilter === 'both-wrong' && ' · both wrong'}
+              </span>
             )}
           </div>
           <RowLevelTable
-            key={`${selectedCell?.run1 || 'none'}-${selectedCell?.run2 || 'none'}`}
-            data={recordsData}
+            key={`${selectedCell?.run1 || 'none'}-${selectedCell?.run2 || 'none'}-${indicatorFilter || 'all'}`}
+            data={displayRecords}
             showRun2Columns={true}
             selectedCell={selectedCell}
             run1Name={selectedRunNames[0] || 'Run 1'}
