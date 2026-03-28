@@ -118,9 +118,10 @@ function getLeaderboardByBenchmarkId(benchmarkId) {
     .sort((a, b) => parseFloat(b.subtype_f1_weighted) - parseFloat(a.subtype_f1_weighted));
 }
 
-function getConfusionMatrix(runId) {
+function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {
   const data = loadData();
-  const results = data.run_results.filter(r => r.run_id === runId);
+  let results = data.run_results.filter(r => r.run_id === runId);
+  if (incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
 
   // Build type matrix
   const types = new Set();
@@ -323,6 +324,7 @@ function getRecords(filters = {}) {
   if (filters.pred_type) results = results.filter(r => r.pred_type === filters.pred_type);
   if (filters.true_subtype) results = results.filter(r => r.true_subtype === filters.true_subtype);
   if (filters.pred_subtype) results = results.filter(r => r.pred_subtype === filters.pred_subtype);
+  if (filters.incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
 
   const limit = filters.limit || 100;
   const offset = filters.offset || 0;
@@ -338,9 +340,10 @@ function getRecords(filters = {}) {
   };
 }
 
-function getSubtypeMatrixForTypePair(runId, trueType, predType) {
+function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectOnly = false) {
   const data = loadData();
-  const results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType && r.pred_type === predType);
+  let results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType && r.pred_type === predType);
+  if (incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
 
   const subtypes = new Set();
   results.forEach(r => {

@@ -103,13 +103,15 @@ function Dashboard() {
       try {
         setLoading(true);
         let url = `/api/confusion-matrix?run_id=${selectedRuns[0]}`;
-        if (filter === 'incorrect') {
-          url += '&filter=incorrect';
-        }
+        if (filter === 'incorrect') url += '&filter=incorrect';
         const response = await fetch(url);
         const data = await response.json();
         setConfusionMatrixData(data);
+        // Reset drill-down state so stale subtype/record data doesn't linger
         setSelectedCell(null);
+        setSelectedTypePair(null);
+        setSelectedSubtypePair(null);
+        setFilteredRecordsData(null);
       } catch (err) {
         setError('Failed to load confusion matrix');
         console.error('Error loading confusion matrix:', err);
@@ -130,7 +132,8 @@ function Dashboard() {
     const fetchSubtypeMatrix = async () => {
       try {
         setLoading(true);
-        const url = `/api/confusion-matrix/subtype?run_id=${selectedRuns[0]}&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
+        let url = `/api/confusion-matrix/subtype?run_id=${selectedRuns[0]}&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
+        if (filter === 'incorrect') url += '&filter=incorrect';
         const response = await fetch(url);
         const data = await response.json();
         setSubtypeMatrixData(data.matrix);
@@ -141,7 +144,7 @@ function Dashboard() {
       }
     };
     fetchSubtypeMatrix();
-  }, [selectedRuns, selectedTypePair]);
+  }, [selectedRuns, selectedTypePair, filter]);
 
   // Load all records when selected runs change (single run or transition mode)
   useEffect(() => {
@@ -177,20 +180,19 @@ function Dashboard() {
     const fetchFilteredRecords = async () => {
       try {
         let url = `/api/records?run_id=${selectedRuns[0]}&limit=1000`;
-        
+
+        if (filter === 'incorrect') url += '&filter=incorrect';
+
         if (selectedTypePair) {
           url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
         }
-        
+
         if (selectedSubtypePair) {
           url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
         }
 
-        console.log('Fetching records from URL:', url);
         const response = await fetch(url);
         const data = await response.json();
-        console.log('API response:', { recordCount: data.data?.length, total: data.pagination?.total });
-        
         setFilteredRecordsData(data);
       } catch (err) {
         console.error('Error fetching filtered records:', err);
@@ -198,7 +200,7 @@ function Dashboard() {
     };
 
     fetchFilteredRecords();
-  }, [selectedTypePair, selectedSubtypePair, selectedRuns, isConfusionMode]);
+  }, [selectedTypePair, selectedSubtypePair, selectedRuns, isConfusionMode, filter]);
   useEffect(() => {
     if (selectedRuns.length !== 2 || minCount < 1) return;
 
@@ -383,13 +385,15 @@ function Dashboard() {
         </div>
 
         <div className="toolbar-controls">
-          <div className="filter-controls">
-            <label>Filter:</label>
-            <select value={filter} onChange={e => setFilter(e.target.value)}>
-              <option value="all">All Predictions</option>
-              <option value="incorrect">Incorrect Only</option>
-            </select>
-          </div>
+          {isConfusionMode && (
+            <div className="filter-controls">
+              <label>Filter:</label>
+              <select value={filter} onChange={e => setFilter(e.target.value)}>
+                <option value="all">All Predictions</option>
+                <option value="incorrect">Incorrect Only</option>
+              </select>
+            </div>
+          )}
 
           {isTransitionMode && (
             <div className="transition-controls">

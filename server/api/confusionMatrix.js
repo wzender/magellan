@@ -13,13 +13,14 @@ const dbLoader = require('../csv-loader');
  */
 router.get('/confusion-matrix', async (req, res) => {
   try {
-    const { run_id } = req.query;
+    const { run_id, filter } = req.query;
 
     if (!run_id) {
       return res.status(400).json({ error: 'run_id is required' });
     }
 
-    const data = await dbLoader.getConfusionMatrix(parseInt(run_id));
+    const incorrectOnly = filter === 'incorrect';
+    const data = await dbLoader.getConfusionMatrix(parseInt(run_id), 'type', incorrectOnly);
     res.json(data);
   } catch (error) {
     console.error('Error calculating confusion matrix:', error);
@@ -33,7 +34,7 @@ router.get('/confusion-matrix', async (req, res) => {
  */
 router.get('/confusion-matrix/subtype', async (req, res) => {
   try {
-    const { run_id, true_type, pred_type } = req.query;
+    const { run_id, true_type, pred_type, filter } = req.query;
 
     if (!run_id || !true_type || !pred_type) {
       return res.status(400).json({
@@ -41,7 +42,8 @@ router.get('/confusion-matrix/subtype', async (req, res) => {
       });
     }
 
-    const subtypeMatrix = await dbLoader.getSubtypeMatrixForTypePair(parseInt(run_id), true_type, pred_type);
+    const incorrectOnly = filter === 'incorrect';
+    const subtypeMatrix = await dbLoader.getSubtypeMatrixForTypePair(parseInt(run_id), true_type, pred_type, incorrectOnly);
 
     res.json({
       type_pair: { true_type, pred_type },

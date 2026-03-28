@@ -50,6 +50,7 @@ router.get('/records', async (req, res) => {
     if (run2_pred_subtype) filters.run2_pred_subtype = run2_pred_subtype;
     if (run1_true_subtype) filters.run1_true_subtype = run1_true_subtype;
     if (run2_true_subtype) filters.run2_true_subtype = run2_true_subtype;
+    if (filter === 'incorrect') filters.incorrectOnly = true;
 
     console.log('Records API called with filters:', JSON.stringify(filters, null, 2));
 

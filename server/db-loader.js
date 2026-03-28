@@ -94,13 +94,14 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
 /**
  * Get confusion matrix for a run
  */
-async function getConfusionMatrix(runId, matrixType = 'type') {
+async function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {
   try {
     const typeCol = matrixType === 'type' ? 'true_type' : 'true_subtype';
     const predCol = matrixType === 'type' ? 'pred_type' : 'pred_subtype';
+    const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
     const result = await query(
-      `SELECT DISTINCT ${typeCol}, ${predCol} FROM run_results WHERE run_id = $1`,
+      `SELECT DISTINCT ${typeCol}, ${predCol} FROM run_results WHERE run_id = $1${incorrectClause}`,
       [runId]
     );
 
@@ -122,7 +123,7 @@ async function getConfusionMatrix(runId, matrixType = 'type') {
     const countResult = await query(
       `SELECT ${typeCol} as true_val, ${predCol} as pred_val, COUNT(*) as count
        FROM run_results
-       WHERE run_id = $1
+       WHERE run_id = $1${incorrectClause}
        GROUP BY ${typeCol}, ${predCol}`,
       [runId]
     );
@@ -148,12 +149,14 @@ async function getConfusionMatrix(runId, matrixType = 'type') {
 /**
  * Get subtype confusion matrix filtered by a specific type pair
  */
-async function getSubtypeMatrixForTypePair(runId, trueType, predType) {
+async function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectOnly = false) {
   try {
+    const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
+
     // Get all subtype transitions for this specific type pair
     const result = await query(
-      `SELECT DISTINCT true_subtype, pred_subtype FROM run_results 
-       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3`,
+      `SELECT DISTINCT true_subtype, pred_subtype FROM run_results
+       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3${incorrectClause}`,
       [runId, trueType, predType]
     );
 
@@ -175,7 +178,7 @@ async function getSubtypeMatrixForTypePair(runId, trueType, predType) {
     const countResult = await query(
       `SELECT true_subtype, pred_subtype, COUNT(*) as count
        FROM run_results
-       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3
+       WHERE run_id = $1 AND true_type = $2 AND pred_type = $3${incorrectClause}
        GROUP BY true_subtype, pred_subtype`,
       [runId, trueType, predType]
     );
@@ -309,6 +312,7 @@ async function getRecords(filters = {}) {
 
     if (filters.run_id2) {
       // Join run1 and run2 records by record_id to show both sides
+      const incorrectClause = filters.incorrectOnly ? ' AND r1.pred_subtype != r1.true_subtype' : '';
       sql = `SELECT DISTINCT ON (r1.record_id) r1.id, r1.run_id, r1.record_id, r1.attributes, r1.metadata,
                      r1.true_type, r1.pred_type, r1.true_subtype, r1.pred_subtype,
                      r2.true_type as run2_true_type, r2.pred_type as run2_pred_type,
@@ -316,7 +320,7 @@ async function getRecords(filters = {}) {
               FROM run_results r1
               JOIN run_results r2 ON r1.record_id = r2.record_id
               WHERE r1.run_id = $1 AND r2.run_id = $2
-                AND r1.pred_subtype <> r2.pred_subtype`;
+                AND r1.pred_subtype <> r2.pred_subtype${incorrectClause}`;
       params.push(filters.run_id1 || filters.run_id);
       params.push(filters.run_id2);
 
@@ -341,7 +345,7 @@ async function getRecords(filters = {}) {
         params.push(filters.run2_true_subtype);
       }
 
-      countSql = `SELECT COUNT(DISTINCT r1.record_id) as total FROM run_results r1 JOIN run_results r2 ON r1.record_id = r2.record_id WHERE r1.run_id = $1 AND r2.run_id = $2 AND r1.pred_subtype <> r2.pred_subtype`;
+      countSql = `SELECT COUNT(DISTINCT r1.record_id) as total FROM run_results r1 JOIN run_results r2 ON r1.record_id = r2.record_id WHERE r1.run_id = $1 AND r2.run_id = $2 AND r1.pred_subtype <> r2.pred_subtype${incorrectClause}`;
       countParams.push(filters.run_id1 || filters.run_id);
       countParams.push(filters.run_id2);
 
@@ -386,6 +390,9 @@ async function getRecords(filters = {}) {
         sql += ` AND pred_subtype = $${paramCount++}`;
         params.push(filters.pred_subtype);
       }
+      if (filters.incorrectOnly) {
+        sql += ' AND pred_subtype != true_subtype';
+      }
 
       countSql = 'SELECT COUNT(*) as total FROM run_results WHERE 1=1';
       if (filters.run_id) {
@@ -407,6 +414,9 @@ async function getRecords(filters = {}) {
       if (filters.pred_subtype) {
         countSql += ` AND pred_subtype = $${countParamCount++}`;
         countParams.push(filters.pred_subtype);
+      }
+      if (filters.incorrectOnly) {
+        countSql += ' AND pred_subtype != true_subtype';
       }
     }
 
