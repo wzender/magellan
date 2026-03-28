@@ -1042,21 +1042,17 @@ select:focus {
 }
 
 .json-pretty {
-  padding: 0.75rem;
-  background: #f5f5f5;
-  border: 1px solid var(--border-color);
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  background: #1e1e2e;
+  color: #a6e3a1;
   border-radius: 4px;
-  font-size: 0.85rem;
-  font-family: 'Courier New', 'Monaco', monospace;
+  font-size: 0.75rem;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
   line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-x: auto;
-}
-
-.json-pretty code {
-  color: #333;
-  font-family: 'Courier New', 'Monaco', monospace;
+  white-space: pre;
+  overflow: auto;
+  max-height: 280px;
 }
 
 .json-container {
@@ -1142,12 +1138,13 @@ select:focus {
 }
 
 .json-empty {
-  padding: 1rem;
-  background: #f5f5f5;
-  border: 1px solid var(--border-color);
+  padding: 0.65rem 0.85rem;
+  background: #1e1e2e;
   border-radius: 4px;
-  color: var(--neutral-color);
+  color: #585b70;
   font-style: italic;
+  font-size: 0.75rem;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
 
 /* Pagination */

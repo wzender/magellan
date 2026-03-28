@@ -210,13 +210,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     if (!obj || Object.keys(obj).length === 0) {
       return <div className="json-empty">(empty)</div>;
     }
-
-    const jsonString = JSON.stringify(obj, null, 2);
-
     return (
-      <pre className="json-pretty">
-        <code>{jsonString}</code>
-      </pre>
+      <pre className="json-pretty">{JSON.stringify(obj, null, 2)}</pre>
     );
   };
 

@@ -69,6 +69,8 @@ function loadData() {
       ...row,
       id: parseInt(row.id),
       run_id: parseInt(row.run_id),
+      attributes: row.attributes ? JSON.parse(row.attributes) : {},
+      metadata: row.metadata ? JSON.parse(row.metadata) : {},
     }));
 
     dataCache = data;
