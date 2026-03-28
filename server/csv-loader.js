@@ -1,123 +1,120 @@
 /**
  * CSV Data Loader
- * Replaces PostgreSQL database with CSV files
+ * Reads leaderboard.csv and per-run CSVs from data/runs/
  */
 
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
-const csv = require('csv-parse/sync');
+const csv  = require('csv-parse/sync');
 
 const DATA_DIR = path.join(__dirname, '../data');
+const RUNS_DIR = path.join(DATA_DIR, 'runs');
 
-// Cache for loaded data
 let dataCache = null;
+
+function sanitize(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function runFileName(benchmarkId, runName) {
+  return `${benchmarkId}_${sanitize(runName)}.csv`;
+}
 
 function loadData() {
   if (dataCache) return dataCache;
 
-  const data = {
-    benchmarks: [],
-    runs: [],
-    leaderboard: [],
-    run_results: [],
-  };
+  const lbFile = fs.readFileSync(path.join(DATA_DIR, 'leaderboard.csv'), 'utf-8');
+  const lbRows = csv.parse(lbFile, { columns: true, skip_empty_lines: true });
 
-  try {
-    // Load benchmarks
-    const benchmarksFile = fs.readFileSync(path.join(DATA_DIR, 'benchmarks.csv'), 'utf-8');
-    data.benchmarks = csv.parse(benchmarksFile, {
-      columns: true,
-      skip_empty_lines: true,
-    }).map(row => ({
-      ...row,
-      id: parseInt(row.id),
-    }));
+  const benchmarks = [];
+  const seenBenchmarks = {};
+  const runs = [];
+  const leaderboard = [];
 
-    // Load runs
-    const runsFile = fs.readFileSync(path.join(DATA_DIR, 'runs.csv'), 'utf-8');
-    data.runs = csv.parse(runsFile, {
-      columns: true,
-      skip_empty_lines: true,
-    }).map(row => ({
-      ...row,
-      id: parseInt(row.id),
-      benchmark_id: parseInt(row.benchmark_id),
-    }));
+  lbRows.forEach((row, i) => {
+    const runId       = i + 1;
+    const benchmarkId = parseInt(row.benchmark_id);
+    const bname       = row.benchmark_name;
 
-    // Load leaderboard
-    const leaderboardFile = fs.readFileSync(path.join(DATA_DIR, 'leaderboard.csv'), 'utf-8');
-    data.leaderboard = csv.parse(leaderboardFile, {
-      columns: true,
-      skip_empty_lines: true,
-    }).map(row => ({
-      ...row,
-      id: parseInt(row.id),
-      run_id: parseInt(row.run_id),
-      benchmark_id: parseInt(row.benchmark_id),
-      benchmark_length: parseInt(row.benchmark_length),
-      subtype_accuracy: parseFloat(row.subtype_accuracy),
+    if (!seenBenchmarks[benchmarkId]) {
+      seenBenchmarks[benchmarkId] = true;
+      benchmarks.push({ id: benchmarkId, name: bname });
+    }
+
+    runs.push({
+      id:            runId,
+      benchmark_id:  benchmarkId,
+      run_name:      row.run_name,
+      model_version: row.model_name,
+    });
+
+    leaderboard.push({
+      id:                  runId,
+      run_id:              runId,
+      benchmark_id:        benchmarkId,
+      run_name:            row.run_name,
+      model_version:       row.model_name,
+      subtype_accuracy:    parseFloat(row.subtype_accuracy),
       subtype_f1_weighted: parseFloat(row.subtype_f1_weighted),
-      type_f1_weighted: parseFloat(row.type_f1_weighted),
-    }));
+      benchmark_length:    0,
+    });
+  });
 
-    // Load run_results
-    const resultsFile = fs.readFileSync(path.join(DATA_DIR, 'run_results.csv'), 'utf-8');
-    data.run_results = csv.parse(resultsFile, {
-      columns: true,
-      skip_empty_lines: true,
-    }).map(row => ({
-      ...row,
-      id: parseInt(row.id),
-      run_id: parseInt(row.run_id),
-      attributes: row.attributes ? JSON.parse(row.attributes) : {},
-      metadata: row.metadata ? JSON.parse(row.metadata) : {},
-    }));
+  const run_results = [];
+  runs.forEach(run => {
+    const fname = runFileName(run.benchmark_id, run.run_name);
+    const fpath = path.join(RUNS_DIR, fname);
+    if (!fs.existsSync(fpath)) {
+      console.warn(`\u26a0 Missing run file: ${fname}`);
+      return;
+    }
+    const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
 
-    dataCache = data;
-    console.log('✓ CSV data loaded successfully');
-  } catch (error) {
-    console.error('Error loading CSV data:', error.message);
-    throw error;
-  }
+    const lbEntry = leaderboard.find(l => l.run_id === run.id);
+    if (lbEntry) lbEntry.benchmark_length = records.length;
 
-  return data;
+    records.forEach((r, idx) => {
+      run_results.push({
+        id:           run.id * 100000 + idx,
+        run_id:       run.id,
+        record_id:    r.rec_id,
+        true_type:    r.true_type,
+        true_subtype: r.true_subtype,
+        pred_type:    r.pred_type,
+        pred_subtype: r.pred_subtype,
+        attributes:   r.attributes ? JSON.parse(r.attributes) : {},
+        metadata:     r.metadata   ? JSON.parse(r.metadata)   : {},
+      });
+    });
+  });
+
+  dataCache = { benchmarks, runs, leaderboard, run_results };
+  console.log(`\u2713 CSV data loaded: ${runs.length} runs, ${run_results.length} records`);
+  return dataCache;
 }
 
-// Query functions matching database API
+// ── Query functions ───────────────────────────────────────────────────────────
 
 function getAllBenchmarks() {
-  const data = loadData();
-  return data.benchmarks;
+  return loadData().benchmarks;
 }
 
 function getBenchmark(id) {
-  const data = loadData();
-  return data.benchmarks.find(b => b.id === id);
+  return loadData().benchmarks.find(b => b.id === id);
 }
 
 function getRunsByBenchmarkId(benchmarkId) {
-  const data = loadData();
-  return data.runs.filter(r => r.benchmark_id === benchmarkId);
+  return loadData().runs.filter(r => r.benchmark_id === benchmarkId);
 }
 
 function getRun(id) {
-  const data = loadData();
-  return data.runs.find(r => r.id === id);
+  return loadData().runs.find(r => r.id === id);
 }
 
 function getLeaderboardByBenchmarkId(benchmarkId) {
-  const data = loadData();
-  return data.leaderboard
+  return loadData().leaderboard
     .filter(l => l.benchmark_id === benchmarkId)
-    .map(l => {
-      const run = data.runs.find(r => r.id === l.run_id);
-      return {
-        ...l,
-        run_name: run?.run_name,
-        model_version: run?.model_version,
-      };
-    })
-    .sort((a, b) => parseFloat(b.subtype_f1_weighted) - parseFloat(a.subtype_f1_weighted));
+    .sort((a, b) => b.subtype_f1_weighted - a.subtype_f1_weighted);
 }
 
 function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {
@@ -125,247 +122,143 @@ function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {
   let results = data.run_results.filter(r => r.run_id === runId);
   if (incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
 
-  // Build type matrix
-  const types = new Set();
-  results.forEach(r => {
-    types.add(r.true_type);
-    types.add(r.pred_type);
-  });
-  const typeArray = Array.from(types).sort();
-
+  const types = Array.from(new Set(results.flatMap(r => [r.true_type, r.pred_type]))).sort();
   const typeMatrix = {};
-  typeArray.forEach(t => {
-    typeMatrix[t] = {};
-    typeArray.forEach(p => {
-      typeMatrix[t][p] = results.filter(r => r.true_type === t && r.pred_type === p).length;
-    });
-  });
+  types.forEach(t => { typeMatrix[t] = {}; types.forEach(p => { typeMatrix[t][p] = 0; }); });
+  results.forEach(r => { typeMatrix[r.true_type][r.pred_type]++; });
 
-  // Build subtype data with type information
+  const seenPairs = new Set();
   const subtypeData = [];
-  const subtype_pairs = new Set();
   results.forEach(r => {
     const key = `${r.true_type}|${r.pred_type}|${r.true_subtype}|${r.pred_subtype}`;
-    if (!subtype_pairs.has(key)) {
-      subtype_pairs.add(key);
+    if (!seenPairs.has(key)) {
+      seenPairs.add(key);
       subtypeData.push({
-        true_type: r.true_type,
-        pred_type: r.pred_type,
+        true_type:    r.true_type,
+        pred_type:    r.pred_type,
         true_subtype: r.true_subtype,
         pred_subtype: r.pred_subtype,
-        count: results.filter(
-          x => x.true_type === r.true_type && x.pred_type === r.pred_type && x.true_subtype === r.true_subtype && x.pred_subtype === r.pred_subtype
+        count: results.filter(x =>
+          x.true_type === r.true_type && x.pred_type === r.pred_type &&
+          x.true_subtype === r.true_subtype && x.pred_subtype === r.pred_subtype
         ).length,
       });
     }
   });
 
   return {
-    type_matrix: {
-      rows: typeArray,
-      cols: typeArray,
-      data: typeMatrix,
-    },
+    type_matrix: { rows: types, cols: types, data: typeMatrix },
     subtype_matrix: subtypeData.sort((a, b) => b.count - a.count),
-  };
-}
-
-function getTransitionMatrix(runId1, runId2, minCount = 1) {
-  const data = loadData();
-  const results1 = data.run_results.filter(r => r.run_id === runId1);
-  const results2 = data.run_results.filter(r => r.run_id === runId2);
-
-  const recordMap = {};
-  results1.forEach(r => {
-    recordMap[r.record_id] = {
-      pred_subtype: r.pred_subtype,
-      true_subtype: r.true_subtype,
-      isCorrect: r.pred_subtype === r.true_subtype
-    };
-  });
-
-  const transitionData = {};
-  const subtypes = new Set();
-
-  results2.forEach(r => {
-    const run1Data = recordMap[r.record_id];
-    if (run1Data && run1Data.pred_subtype !== r.pred_subtype) {
-      const run1Pred = run1Data.pred_subtype;
-      const run2Pred = r.pred_subtype;
-      const trueSubtype = run1Data.true_subtype;
-
-      if (!transitionData[run1Pred]) transitionData[run1Pred] = {};
-      if (!transitionData[run1Pred][run2Pred]) {
-        transitionData[run1Pred][run2Pred] = {
-          total: 0,
-          run1Correct: 0,    // run1 prediction matches true
-          run2Correct: 0,    // run2 prediction matches true
-          bothWrong: 0       // both predictions are wrong
-        };
-      }
-
-      const cell = transitionData[run1Pred][run2Pred];
-      cell.total++;
-
-      const run1IsCorrect = run1Pred === trueSubtype;
-      const run2IsCorrect = run2Pred === trueSubtype;
-
-      if (run1IsCorrect && !run2IsCorrect) {
-        cell.run1Correct++;
-      } else if (!run1IsCorrect && run2IsCorrect) {
-        cell.run2Correct++;
-      } else if (!run1IsCorrect && !run2IsCorrect) {
-        cell.bothWrong++;
-      }
-      // Both correct is impossible in a transition matrix
-
-      subtypes.add(run1Pred);
-      subtypes.add(run2Pred);
-    }
-  });
-
-  // Filter out transitions with count < minCount
-  const filteredTransitionData = {};
-  const filteredSubtypes = new Set();
-
-  Object.keys(transitionData).forEach(run1Subtype => {
-    Object.keys(transitionData[run1Subtype]).forEach(run2Subtype => {
-      const cell = transitionData[run1Subtype][run2Subtype];
-      if (cell.total >= minCount) {
-        if (!filteredTransitionData[run1Subtype]) {
-          filteredTransitionData[run1Subtype] = {};
-        }
-        filteredTransitionData[run1Subtype][run2Subtype] = cell;
-        filteredSubtypes.add(run1Subtype);
-        filteredSubtypes.add(run2Subtype);
-      }
-    });
-  });
-
-  const subtypeArray = Array.from(filteredSubtypes).sort();
-
-  return {
-    rows: subtypeArray,
-    cols: subtypeArray,
-    data: filteredTransitionData,
-  };
-}
-
-function getRecords(filters = {}) {
-  const data = loadData();
-
-  // Transition mode (two runs): join by record_id and include run2 fields
-  if (filters.run_id2) {
-    const runId1 = filters.run_id1 || filters.run_id;
-    const runId2 = filters.run_id2;
-
-    let run1Records = data.run_results.filter(r => r.run_id === runId1);
-    const run2Map = data.run_results
-      .filter(r => r.run_id === runId2)
-      .reduce((acc, r) => {
-        acc[r.record_id] = r;
-        return acc;
-      }, {});
-
-    let combined = run1Records
-      .map(r1 => {
-        const r2 = run2Map[r1.record_id];
-        if (!r2) return null;
-        return {
-          ...r1,
-          run2_true_type: r2.true_type,
-          run2_pred_type: r2.pred_type,
-          run2_true_subtype: r2.true_subtype,
-          run2_pred_subtype: r2.pred_subtype,
-        };
-      })
-      .filter(r => r !== null);
-
-    // Default transition matrix intent: changed subtype
-    combined = combined.filter(r => r.pred_subtype !== r.run2_pred_subtype);
-
-    if (filters.run1_pred_subtype) {
-      combined = combined.filter(r => r.pred_subtype === filters.run1_pred_subtype);
-    }
-    if (filters.run2_pred_subtype) {
-      combined = combined.filter(r => r.run2_pred_subtype === filters.run2_pred_subtype);
-    }
-    if (filters.run1_true_subtype) {
-      combined = combined.filter(r => r.true_subtype === filters.run1_true_subtype);
-    }
-    if (filters.run2_true_subtype) {
-      combined = combined.filter(r => r.run2_true_subtype === filters.run2_true_subtype);
-    }
-    if (filters.true_type) {
-      combined = combined.filter(r => r.true_type === filters.true_type);
-    }
-    if (filters.pred_type) {
-      combined = combined.filter(r => r.pred_type === filters.pred_type);
-    }
-
-    const limit = filters.limit || 100;
-    const offset = filters.offset || 0;
-    const total = combined.length;
-    const pageData = combined.slice(offset, offset + limit);
-
-    return {
-      data: pageData,
-      pagination: {
-        total,
-        limit,
-        offset,
-        pages: Math.ceil(total / limit),
-      },
-    };
-  }
-
-  // Single-run mode
-  let results = data.run_results;
-  if (filters.run_id) results = results.filter(r => r.run_id === filters.run_id);
-  if (filters.true_type) results = results.filter(r => r.true_type === filters.true_type);
-  if (filters.pred_type) results = results.filter(r => r.pred_type === filters.pred_type);
-  if (filters.true_subtype) results = results.filter(r => r.true_subtype === filters.true_subtype);
-  if (filters.pred_subtype) results = results.filter(r => r.pred_subtype === filters.pred_subtype);
-  if (filters.incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
-
-  const limit = filters.limit || 100;
-  const offset = filters.offset || 0;
-
-  return {
-    data: results.slice(offset, offset + limit),
-    pagination: {
-      total: results.length,
-      limit,
-      offset,
-      pages: Math.ceil(results.length / limit),
-    },
   };
 }
 
 function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectOnly = false) {
   const data = loadData();
-  let results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType && r.pred_type === predType);
+  let results = data.run_results.filter(r =>
+    r.run_id === runId && r.true_type === trueType && r.pred_type === predType
+  );
   if (incorrectOnly) results = results.filter(r => r.pred_subtype !== r.true_subtype);
 
-  const subtypes = new Set();
-  results.forEach(r => {
-    subtypes.add(r.true_subtype);
-    subtypes.add(r.pred_subtype);
-  });
-  const subtypeArray = Array.from(subtypes).sort();
-
+  const subtypes = Array.from(new Set(results.flatMap(r => [r.true_subtype, r.pred_subtype]))).sort();
   const matrixData = {};
-  subtypeArray.forEach(t => {
-    matrixData[t] = {};
-    subtypeArray.forEach(p => {
-      matrixData[t][p] = results.filter(r => r.true_subtype === t && r.pred_subtype === p).length;
+  subtypes.forEach(t => { matrixData[t] = {}; subtypes.forEach(p => { matrixData[t][p] = 0; }); });
+  results.forEach(r => { matrixData[r.true_subtype][r.pred_subtype]++; });
+
+  return { rows: subtypes, cols: subtypes, data: matrixData };
+}
+
+function getTransitionMatrix(runId1, runId2, minCount = 1) {
+  const data = loadData();
+  const run1Map = {};
+  data.run_results.filter(r => r.run_id === runId1).forEach(r => {
+    run1Map[r.record_id] = { pred_subtype: r.pred_subtype, true_subtype: r.true_subtype };
+  });
+
+  const transitionData = {};
+  data.run_results.filter(r => r.run_id === runId2).forEach(r => {
+    const r1 = run1Map[r.record_id];
+    if (!r1 || r1.pred_subtype === r.pred_subtype) return;
+
+    const run1Pred    = r1.pred_subtype;
+    const run2Pred    = r.pred_subtype;
+    const trueSubtype = r1.true_subtype;
+
+    if (!transitionData[run1Pred]) transitionData[run1Pred] = {};
+    if (!transitionData[run1Pred][run2Pred]) {
+      transitionData[run1Pred][run2Pred] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
+    const cell = transitionData[run1Pred][run2Pred];
+    cell.total++;
+    const r1c = run1Pred === trueSubtype;
+    const r2c = run2Pred === trueSubtype;
+    if      (r1c && !r2c) cell.run1Correct++;
+    else if (!r1c && r2c) cell.run2Correct++;
+    else if (!r1c && !r2c) cell.bothWrong++;
+  });
+
+  const filteredData = {};
+  const filteredSubtypes = new Set();
+  Object.keys(transitionData).forEach(r1 => {
+    Object.keys(transitionData[r1]).forEach(r2 => {
+      if (transitionData[r1][r2].total >= minCount) {
+        if (!filteredData[r1]) filteredData[r1] = {};
+        filteredData[r1][r2] = transitionData[r1][r2];
+        filteredSubtypes.add(r1);
+        filteredSubtypes.add(r2);
+      }
     });
   });
 
+  const subtypeArray = Array.from(filteredSubtypes).sort();
+  return { rows: subtypeArray, cols: subtypeArray, data: filteredData };
+}
+
+function getRecords(filters = {}) {
+  const data = loadData();
+
+  if (filters.run_id2) {
+    const runId1 = filters.run_id1 || filters.run_id;
+    const runId2 = filters.run_id2;
+
+    const run2Map = {};
+    data.run_results.filter(r => r.run_id === runId2).forEach(r => { run2Map[r.record_id] = r; });
+
+    let combined = data.run_results
+      .filter(r => r.run_id === runId1)
+      .map(r1 => {
+        const r2 = run2Map[r1.record_id];
+        if (!r2) return null;
+        return { ...r1, run2_pred_type: r2.pred_type, run2_pred_subtype: r2.pred_subtype };
+      })
+      .filter(Boolean)
+      .filter(r => r.pred_subtype !== r.run2_pred_subtype);
+
+    if (filters.run1_pred_subtype)  combined = combined.filter(r => r.pred_subtype       === filters.run1_pred_subtype);
+    if (filters.run2_pred_subtype)  combined = combined.filter(r => r.run2_pred_subtype   === filters.run2_pred_subtype);
+    if (filters.true_type)          combined = combined.filter(r => r.true_type           === filters.true_type);
+    if (filters.pred_type)          combined = combined.filter(r => r.pred_type           === filters.pred_type);
+
+    const limit  = filters.limit  || 100;
+    const offset = filters.offset || 0;
+    return {
+      data: combined.slice(offset, offset + limit),
+      pagination: { total: combined.length, limit, offset, pages: Math.ceil(combined.length / limit) },
+    };
+  }
+
+  let results = data.run_results;
+  if (filters.run_id)        results = results.filter(r => r.run_id        === filters.run_id);
+  if (filters.true_type)     results = results.filter(r => r.true_type     === filters.true_type);
+  if (filters.pred_type)     results = results.filter(r => r.pred_type     === filters.pred_type);
+  if (filters.true_subtype)  results = results.filter(r => r.true_subtype  === filters.true_subtype);
+  if (filters.pred_subtype)  results = results.filter(r => r.pred_subtype  === filters.pred_subtype);
+  if (filters.incorrectOnly) results = results.filter(r => r.pred_subtype  !== r.true_subtype);
+
+  const limit  = filters.limit  || 100;
+  const offset = filters.offset || 0;
   return {
-    rows: subtypeArray,
-    cols: subtypeArray,
-    data: matrixData,
+    data: results.slice(offset, offset + limit),
+    pagination: { total: results.length, limit, offset, pages: Math.ceil(results.length / limit) },
   };
 }
 

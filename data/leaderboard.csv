@@ -1,11 +1,11 @@
-id,run_id,benchmark_id,benchmark_length,subtype_accuracy,subtype_f1_weighted,type_f1_weighted,run_name,model_version
-1,1,1,2000,0.0695,0.0695,0.8105,model_v1,1.0.0
-3,3,1,2000,0.0365,0.0365,0.4365,model_v3,1.2.0
-2,2,1,2000,0.0350,0.0350,0.4290,model_v2,1.1.0
-4,4,2,2000,0.0805,0.0805,1.0000,model_v1,1.0.0
-5,5,2,2000,0.0450,0.0450,0.5270,model_v2,1.1.0
-6,6,2,2000,0.0375,0.0375,0.5235,model_v3,1.2.0
-7,7,3,2000,0.0585,0.0585,0.7455,model_v1,1.0.0
-8,8,3,2000,0.0345,0.0345,0.3990,model_v2,1.1.0
-9,9,3,2000,0.0320,0.0320,0.4010,model_v3,1.2.0
-10,10,3,2000,1.0,1.0,1.0,perfect model,perfect
+benchmark_id,benchmark_name,run_name,model_name,subtype_accuracy,subtype_f1_weighted
+1,Benchmark Q1 2026,model_v2,1.1.0,0.0350,0.0350
+1,Benchmark Q1 2026,model_v3,1.2.0,0.0365,0.0365
+1,Benchmark Q1 2026,model_v1,1.0.0,0.0695,0.0695
+2,Benchmark Q2 2026,model_v3,1.2.0,0.0375,0.0375
+2,Benchmark Q2 2026,model_v2,1.1.0,0.0450,0.0450
+2,Benchmark Q2 2026,model_v1,1.0.0,0.0805,0.0805
+3,Test Benchmark,model_v3,1.2.0,0.0320,0.0320
+3,Test Benchmark,model_v2,1.1.0,0.0345,0.0345
+3,Test Benchmark,model_v1,1.0.0,0.0585,0.0585
+3,Test Benchmark,perfect model,perfect,1.0,1.0
