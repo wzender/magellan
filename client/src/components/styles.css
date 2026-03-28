@@ -216,7 +216,7 @@ select:focus {
 
 .leaderboard-widget h2 {
   margin: 0 0 0.35rem;
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -336,7 +336,7 @@ select:focus {
 }
 
 .matrix-panel-title {
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -632,7 +632,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 }
 
 .records-section-title {
-  font-size: 0.68rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-faint);
   text-transform: uppercase;
@@ -651,7 +651,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 
 .row-level-table-panel h3 {
   margin: 0 0 0.3rem;
-  font-size: 0.78rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-muted);
   flex-shrink: 0;
@@ -749,6 +749,8 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 
 .badge-correct   { background: var(--success); }
 .badge-incorrect { background: var(--error); }
+.legend-badge { margin-right: 2px; vertical-align: middle; }
+.legend-badge + .legend-badge { margin-right: 5px; }
 
 /* Expanded detail row */
 .record-row-expanded td {

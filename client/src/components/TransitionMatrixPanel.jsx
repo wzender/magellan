@@ -88,16 +88,16 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
           <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
           <div className="correctness-legend inline-legend">
             <span className={`legend-item ${indicatorFilter === null ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(null)}>
-              <span className="legend-box legend-clear">●</span>All ({indicatorTotals.total})
+              <span className="correctness-badge badge-correct legend-badge" /><span className="correctness-badge badge-correct legend-badge" />All ({indicatorTotals.total})
             </span>
             <span className={`legend-item ${indicatorFilter === 'run1-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run1-correct' ? null : 'run1-correct')}>
-              <span className="legend-box legend-run1">✓₁</span>{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
+              <span className="correctness-badge badge-correct legend-badge" /><span className="correctness-badge badge-incorrect legend-badge" />{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
             </span>
             <span className={`legend-item ${indicatorFilter === 'run2-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run2-correct' ? null : 'run2-correct')}>
-              <span className="legend-box legend-run2">✓₂</span>{selectedRunNames[1] || 'Run B'} ({indicatorTotals.run2Correct})
+              <span className="correctness-badge badge-incorrect legend-badge" /><span className="correctness-badge badge-correct legend-badge" />{selectedRunNames[1] || 'Run B'} ({indicatorTotals.run2Correct})
             </span>
             <span className={`legend-item ${indicatorFilter === 'both-wrong' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'both-wrong' ? null : 'both-wrong')}>
-              <span className="legend-box legend-both">✗</span>Both wrong ({indicatorTotals.bothWrong})
+              <span className="correctness-badge badge-incorrect legend-badge" /><span className="correctness-badge badge-incorrect legend-badge" />Both wrong ({indicatorTotals.bothWrong})
             </span>
           </div>
         </div>
