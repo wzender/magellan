@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import RowLevelTable from './RowLevelTable';
 
 function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [] }) {
-  const [matrixOpen, setMatrixOpen] = useState(true);
   const [indicatorFilter, setIndicatorFilter] = useState(null);
 
   if (loading) return <div className="loading">Loading transition matrix...</div>;
@@ -68,77 +67,72 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
   return (
     <div className="matrix-view">
 
-      {/* ── Matrix drawer ── */}
-      <div className="panel-stack">
-        <div className="matrix-drawer">
-          <div className="matrix-drawer-handle" onClick={() => setMatrixOpen(o => !o)}>
-            <span className="drawer-chevron">{matrixOpen ? '▾' : '▸'}</span>
-            <span>Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
-            <div className="correctness-legend inline-legend" onClick={e => e.stopPropagation()}>
-              <span className={`legend-item ${indicatorFilter === 'run1-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run1-correct' ? null : 'run1-correct')}>
-                <span className="legend-box legend-run1">✓₁</span>{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
-              </span>
-              <span className={`legend-item ${indicatorFilter === 'run2-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run2-correct' ? null : 'run2-correct')}>
-                <span className="legend-box legend-run2">✓₂</span>{selectedRunNames[1] || 'Run B'} ({indicatorTotals.run2Correct})
-              </span>
-              <span className={`legend-item ${indicatorFilter === 'both-wrong' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'both-wrong' ? null : 'both-wrong')}>
-                <span className="legend-box legend-both">✗</span>Both wrong ({indicatorTotals.bothWrong})
-              </span>
-              <span className="legend-item" onClick={() => setIndicatorFilter(null)}>
-                <span className="legend-box legend-clear">●</span>All ({indicatorTotals.total})
-              </span>
-            </div>
+      {/* ── Transition Matrix Panel ── */}
+      <div className="matrix-panel">
+        <div className="matrix-panel-header">
+          <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
+          <div className="correctness-legend inline-legend">
+            <span className={`legend-item ${indicatorFilter === 'run1-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run1-correct' ? null : 'run1-correct')}>
+              <span className="legend-box legend-run1">✓₁</span>{selectedRunNames[0] || 'Run A'} ({indicatorTotals.run1Correct})
+            </span>
+            <span className={`legend-item ${indicatorFilter === 'run2-correct' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'run2-correct' ? null : 'run2-correct')}>
+              <span className="legend-box legend-run2">✓₂</span>{selectedRunNames[1] || 'Run B'} ({indicatorTotals.run2Correct})
+            </span>
+            <span className={`legend-item ${indicatorFilter === 'both-wrong' ? 'indicator-active' : ''}`} onClick={() => setIndicatorFilter(indicatorFilter === 'both-wrong' ? null : 'both-wrong')}>
+              <span className="legend-box legend-both">✗</span>Both wrong ({indicatorTotals.bothWrong})
+            </span>
+            <span className="legend-item" onClick={() => setIndicatorFilter(null)}>
+              <span className="legend-box legend-clear">●</span>All ({indicatorTotals.total})
+            </span>
           </div>
-          {matrixOpen && (
-            <div className="matrix-drawer-body">
-              {rows.length === 0 ? (
-                <div className="no-selection-message compact">
-                  No transitions found. Try reducing the minimum changed records threshold.
-                </div>
-              ) : (
-                <table className="transition-matrix">
-                  <thead>
-                    <tr>
-                      <th>{runNameLeft} \ {runNameRight}</th>
-                      {cols.map(col => (
-                        <th key={col}>
-                          <span className="matrix-th-label" data-tooltip={col}>
-                            {col.length > 8 ? col.substring(0, 8) + '…' : col}
-                          </span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(row => (
-                      <tr key={row}>
-                        <th>
-                          <span className="matrix-th-label" data-tooltip={row}>
-                            {row.length > 8 ? row.substring(0, 8) + '…' : row}
-                          </span>
-                        </th>
-                        {cols.map(col => {
-                          const cell = matrixData[row]?.[col];
-                          const total = cell?.total || cell || 0;
-                          const isSelected = selectedCell?.run1 === row && selectedCell?.run2 === col;
-                          return (
-                            <td
-                              key={`${row}-${col}`}
-                              className={`matrix-cell ${isSelected ? 'selected' : ''} ${total > 0 ? 'populated' : 'empty'} ${getCorrectnessCssClass(cell)} ${row === col ? 'diagonal-cell' : ''}`}
-                              onClick={() => total > 0 && onCellClick(row, col)}
-                              style={getTransitionCellStyle(cell, row, col, isSelected)}
-                              title={cell ? `Run1: ${cell.run1Correct || 0} correct, Run2: ${cell.run2Correct || 0} correct, Both wrong: ${cell.bothWrong || 0}` : ''}
-                            >
-                              <div className="cell-content"><div className="cell-total">{total}</div></div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+        </div>
+        <div className="matrix-panel-body">
+          {rows.length === 0 ? (
+            <div className="no-selection-message compact">
+              No transitions found. Try reducing the minimum changed records threshold.
             </div>
+          ) : (
+            <table className="transition-matrix">
+              <thead>
+                <tr>
+                  <th>{runNameLeft} \ {runNameRight}</th>
+                  {cols.map(col => (
+                    <th key={col}>
+                      <span className="matrix-th-label" data-tooltip={col}>
+                        {col.length > 8 ? col.substring(0, 8) + '…' : col}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row}>
+                    <th>
+                      <span className="matrix-th-label" data-tooltip={row}>
+                        {row.length > 8 ? row.substring(0, 8) + '…' : row}
+                      </span>
+                    </th>
+                    {cols.map(col => {
+                      const cell = matrixData[row]?.[col];
+                      const total = cell?.total || cell || 0;
+                      const isSelected = selectedCell?.run1 === row && selectedCell?.run2 === col;
+                      return (
+                        <td
+                          key={`${row}-${col}`}
+                          className={`matrix-cell ${isSelected ? 'selected' : ''} ${total > 0 ? 'populated' : 'empty'} ${getCorrectnessCssClass(cell)} ${row === col ? 'diagonal-cell' : ''}`}
+                          onClick={() => total > 0 && onCellClick(row, col)}
+                          style={getTransitionCellStyle(cell, row, col, isSelected)}
+                          title={cell ? `Run1: ${cell.run1Correct || 0} correct, Run2: ${cell.run2Correct || 0} correct, Both wrong: ${cell.bothWrong || 0}` : ''}
+                        >
+                          <div className="cell-content"><div className="cell-total">{total}</div></div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
