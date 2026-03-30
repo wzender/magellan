@@ -521,6 +521,27 @@ select:focus {
   font-weight: 700;
 }
 
+/* F1 footer row */
+.f1-row-header {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg) !important;
+  font-weight: 700;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border) !important;
+  text-align: right;
+  padding-right: 0.55rem;
+}
+
+.f1-cell {
+  font-weight: 700;
+  font-size: 0.72rem;
+  cursor: default !important;
+  border-bottom: 2px solid var(--border) !important;
+  white-space: nowrap;
+}
+
 /* Clickable row headers */
 .matrix-row-header.clickable { cursor: pointer; }
 .matrix-row-header.clickable:hover { background: #ede9fe; color: var(--primary); }

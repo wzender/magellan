@@ -3,10 +3,12 @@
 Sequence diagrams for the main interaction flows in the React/Node version.
 
 Participants:
-- **User** — browser interactions
-- **Dashboard** — `Dashboard.jsx`, owns all state and `useEffect` hooks
-- **API** — Express routes in `server/api/`
-- **CSVLoader** — `server/csv-loader.js`, in-memory data cache
+
+* **User** — browser interactions
+* **Dashboard** — `Dashboard.jsx`, owns all state and `useEffect` hooks
+* **API** — Express routes in `server/api/`
+* **CSVLoader** — `server/csv-loader.js`, in-memory data cache
+
 
 ---
 
@@ -47,6 +49,7 @@ sequenceDiagram
     Note over Dashboard: selectedRuns.length === 1 → confusion mode
 ```
 
+
 ---
 
 ## 2. Confusion Mode — Single Run Selected
@@ -83,6 +86,7 @@ sequenceDiagram
     Dashboard->>ConfusionMatrixPanel: data, recordsData
     ConfusionMatrixPanel->>User: render Type Confusion Matrix + Record Details
 ```
+
 
 ---
 
@@ -131,6 +135,7 @@ sequenceDiagram
     ConfusionMatrixPanel->>User: Record Details filtered to that subtype cell
 ```
 
+
 ---
 
 ## 4. Transition Mode — Two Runs Selected
@@ -169,6 +174,7 @@ sequenceDiagram
     TransitionMatrixPanel->>User: render Transition Matrix + Record Details
 ```
 
+
 ---
 
 ## 5. Transition Mode — Cell Click Filters Records
@@ -194,6 +200,7 @@ sequenceDiagram
     Dashboard->>TransitionMatrixPanel: filteredRecordsData
     TransitionMatrixPanel->>User: Record Details filtered to that transition cell
 ```
+
 
 ---
 
@@ -227,6 +234,7 @@ sequenceDiagram
         Dashboard->>Dashboard: setRuns(...)
     end
 ```
+
 
 ---
 
@@ -262,3 +270,5 @@ sequenceDiagram
 
     Note over Dashboard: if selectedTypePair was set,<br/>subtype matrix is also re-fetched automatically<br/>(selectedTypePair + filter are both useEffect deps)
 ```
+
+
