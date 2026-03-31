@@ -1,15 +1,15 @@
 """
-Data loader for the classification evaluation dashboard.
-Mirrors the logic of server/csv-loader.js.
+Data loader for the Dash classification evaluation dashboard.
+Mirrors data_loader.py but removes Streamlit dependency.
 """
 
 import os
 import re
 import json
+import functools
 import pandas as pd
-import streamlit as st
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 RUNS_DIR = os.path.join(DATA_DIR, "runs")
 
 
@@ -25,7 +25,7 @@ def run_file_name(benchmark_id: int, run_name: str) -> str:
     return f"{benchmark_id}_{sanitize(run_name)}.csv"
 
 
-@st.cache_data(show_spinner="Loading data...")
+@functools.lru_cache(maxsize=1)
 def load_data() -> dict:
     """
     Load leaderboard.csv and all per-run CSVs into memory.
@@ -127,15 +127,24 @@ def load_data() -> dict:
 # ── Query functions ────────────────────────────────────────────────────────────
 
 
-def get_benchmarks() -> list[dict]:
+def get_benchmarks() -> list:
     return load_data()["benchmarks"]
 
 
-def get_leaderboard(benchmark_id: int) -> list[dict]:
+def get_leaderboard(benchmark_id: int) -> list:
     data = load_data()
     rows = [l for l in data["leaderboard"] if l["benchmark_id"] == benchmark_id]
     rows.sort(key=lambda x: x["subtype_f1_weighted"], reverse=True)
     return rows
+
+
+def get_run_name(run_id: int) -> str:
+    """Returns the run_name for a given run_id."""
+    data = load_data()
+    for run in data["runs"]:
+        if run["id"] == run_id:
+            return run["run_name"]
+    return str(run_id)
 
 
 def get_confusion_matrix(run_id: int, incorrect_only: bool = False) -> dict:
@@ -184,9 +193,21 @@ def get_confusion_matrix(run_id: int, incorrect_only: bool = False) -> dict:
 
     subtype_data.sort(key=lambda x: x["count"], reverse=True)
 
+    # Compute per-type F1
+    type_f1 = {}
+    for t in types:
+        tp = type_matrix[t][t]
+        fp = sum(type_matrix[other][t] for other in types if other != t)
+        fn = sum(type_matrix[t][other] for other in types if other != t)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        type_f1[t] = round(f1, 3)
+
     return {
         "type_matrix": {"rows": types, "cols": types, "data": type_matrix},
         "subtype_matrix": subtype_data,
+        "type_f1": type_f1,
     }
 
 
@@ -269,18 +290,22 @@ def get_transition_matrix(run_id1: int, run_id2: int, min_count: int = 1) -> dic
 
     # Filter by min_count
     filtered_data = {}
-    filtered_subtypes = set()
+    filtered_rows = set()
+    filtered_cols = set()
     for r1_pred, r2_preds in transition_data.items():
         for r2_pred, cell in r2_preds.items():
             if cell["total"] >= min_count:
                 if r1_pred not in filtered_data:
                     filtered_data[r1_pred] = {}
                 filtered_data[r1_pred][r2_pred] = cell
-                filtered_subtypes.add(r1_pred)
-                filtered_subtypes.add(r2_pred)
+                filtered_rows.add(r1_pred)
+                filtered_cols.add(r2_pred)
 
-    subtype_array = sorted(filtered_subtypes)
-    return {"rows": subtype_array, "cols": subtype_array, "data": filtered_data}
+    return {
+        "rows": sorted(filtered_rows),
+        "cols": sorted(filtered_cols),
+        "data": filtered_data,
+    }
 
 
 def get_records(filters: dict) -> dict:
@@ -328,7 +353,7 @@ def get_records(filters: dict) -> dict:
 
         total = len(combined)
         return {
-            "data": combined[offset : offset + limit],
+            "data": combined[offset: offset + limit],
             "total": total,
         }
 
@@ -348,6 +373,6 @@ def get_records(filters: dict) -> dict:
 
     total = len(results)
     return {
-        "data": results[offset : offset + limit],
+        "data": results[offset: offset + limit],
         "total": total,
     }
