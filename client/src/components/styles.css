@@ -480,6 +480,19 @@ select:focus {
 
 .matrix-cell.diagonal-cell {
   font-weight: 700;
+  position: relative;
+}
+
+.matrix-cell.diagonal-cell::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  border-color: transparent rgba(0, 0, 0, 0.28) transparent transparent;
 }
 
 /* Transition correctness colours */
@@ -514,10 +527,10 @@ select:focus {
 /* Asymmetry arrow */
 .asymmetry-arrow {
   display: block;
-  font-size: 0.65em;
+  font-size: 1em;
   color: #f59e0b;
   line-height: 1;
-  margin-top: 1px;
+  margin-top: 2px;
   font-weight: 700;
 }
 

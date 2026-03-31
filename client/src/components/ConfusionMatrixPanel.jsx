@@ -84,22 +84,26 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
   // Type matrix is always square (same label set on both axes); sort once.
   const sortedTypeLabels = sortByF1(data.type_matrix.rows, data.type_matrix.data);
 
-  // Subtype matrix may be asymmetric (off-diagonal type cell: rows = true_subtypes of
-  // true_type, cols = pred_subtypes of pred_type — different label sets). Always sort
-  // rows and cols independently by descending total count.
+  // Sort subtype rows (pred) by F1 descending. Cols (true) follow the same order for
+  // shared labels so the diagonal stays aligned; remaining cols appended sorted by F1.
   const sortedSubtypeRowLabels = subtypeMatrix
     ? [...subtypeMatrix.rows].sort((a, b) => {
-        const ta = subtypeMatrix.cols.reduce((s, c) => s + (subtypeMatrix.data[a]?.[c] ?? 0), 0);
-        const tb = subtypeMatrix.cols.reduce((s, c) => s + (subtypeMatrix.data[b]?.[c] ?? 0), 0);
-        return tb - ta;
+        const fa = computeF1(subtypeMatrix.data, a, subtypeMatrix.rows, subtypeMatrix.cols)?.f1 ?? -1;
+        const fb = computeF1(subtypeMatrix.data, b, subtypeMatrix.rows, subtypeMatrix.cols)?.f1 ?? -1;
+        return fb - fa;
       })
     : [];
   const sortedSubtypeColLabels = subtypeMatrix
-    ? [...subtypeMatrix.cols].sort((a, b) => {
-        const ta = subtypeMatrix.rows.reduce((s, r) => s + (subtypeMatrix.data[r]?.[a] ?? 0), 0);
-        const tb = subtypeMatrix.rows.reduce((s, r) => s + (subtypeMatrix.data[r]?.[b] ?? 0), 0);
-        return tb - ta;
-      })
+    ? [
+        ...sortedSubtypeRowLabels.filter(l => subtypeMatrix.cols.includes(l)),
+        ...[...subtypeMatrix.cols]
+          .filter(l => !subtypeMatrix.rows.includes(l))
+          .sort((a, b) => {
+            const fa = computeF1(subtypeMatrix.data, a, subtypeMatrix.rows, subtypeMatrix.cols)?.f1 ?? -1;
+            const fb = computeF1(subtypeMatrix.data, b, subtypeMatrix.rows, subtypeMatrix.cols)?.f1 ?? -1;
+            return fb - fa;
+          }),
+      ]
     : [];
 
   const getF1CellStyle = (result) => {
