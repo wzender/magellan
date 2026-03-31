@@ -1,11 +1,11 @@
-benchmark_id,benchmark_name,run_name,model_name,subtype_accuracy,subtype_f1_weighted
-1,Benchmark Q1 2026,model_v2,1.1.0,0.0350,0.0350
-1,Benchmark Q1 2026,model_v3,1.2.0,0.0365,0.0365
-1,Benchmark Q1 2026,model_v1,1.0.0,0.0695,0.0695
-2,Benchmark Q2 2026,model_v3,1.2.0,0.0375,0.0375
-2,Benchmark Q2 2026,model_v2,1.1.0,0.0450,0.0450
-2,Benchmark Q2 2026,model_v1,1.0.0,0.0805,0.0805
-3,Test Benchmark,model_v3,1.2.0,0.0320,0.0320
-3,Test Benchmark,model_v2,1.1.0,0.0345,0.0345
-3,Test Benchmark,model_v1,1.0.0,0.0585,0.0585
-3,Test Benchmark,perfect model,perfect,1.0,1.0
+benchmark_id,benchmark_name,run_name,model_name,subtype_accuracy,subtype_f1_weighted,run_date
+1,Benchmark Q1 2026,model_v2,1.1.0,0.0350,0.0350,2026-01-28T09:15:00Z
+1,Benchmark Q1 2026,model_v3,1.2.0,0.0365,0.0365,2026-02-04T14:30:00Z
+1,Benchmark Q1 2026,model_v1,1.0.0,0.0695,0.0695,2026-01-15T11:00:00Z
+2,Benchmark Q2 2026,model_v3,1.2.0,0.0375,0.0375,2026-03-20T08:45:00Z
+2,Benchmark Q2 2026,model_v2,1.1.0,0.0450,0.0450,2026-03-10T16:20:00Z
+2,Benchmark Q2 2026,model_v1,1.0.0,0.0805,0.0805,2026-03-01T10:00:00Z
+3,Test Benchmark,model_v3,1.2.0,0.0320,0.0320,2026-03-31T23:50:00Z
+3,Test Benchmark,model_v2,1.1.0,0.0345,0.0345,2026-03-30T12:00:00Z
+3,Test Benchmark,model_v1,1.0.0,0.0585,0.0585,2026-03-25T09:30:00Z
+3,Test Benchmark,perfect model,perfect,1.0,1.0,2026-03-31T18:00:00Z

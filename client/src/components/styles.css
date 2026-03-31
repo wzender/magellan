@@ -319,6 +319,22 @@ select:focus {
   color: var(--text-muted);
 }
 
+.leaderboard-table .run-date-cell {
+  white-space: nowrap;
+}
+
+.run-date-abs {
+  display: block;
+  font-size: 0.85em;
+  color: var(--text-primary);
+}
+
+.run-date-rel {
+  display: block;
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+
 /* ─── Main content ──────────────────────────────────────────── */
 
 .main-content {

@@ -1,11 +1,36 @@
 import React, { useState, useEffect } from 'react';
 
+function parseRunDate(runName) {
+  const m = runName && runName.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (!m) return null;
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function timeAgo(date) {
+  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (secs < 60)          return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60)          return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24)         return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7)           return `${days} day${days !== 1 ? 's' : ''} ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5)          return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+  const months = Math.floor(days / 30.44);
+  if (months < 12)        return `${months} month${months !== 1 ? 's' : ''} ago`;
+  const years = Math.floor(days / 365.25);
+  return `${years} year${years !== 1 ? 's' : ''} ago`;
+}
+
 function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }) {
   const [columns, setColumns] = useState([
     { key: 'select', label: 'Select', width: 70 },
     { key: 'rank', label: 'Rank', width: 70 },
     { key: 'run_name', label: 'Run', width: 220 },
     { key: 'model_version', label: 'Model Version', width: 180 },
+    { key: 'run_date', label: 'Date', width: 160 },
     { key: 'subtype_accuracy', label: 'Subtype Accuracy', width: 140 },
     { key: 'subtype_f1_weighted', label: 'Subtype F1 (Weighted)', width: 160 },
     { key: 'type_f1_weighted', label: 'Type F1 (Weighted)', width: 150 },
@@ -200,6 +225,18 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
                     return <td key={`${row.run_id}-${col.key}`}>{row.run_name}</td>;
                   case 'model_version':
                     return <td key={`${row.run_id}-${col.key}`}>{row.model_version || '-'}</td>;
+                  case 'run_date': {
+                    const d = parseRunDate(row.run_name);
+                    if (!d) return <td key={`${row.run_id}-${col.key}`} className="run-date-cell">—</td>;
+                    const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+                    const relative = timeAgo(d);
+                    return (
+                      <td key={`${row.run_id}-${col.key}`} className="run-date-cell" title={d.toISOString()}>
+                        <span className="run-date-abs">{formatted}</span>
+                        <span className="run-date-rel">{relative}</span>
+                      </td>
+                    );
+                  }
                   case 'subtype_accuracy':
                     return <td key={`${row.run_id}-${col.key}`} className="metric">{parseFloat(row.subtype_accuracy).toFixed(4)}</td>;
                   case 'subtype_f1_weighted':
