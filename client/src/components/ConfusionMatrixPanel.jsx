@@ -81,11 +81,25 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
       return fb - fa;
     });
 
-  // Both rows and cols use the same labels; sort once and apply to both axes
-  // so the diagonal is preserved and classes are ordered best→worst by F1.
+  // Type matrix is always square (same label set on both axes); sort once.
   const sortedTypeLabels = sortByF1(data.type_matrix.rows, data.type_matrix.data);
-  const sortedSubtypeLabels = subtypeMatrix
-    ? sortByF1(subtypeMatrix.rows, subtypeMatrix.data)
+
+  // Subtype matrix may be asymmetric (off-diagonal type cell: rows = true_subtypes of
+  // true_type, cols = pred_subtypes of pred_type — different label sets). Always sort
+  // rows and cols independently by descending total count.
+  const sortedSubtypeRowLabels = subtypeMatrix
+    ? [...subtypeMatrix.rows].sort((a, b) => {
+        const ta = subtypeMatrix.cols.reduce((s, c) => s + (subtypeMatrix.data[a]?.[c] ?? 0), 0);
+        const tb = subtypeMatrix.cols.reduce((s, c) => s + (subtypeMatrix.data[b]?.[c] ?? 0), 0);
+        return tb - ta;
+      })
+    : [];
+  const sortedSubtypeColLabels = subtypeMatrix
+    ? [...subtypeMatrix.cols].sort((a, b) => {
+        const ta = subtypeMatrix.rows.reduce((s, r) => s + (subtypeMatrix.data[r]?.[a] ?? 0), 0);
+        const tb = subtypeMatrix.rows.reduce((s, r) => s + (subtypeMatrix.data[r]?.[b] ?? 0), 0);
+        return tb - ta;
+      })
     : [];
 
   const getF1CellStyle = (result) => {
@@ -199,7 +213,7 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
               <thead>
                 <tr>
                   <th>True \ Pred</th>
-                  {sortedSubtypeLabels.map(col => (
+                  {sortedSubtypeColLabels.map(col => (
                     <th key={col}>
                       <span className="matrix-th-label" data-tooltip={col}>
                         {col.length > 15 ? col.substring(0, 15) + '…' : col}
@@ -209,8 +223,8 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                 </tr>
                 <tr>
                   <th className="f1-row-header">F1</th>
-                  {sortedSubtypeLabels.map(col => {
-                    const f1Result = computeF1(subtypeMatrix.data, col, sortedSubtypeLabels, sortedSubtypeLabels);
+                  {sortedSubtypeColLabels.map(col => {
+                    const f1Result = computeF1(subtypeMatrix.data, col, sortedSubtypeColLabels, sortedSubtypeColLabels);
                     return (
                       <td
                         key={col}
@@ -225,8 +239,8 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                 </tr>
               </thead>
               <tbody>
-                {sortedSubtypeLabels.map(row => {
-                  const rowTotal = getRowTotal(subtypeMatrix.data, row, sortedSubtypeLabels);
+                {sortedSubtypeRowLabels.map(row => {
+                  const rowTotal = getRowTotal(subtypeMatrix.data, row, sortedSubtypeColLabels);
                   const lowSupport = rowTotal > 0 && rowTotal < LOW_SUPPORT;
                   return (
                   <tr key={row}>
@@ -236,7 +250,7 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                       </span>
                       {lowSupport && <span className="low-support-warn" title={`Low support: only ${rowTotal} samples`}>⚠</span>}
                     </th>
-                    {sortedSubtypeLabels.map(col => {
+                    {sortedSubtypeColLabels.map(col => {
                       const value = subtypeMatrix.data[row]?.[col] ?? 0;
                       const isSelected = selectedCell?.trueSubtype === row && selectedCell?.predSubtype === col;
                       const asymmetric = isAsymmetric(subtypeMatrix.data, row, col);

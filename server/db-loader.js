@@ -4,27 +4,20 @@
  *
  * Schema
  * ------
- * leaderboard table columns:
- *   benchmark_id, benchmark_name, run_name, model_name,
- *   subtype_accuracy, subtype_f1_weighted
+ * "leaderboard-table" columns:
+ *   run_id (text, the actual run table name), nof_items, subtype_accuracy, description
  *
- * Per-run tables named:  "{benchmark_id}_{sanitized(run_name)}"
- *   e.g. "1_model_v1", "3_perfect_model"
- *   columns: benchmark_id, rec_id, true_type, true_subtype,
- *            pred_type, pred_subtype, attributes, metadata
+ * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
+ *   e.g. "20261230-1445-Test-benchmark"
+ *   columns: record_id, true_type, true_subtype, pred_type, pred_subtype,
+ *            attributes, metadata
+ *
+ * Benchmarks are inferred from the run table name (everything after YYYYMMDD-HHMM-).
  */
 
 const { query } = require('./db');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function sanitize(name) {
-  return name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '');
-}
-
-function runTableName(benchmarkId, runName) {
-  return `${benchmarkId}_${sanitize(runName)}`;
-}
 
 function parseJsonFields(row) {
   return {
@@ -32,6 +25,16 @@ function parseJsonFields(row) {
     attributes: typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {}),
     metadata:   typeof row.metadata   === 'string' ? JSON.parse(row.metadata)   : (row.metadata   || {}),
   };
+}
+
+// Extract benchmark name from table name "YYYYMMDD-HHMM-benchmark_name"
+// e.g. "20261230-1445-Test-benchmark" -> "Test-benchmark"
+function extractBenchmarkName(tableName) {
+  const parts = tableName.split('-');
+  if (parts.length >= 3) {
+    return parts.slice(2).join('-');
+  }
+  return tableName;
 }
 
 // ── Run index (cached) ────────────────────────────────────────────────────────
@@ -44,41 +47,45 @@ async function getRunIndex() {
   if (_runIndex) return _runIndex;
 
   const result = await query(
-    `SELECT benchmark_id, benchmark_name, run_name, model_name,
-            subtype_accuracy, subtype_f1_weighted
-     FROM leaderboard
-     ORDER BY benchmark_id ASC, run_name ASC`
+    `SELECT run_id, nof_items, subtype_accuracy, description
+     FROM "leaderboard-table"
+     ORDER BY run_id ASC`
   );
 
   const benchmarks = [];
-  const seenBenchmarks = new Set();
+  const seenBenchmarks = new Map(); // benchmark_name -> id
   const runs = [];
   const leaderboard = [];
 
   result.rows.forEach((row, i) => {
-    const runId       = i + 1;
-    const benchmarkId = parseInt(row.benchmark_id);
+    const syntheticRunId = i + 1;
+    const tableName      = row.run_id; // e.g. "20261230-1445-Test-benchmark"
+    const benchmarkName  = extractBenchmarkName(tableName);
 
-    if (!seenBenchmarks.has(benchmarkId)) {
-      seenBenchmarks.add(benchmarkId);
-      benchmarks.push({ id: benchmarkId, name: row.benchmark_name });
+    if (!seenBenchmarks.has(benchmarkName)) {
+      const newId = seenBenchmarks.size + 1;
+      seenBenchmarks.set(benchmarkName, newId);
+      benchmarks.push({ id: newId, name: benchmarkName });
     }
 
+    const benchmarkId = seenBenchmarks.get(benchmarkName);
+
     runs.push({
-      id:            runId,
+      id:            syntheticRunId,
       benchmark_id:  benchmarkId,
-      run_name:      row.run_name,
-      model_version: row.model_name,
+      run_name:      tableName,
+      model_version: row.description || '',
     });
 
     leaderboard.push({
-      id:                  runId,
-      run_id:              runId,
+      id:                  syntheticRunId,
+      run_id:              syntheticRunId,
       benchmark_id:        benchmarkId,
-      run_name:            row.run_name,
-      model_version:       row.model_name,
-      subtype_accuracy:    parseFloat(row.subtype_accuracy),
-      subtype_f1_weighted: parseFloat(row.subtype_f1_weighted),
+      run_name:            tableName,
+      model_version:       row.description || '',
+      subtype_accuracy:    parseFloat(row.subtype_accuracy) || 0,
+      subtype_f1_weighted: parseFloat(row.subtype_accuracy) || 0, // use accuracy as proxy
+      benchmark_length:    parseInt(row.nof_items) || 0,
     });
   });
 
@@ -113,22 +120,10 @@ async function getRun(id) {
 }
 
 async function getLeaderboardByBenchmarkId(benchmarkId) {
-  const { leaderboard, runs } = await getRunIndex();
+  const { leaderboard } = await getRunIndex();
   const rows = leaderboard.filter(l => l.benchmark_id === benchmarkId);
-
-  // Fetch benchmark_length from each run table in parallel
-  await Promise.all(rows.map(async l => {
-    const run = runById(runs, l.run_id);
-    const tbl = runTableName(l.benchmark_id, run.run_name);
-    try {
-      const r = await query(`SELECT COUNT(*) AS cnt FROM "${tbl}"`);
-      l.benchmark_length = parseInt(r.rows[0].cnt);
-    } catch {
-      l.benchmark_length = 0;
-    }
-  }));
-
-  return rows.sort((a, b) => b.subtype_f1_weighted - a.subtype_f1_weighted);
+  // benchmark_length already populated from nof_items; no extra query needed
+  return rows.sort((a, b) => b.subtype_accuracy - a.subtype_accuracy);
 }
 
 async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = false) {
@@ -136,7 +131,7 @@ async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = f
   const run = runById(runs, runId);
   if (!run) return { type_matrix: { rows: [], cols: [], data: {} }, subtype_matrix: [] };
 
-  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
   const result = await query(
@@ -184,7 +179,7 @@ async function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectO
   const run = runById(runs, runId);
   if (!run) return { rows: [], cols: [], data: {} };
 
-  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
   const result = await query(
@@ -220,17 +215,16 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
   const run2 = runById(runs, runId2);
   if (!run1 || !run2) return { rows: [], cols: [], data: {} };
 
-  const tbl1 = runTableName(run1.benchmark_id, run1.run_name);
-  const tbl2 = runTableName(run2.benchmark_id, run2.run_name);
+  const tbl1 = run1.run_name;
+  const tbl2 = run2.run_name;
 
-  // Single query: join on rec_id, group by pred pairs + true_subtype
   const result = await query(
     `SELECT r1.pred_subtype AS run1_pred,
             r2.pred_subtype AS run2_pred,
             r1.true_subtype AS true_subtype,
             COUNT(*)        AS cnt
      FROM "${tbl1}" r1
-     JOIN "${tbl2}" r2 ON r1.rec_id = r2.rec_id
+     JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id
      WHERE r1.pred_subtype <> r2.pred_subtype
      GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
   );
@@ -284,8 +278,8 @@ async function getRecords(filters = {}) {
     const run2 = runById(runs, filters.run_id2);
     if (!run1 || !run2) return { data: [], pagination: { total: 0, limit, offset, pages: 0 } };
 
-    const tbl1 = runTableName(run1.benchmark_id, run1.run_name);
-    const tbl2 = runTableName(run2.benchmark_id, run2.run_name);
+    const tbl1 = run1.run_name;
+    const tbl2 = run2.run_name;
 
     const params = [];
     let p = 1;
@@ -296,14 +290,14 @@ async function getRecords(filters = {}) {
     if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
     if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
 
-    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.rec_id = r2.rec_id WHERE ${where}`;
+    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id WHERE ${where}`;
 
     const [dataResult, countResult] = await Promise.all([
-      query(`SELECT r1.rec_id AS record_id,
+      query(`SELECT r1.record_id,
                     r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
                     r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
                     r1.attributes, r1.metadata
-             ${baseSQL} ORDER BY r1.rec_id LIMIT $${p} OFFSET $${p + 1}`,
+             ${baseSQL} ORDER BY r1.record_id LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
     ]);
@@ -319,7 +313,7 @@ async function getRecords(filters = {}) {
   const run = runById(runs, filters.run_id);
   if (!run) return { data: [], pagination: { total: 0, limit, offset, pages: 0 } };
 
-  const tbl = runTableName(run.benchmark_id, run.run_name);
+  const tbl = run.run_name;
   const params = [];
   let p = 1;
   let where = '1=1';
@@ -333,9 +327,9 @@ async function getRecords(filters = {}) {
   const baseSQL = `FROM "${tbl}" WHERE ${where}`;
 
   const [dataResult, countResult] = await Promise.all([
-    query(`SELECT rec_id AS record_id, true_type, true_subtype, pred_type, pred_subtype,
+    query(`SELECT record_id, true_type, true_subtype, pred_type, pred_subtype,
                   attributes, metadata
-           ${baseSQL} ORDER BY rec_id LIMIT $${p} OFFSET $${p + 1}`,
+           ${baseSQL} ORDER BY record_id LIMIT $${p} OFFSET $${p + 1}`,
       [...params, limit, offset]),
     query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
   ]);
