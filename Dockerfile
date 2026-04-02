@@ -1,10 +1,10 @@
-FROM artifactory_url/images/node:18.18.2-slim
+FROM node:21-slim
 
 WORKDIR /app
 
 # Install server dependencies
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY package.json ./
+RUN npm install --omit=dev
 
 # Install client dependencies and build
 COPY client/package.json ./client/

@@ -6,7 +6,7 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const schema = process.env.DB_SCHEMA || 'public';
+const schema = process.env.DB_SCHEMA || 'magellan';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

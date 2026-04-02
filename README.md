@@ -1,242 +1,173 @@
 # Classification Evaluation & Analysis System
 
-## Overview
-A modern single-page dashboard for evaluating, benchmarking, and exploring classification model performance with interactive visualizations and drill-down analytics.
+A single-page dashboard for evaluating and exploring classification model performance — confusion matrices, transition matrices, leaderboards, and record-level drill-down.
 
 ## Features
-- **Leaderboard**: View and compare classification metrics across model versions
-- **Confusion Matrices**: Analyze type and subtype prediction errors
-- **Transition Matrix**: Compare prediction changes between model runs
-- **Row-Level Exploration**: Drill into individual records with expandable attributes/metadata
-- **Responsive Design**: Handles dense taxonomies (20 types × ~400 subtypes)
-- **Modern UI**: Built with React and clean CSS for optimal data visualization
+
+- **Leaderboard** — compare runs by subtype accuracy, F1 (weighted), and run date
+- **Confusion Matrix** — type and subtype level; F1 row, asymmetry hints, diagonal markers
+- **Transition Matrix** — diff two runs side-by-side with correctness coloring and net-delta badge
+- **Row-Level Drill-Down** — paginated, filterable, sortable record table with JSON attribute viewer
 
 ## Tech Stack
-- **Backend**: Node.js/Express, PostgreSQL, CORS
-- **Frontend**: React.js, CSS3
-- **Testing**: Jest, React Testing Library, Supertest
-- **Database**: PostgreSQL 12+
 
-## Quick Start
+- **Backend**: Node.js 21 / Express, PostgreSQL (or CSV fallback)
+- **Frontend**: React, CSS3
+- **Data**: CSV files in `data/` (default) or PostgreSQL via `DATA_SOURCE=postgres`
 
-### Prerequisites
-- Node.js 14+
-- PostgreSQL 12+
-- npm or yarn
+---
 
-### Installation
+## Quick Start (local dev)
+
 ```bash
-# Install dependencies
+# 1. Install server dependencies
 npm install
 
-# Set up environment variables
+# 2. Install client dependencies
+cd client && npm install && cd ..
+
+# 3. Configure environment
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env — set DATABASE_URL, DB_SCHEMA, DATA_SOURCE
 
-# Create database and schema
-# sudo -u postgres psql -f db/schema.sql
-node setup-db.js
-
-# Seed database with mock data
-npm run mock-seed
-
-# create client
-cd client
-npm run build
-
-# run sevrer
-# from root dir
-npm start
-
-
-# # Start development server
-# npm run dev
-
-# # Start frontend (in separate terminal)
-# npm run dev:frontend
-# ```
-
-# ### Running Tests
-# ```bash
-# # Run all tests
-# npm test
-
-# # Run backend tests only
-# npm run test:backend
-
-# # Run frontend tests only
-# npm run test:frontend
+# 4. Run in development mode (server auto-restarts, client hot-reload)
+npm run dev                        # server on :5000
+cd client && npm start             # client dev server on :3000 (proxies /api to :5000)
 ```
+
+### Production build (no Docker)
+
+```bash
+cd client && npm run build && cd ..
+npm start                          # serves built client + API on :5000
+```
+
+---
+
+## Docker
+
+### Build
+
+```bash
+docker build -t magellan .
+```
+
+### Run
+
+```bash
+docker run -p 5000:5000 \
+  -e DATABASE_URL=postgresql://user:password@host:5432/dbname \
+  -e DB_SCHEMA=magellan \
+  -e DATA_SOURCE=postgres \
+  magellan
+```
+
+To use the CSV backend instead (no database required):
+
+```bash
+docker run -p 5000:5000 \
+  -e DATA_SOURCE=csv \
+  magellan
+```
+
+Then open [http://localhost:5000](http://localhost:5000).
+
+### Build and run with docker compose (example)
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/classification_eval
+      DB_SCHEMA: magellan
+      DATA_SOURCE: postgres
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: classification_eval
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+```
+
+```bash
+docker compose up --build
+```
+
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string | — |
+| `DB_SCHEMA` | PostgreSQL schema | `magellan` |
+| `DATA_SOURCE` | `postgres` or `csv` | `csv` |
+| `PORT` | Server port | `5000` |
+| `NODE_ENV` | `development` or `production` | `development` |
+
+Copy `.env.example` to `.env` and fill in your values.
+
+---
 
 ## Project Structure
-```
+
+```text
 .
 ├── server/
-│   ├── api/              # API endpoints
+│   ├── api/              # Express route handlers
 │   │   ├── leaderboard.js
 │   │   ├── runs.js
 │   │   ├── confusionMatrix.js
 │   │   ├── transitionMatrix.js
-│   │   ├── records.js
-│   │   └── __tests__/
-│   ├── mock/             # Mock data generation
-│   │   ├── mockDataGenerator.js
-│   │   └── seedDatabase.js
-│   ├── db.js             # Database connection
+│   │   └── records.js
+│   ├── csv-loader.js     # In-memory CSV backend
+│   ├── db-loader.js      # PostgreSQL backend
+│   ├── loader.js         # Selects backend via DATA_SOURCE
+│   ├── db.js             # PostgreSQL pool (reads DATABASE_URL + DB_SCHEMA)
 │   └── index.js          # Server entry point
 ├── client/
-│   ├── components/       # React components
-│   │   ├── Dashboard.jsx
-│   │   ├── LeaderboardWidget.jsx
-│   │   ├── ConfusionMatrixPanel.jsx
-│   │   ├── TransitionMatrixPanel.jsx
-│   │   ├── RowLevelTable.jsx
-│   │   ├── BenchmarkDropdown.jsx
-│   │   ├── RunSelector.jsx
-│   │   ├── styles/
-│   │   │   └── styles.css
-│   │   └── __tests__/
-│   ├── public/
-│   │   └── index.html
-│   └── index.js          # Frontend entry point
-├── db/
-│   └── schema.sql        # Database schema
-├── package.json
-├── tasks/                # PRD and task list
-└── README.md
+│   └── src/
+│       └── components/   # React components
+│           ├── Dashboard.jsx
+│           ├── LeaderboardWidget.jsx
+│           ├── ConfusionMatrixPanel.jsx
+│           ├── TransitionMatrixPanel.jsx
+│           ├── RowLevelTable.jsx
+│           └── styles.css
+├── data/
+│   ├── leaderboard.csv   # Run metadata (benchmark, model, date, metrics)
+│   └── runs/             # Per-run prediction CSVs
+├── Dockerfile
+├── start.sh              # Builds client then starts server
+├── .env.example
+└── tasks/                # PRD
 ```
 
-## API Endpoints
+---
 
-### Benchmarks & Leaderboard
-- `GET /api/benchmarks` - Get all benchmarks
-- `GET /api/leaderboard?benchmark_id=X` - Get leaderboard metrics
+## API Reference
 
-### Runs
-- `GET /api/runs?benchmark_id=X` - Get runs for benchmark
-- `GET /api/runs/:id` - Get specific run details
+| Method | Endpoint | Params |
+| --- | --- | --- |
+| GET | `/api/benchmarks` | — |
+| GET | `/api/leaderboard` | `benchmark_id` |
+| GET | `/api/runs` | `benchmark_id` |
+| GET | `/api/runs/:id` | — |
+| GET | `/api/confusion-matrix` | `run_id`, `filter` (optional: `incorrect`) |
+| GET | `/api/confusion-matrix/subtype` | `run_id`, `true_type`, `pred_type`, `filter` |
+| GET | `/api/transition-matrix` | `run_id1`, `run_id2`, `min_count` |
+| GET | `/api/records` | `run_id`, type/subtype filters, `limit`, `offset` |
+| GET | `/api/records/:id` | — |
+| GET | `/api/health` | — |
 
-### Confusion Matrices
-- `GET /api/confusion-matrix?run_id=X` - Get type/subtype confusion matrices
-- `GET /api/confusion-matrix/subtype?run_id=X&true_type=Y&pred_type=Z` - Get subtype confusion
+---
 
-### Records
-- `GET /api/records?run_id=X` - Get paginated records with filters
-- `GET /api/records/:id` - Get specific record
+## Running Tests
 
-### Transition Matrix
-- `GET /api/transition-matrix?run_id1=X&run_id2=Y&min_count=1` - Compare two runs
-
-## Database Schema
-
-### Benchmarks Table
-```sql
-- id (PK)
-- name (UNIQUE)
-- created_at
+```bash
+npm test                  # all tests
+npm run test:backend      # server/ only
 ```
-
-### Runs Table
-```sql
-- id (PK)
-- benchmark_id (FK)
-- run_name
-- model_version
-- created_at
-```
-
-### RunResults Table
-```sql
-- id (PK)
-- run_id (FK)
-- record_id
-- attributes (JSONB)
-- metadata (JSONB)
-- true_type
-- pred_type
-- true_subtype
-- pred_subtype
-```
-
-### Leaderboard Table
-```sql
-- id (PK)
-- run_id (FK, UNIQUE)
-- benchmark_id (FK)
-- benchmark_length
-- subtype_accuracy
-- subtype_f1_weighted
-- type_f1_weighted
-```
-
-## Key Features & Performance
-
-### Handling Dense Data
-- Optimized SQL queries with strategic indexing
-- Virtualized tables for large datasets
-- Lazy loading for matrix navigation
-- Responsive design with breakpoints
-
-### Metrics Calculated
-- **Subtype Accuracy**: Exact match between true and predicted subtypes
-- **Subtype F1 (Weighted)**: Precision-weighted F1 per subtype
-- **Type F1 (Weighted)**: Precision-weighted F1 per type
-
-### Drill-Down UI Flow
-1. Select benchmark & run
-2. View type confusion matrix
-3. Click type cell → view subtype confusion
-4. Click subtype cell → view records
-5. Expand row → view full attributes/metadata
-
-## Development
-
-### Adding New Features
-1. Create API endpoint in `server/api/`
-2. Add corresponding React component in `client/components/`
-3. Write tests for both
-4. Update this README
-
-### Extending the Backend
-All API endpoints follow the same pattern:
-- Express route handler with query parameters
-- Database query via `pg` pool
-- JSON response or error status
-
-### Extending the Frontend
-All React components follow these conventions:
-- Functional components with hooks
-- Props-based data flow
-- CSS modules/classes for styling
-- Tests in adjacent `__tests__` directory
-
-## Performance Optimization
-
-### Backend
-- Connection pooling (pg)
-- Query indexing on type/subtype fields
-- Pagination for record endpoints
-- JSONB GIN indexes for attribute searching
-
-### Frontend
-- Virtual scrolling for large tables
-- Lazy loading of data
-- Memoization of expensive computations
-- CSS compression and minification
-
-## Environment Variables
-```
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=classification_eval
-DB_USER=postgres
-DB_PASSWORD=postgres
-PORT=5000
-NODE_ENV=development
-```
-
-## License
-MIT
-
-## Support
-For issues or questions, please refer to the task list and PRD in `/tasks/`

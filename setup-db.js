@@ -8,6 +8,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 async function setupDatabase() {
+  const targetSchema = process.env.DB_SCHEMA || 'magellan';
   const pool = new Pool({
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
@@ -52,6 +53,8 @@ async function setupDatabase() {
     const schema = fs.readFileSync('./db/schema.sql', 'utf-8');
     
     console.log('Creating database schema...');
+    await dbClient.query(`CREATE SCHEMA IF NOT EXISTS "${targetSchema}"`);
+    await dbClient.query(`SET search_path TO "${targetSchema}"`);
     await dbClient.query(schema);
     
     console.log('✓ Database schema created successfully');
