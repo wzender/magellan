@@ -54,19 +54,32 @@ docker build -t magellan .
 
 ### Run
 
+If PostgreSQL is running on the host machine and the app container needs to connect to it on Linux, use host networking so `localhost` inside the container resolves to the host:
+
 ```bash
-docker run -p 5000:5000 \
-  -e DATABASE_URL=postgresql://user:password@host:5432/dbname \
+docker run --rm --network host \
+  -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/classification_eval \
   -e DB_SCHEMA=magellan \
   -e DATA_SOURCE=postgres \
   magellan
 ```
 
-To use the CSV backend instead (no database required):
+To use the CSV backend instead, expose port 5000 normally:
 
 ```bash
-docker run -p 5000:5000 \
+docker run --rm -p 5000:5000 \
   -e DATA_SOURCE=csv \
+  magellan
+```
+
+If you prefer bridge networking and want the container to reach PostgreSQL on the host, use Docker's host gateway name instead of `localhost`:
+
+```bash
+docker run --rm -p 5000:5000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/classification_eval \
+  -e DB_SCHEMA=magellan \
+  -e DATA_SOURCE=postgres \
   magellan
 ```
 
