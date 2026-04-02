@@ -1,0 +1,6 @@
+dash>=2.16
+plotly
+pandas
+numpy
+psycopg2-binary
+python-dotenv
