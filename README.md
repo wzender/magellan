@@ -178,6 +178,66 @@ Copy `.env.example` to `.env` and fill in your values.
 
 ---
 
+## PostgreSQL Data Source
+
+### Connection string
+
+The connection string is read from the `DATABASE_URL` environment variable. Set it in your `.env` file (copied from `.env.example`):
+
+```
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/classification_eval
+DB_SCHEMA=magellan
+DATA_SOURCE=postgres
+```
+
+`DB_SCHEMA` controls which PostgreSQL schema is searched (defaults to `magellan`). The app sets `search_path` to that schema on every connection, so all table names below are relative to it.
+
+### Table and column definitions
+
+The schema is documented and queried in [server/db-loader.js](server/db-loader.js). There are two kinds of tables:
+
+**`leaderboard-table`** — one row per run:
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `run_id` | text | Name of the per-run table (e.g. `20261230-1445-Test-benchmark`) |
+| `nof_items` | integer | Number of records in the run |
+| `subtype_accuracy` | numeric | Overall subtype accuracy (0–1) |
+| `description` | text | Human-readable label shown in the leaderboard |
+
+**Per-run tables** — one row per prediction, named `YYYYMMDD-HHMM-<benchmark-name>`:
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `record_id` | text | Stable identifier used to join two runs in transition-matrix mode |
+| `true_type` | text | Ground-truth type label |
+| `true_subtype` | text | Ground-truth subtype label |
+| `pred_type` | text | Predicted type label |
+| `pred_subtype` | text | Predicted subtype label |
+| `attributes` | text / jsonb | JSON object with item-level attributes (displayed in drill-down) |
+| `metadata` | text / jsonb | JSON object with additional metadata (displayed in drill-down) |
+
+The benchmark name is inferred automatically from the run table name by dropping the `YYYYMMDD-HHMM-` prefix, so no separate benchmarks table is needed.
+
+### Adapting to a different schema
+
+If your environment uses different table or column names, the only file to edit is [server/db-loader.js](server/db-loader.js):
+
+1. **Different leaderboard table name** — change the table name in the `getRunIndex` query (line ~50):
+   ```js
+   FROM "leaderboard-table"   // ← rename to match your table
+   ```
+
+2. **Different leaderboard column names** — update the `SELECT` list and the field references in `getRunIndex` where it maps `row.run_id`, `row.nof_items`, `row.subtype_accuracy`, `row.description`.
+
+3. **Different per-run table naming convention** — the `extractBenchmarkName` helper (line ~32) splits the table name on `-` and drops the first two segments (`YYYYMMDD` and `HHMM`). Adjust that function if your tables follow a different naming pattern.
+
+4. **Different per-run column names** — every SQL query in `db-loader.js` that touches per-run tables selects `record_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes`, `metadata`. Search for those names and replace them with your column names. The rest of the app only sees the data after `db-loader.js` has mapped it, so no other files need changing.
+
+5. **Different schema name** — just change `DB_SCHEMA` in your `.env`; the pool in [server/db.js](server/db.js) sets `search_path` dynamically from that variable.
+
+---
+
 ## Running Tests
 
 ```bash
