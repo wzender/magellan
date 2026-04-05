@@ -204,6 +204,7 @@ The schema is documented and queried in [server/db-loader.js](server/db-loader.j
 | `nof_items` | integer | Number of records in the run |
 | `subtype_accuracy` | numeric | Overall subtype accuracy (0–1) |
 | `description` | text | Human-readable label shown in the leaderboard |
+| `benchmark` | text | Benchmark name shown in the UI benchmark selector |
 
 **Per-run tables** — one row per prediction, named `YYYYMMDD-HHMM-<benchmark-name>`:
 
@@ -217,7 +218,7 @@ The schema is documented and queried in [server/db-loader.js](server/db-loader.j
 | `attributes` | text / jsonb | JSON object with item-level attributes (displayed in drill-down) |
 | `metadata` | text / jsonb | JSON object with additional metadata (displayed in drill-down) |
 
-The benchmark name is inferred automatically from the run table name by dropping the `YYYYMMDD-HHMM-` prefix, so no separate benchmarks table is needed.
+The benchmark name is read from the `benchmark` column. Multiple rows with the same `benchmark` value are grouped under one benchmark entry in the UI. If the column is missing or NULL, the run table name is used as a fallback.
 
 ### Adapting to a different schema
 

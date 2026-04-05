@@ -12,6 +12,11 @@ const RUNS_DIR = path.join(DATA_DIR, 'runs');
 
 let dataCache = null;
 
+function tryParseJson(value) {
+  if (typeof value !== 'string') return value || {};
+  try { return JSON.parse(value); } catch { return value; }
+}
+
 function sanitize(name) {
   return name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '');
 }
@@ -33,13 +38,15 @@ function loadData() {
 
   lbRows.forEach((row, i) => {
     const runId       = i + 1;
-    const benchmarkId = parseInt(row.benchmark_id);
-    const bname       = row.benchmark_name;
+    const benchmarkName = row.benchmark || row.run_name;
 
-    if (!seenBenchmarks[benchmarkId]) {
-      seenBenchmarks[benchmarkId] = true;
-      benchmarks.push({ id: benchmarkId, name: bname });
+    if (!seenBenchmarks[benchmarkName]) {
+      const newId = Object.keys(seenBenchmarks).length + 1;
+      seenBenchmarks[benchmarkName] = newId;
+      benchmarks.push({ id: newId, name: benchmarkName });
     }
+
+    const benchmarkId = seenBenchmarks[benchmarkName];
 
     runs.push({
       id:            runId,
@@ -82,8 +89,8 @@ function loadData() {
         true_subtype: r.true_subtype,
         pred_type:    r.pred_type,
         pred_subtype: r.pred_subtype,
-        attributes:   r.attributes ? JSON.parse(r.attributes) : {},
-        metadata:     r.metadata   ? JSON.parse(r.metadata)   : {},
+        attributes:   tryParseJson(r.attributes),
+        metadata:     tryParseJson(r.metadata),
       });
     });
   });

@@ -5,36 +5,37 @@
  * Schema
  * ------
  * "leaderboard-table" columns:
- *   run_id (text, the actual run table name), nof_items, subtype_accuracy, description
+ *   run_id (text, the actual run table name), nof_items, subtype_accuracy,
+ *   description, benchmark (text, explicit benchmark name)
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
  *   e.g. "20261230-1445-Test-benchmark"
- *   columns: record_id, true_type, true_subtype, pred_type, pred_subtype,
+ *   columns: request_id, true_type, true_subtype, pred_type, pred_subtype,
  *            attributes, metadata
  *
- * Benchmarks are inferred from the run table name (everything after YYYYMMDD-HHMM-).
+ * Benchmarks are read directly from the "benchmark" column in leaderboard-table.
  */
 
 const { query } = require('./db');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function tryParseJson(value) {
+  if (typeof value !== 'string') return value || {};
+  try { return JSON.parse(value); } catch { return value; }
+}
+
 function parseJsonFields(row) {
   return {
     ...row,
-    attributes: typeof row.attributes === 'string' ? JSON.parse(row.attributes) : (row.attributes || {}),
-    metadata:   typeof row.metadata   === 'string' ? JSON.parse(row.metadata)   : (row.metadata   || {}),
+    attributes: tryParseJson(row.attributes),
+    metadata:   tryParseJson(row.metadata),
   };
 }
 
-// Extract benchmark name from table name "YYYYMMDD-HHMM-benchmark_name"
-// e.g. "20261230-1445-Test-benchmark" -> "Test-benchmark"
-function extractBenchmarkName(tableName) {
-  const parts = tableName.split('-');
-  if (parts.length >= 3) {
-    return parts.slice(2).join('-');
-  }
-  return tableName;
+// Returns true for PostgreSQL "relation does not exist" (42P01)
+function isTableMissing(err) {
+  return err.code === '42P01';
 }
 
 // ── Run index (cached) ────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ async function getRunIndex() {
   if (_runIndex) return _runIndex;
 
   const result = await query(
-    `SELECT run_id, nof_items, subtype_accuracy, description
+    `SELECT run_id, nof_items, subtype_accuracy, description, benchmark
      FROM "leaderboard-table"
      ORDER BY run_id ASC`
   );
@@ -59,8 +60,8 @@ async function getRunIndex() {
 
   result.rows.forEach((row, i) => {
     const syntheticRunId = i + 1;
-    const tableName      = row.run_id; // e.g. "20261230-1445-Test-benchmark"
-    const benchmarkName  = extractBenchmarkName(tableName);
+    const tableName      = row.run_id;
+    const benchmarkName  = row.benchmark || tableName;
 
     if (!seenBenchmarks.has(benchmarkName)) {
       const newId = seenBenchmarks.size + 1;
@@ -134,12 +135,18 @@ async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = f
   const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
-  const result = await query(
-    `SELECT true_type, pred_type, true_subtype, pred_subtype, COUNT(*) AS cnt
-     FROM "${tbl}"
-     WHERE 1=1${incorrectClause}
-     GROUP BY true_type, pred_type, true_subtype, pred_subtype`
-  );
+  let result;
+  try {
+    result = await query(
+      `SELECT true_type, pred_type, true_subtype, pred_subtype, COUNT(*) AS cnt
+       FROM "${tbl}"
+       WHERE 1=1${incorrectClause}
+       GROUP BY true_type, pred_type, true_subtype, pred_subtype`
+    );
+  } catch (err) {
+    if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl}`); return { type_matrix: { rows: [], cols: [], data: {} }, subtype_matrix: [] }; }
+    throw err;
+  }
 
   const types = new Set();
   const typeMatrix = {};
@@ -182,13 +189,19 @@ async function getSubtypeMatrixForTypePair(runId, trueType, predType, incorrectO
   const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
 
-  const result = await query(
-    `SELECT true_subtype, pred_subtype, COUNT(*) AS cnt
-     FROM "${tbl}"
-     WHERE true_type = $1 AND pred_type = $2${incorrectClause}
-     GROUP BY true_subtype, pred_subtype`,
-    [trueType, predType]
-  );
+  let result;
+  try {
+    result = await query(
+      `SELECT true_subtype, pred_subtype, COUNT(*) AS cnt
+       FROM "${tbl}"
+       WHERE true_type = $1 AND pred_type = $2${incorrectClause}
+       GROUP BY true_subtype, pred_subtype`,
+      [trueType, predType]
+    );
+  } catch (err) {
+    if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl}`); return { rows: [], cols: [], data: {} }; }
+    throw err;
+  }
 
   const subtypes = new Set();
   const matrixData = {};
@@ -218,16 +231,22 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
   const tbl1 = run1.run_name;
   const tbl2 = run2.run_name;
 
-  const result = await query(
-    `SELECT r1.pred_subtype AS run1_pred,
-            r2.pred_subtype AS run2_pred,
-            r1.true_subtype AS true_subtype,
-            COUNT(*)        AS cnt
-     FROM "${tbl1}" r1
-     JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id
-     WHERE r1.pred_subtype <> r2.pred_subtype
-     GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
-  );
+  let result;
+  try {
+    result = await query(
+      `SELECT r1.pred_subtype AS run1_pred,
+              r2.pred_subtype AS run2_pred,
+              r1.true_subtype AS true_subtype,
+              COUNT(*)        AS cnt
+       FROM "${tbl1}" r1
+       JOIN "${tbl2}" r2 ON r1.request_id = r2.request_id
+       WHERE r1.pred_subtype <> r2.pred_subtype
+       GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
+    );
+  } catch (err) {
+    if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl1} or ${tbl2}`); return { rows: [], cols: [], data: {} }; }
+    throw err;
+  }
 
   const transitionData = {};
 
@@ -290,17 +309,23 @@ async function getRecords(filters = {}) {
     if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
     if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
 
-    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id WHERE ${where}`;
+    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.request_id = r2.request_id WHERE ${where}`;
 
-    const [dataResult, countResult] = await Promise.all([
-      query(`SELECT r1.record_id,
-                    r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
-                    r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
-                    r1.attributes, r1.metadata
-             ${baseSQL} ORDER BY r1.record_id LIMIT $${p} OFFSET $${p + 1}`,
-        [...params, limit, offset]),
-      query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
-    ]);
+    let dataResult, countResult;
+    try {
+      [dataResult, countResult] = await Promise.all([
+        query(`SELECT r1.request_id,
+                      r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
+                      r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
+                      r1.attributes, r1.metadata
+               ${baseSQL} ORDER BY r1.request_id LIMIT $${p} OFFSET $${p + 1}`,
+          [...params, limit, offset]),
+        query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+      ]);
+    } catch (err) {
+      if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl1} or ${tbl2}`); return { data: [], pagination: { total: 0, limit, offset, pages: 0 } }; }
+      throw err;
+    }
 
     const total = parseInt(countResult.rows[0].total);
     return {
@@ -326,13 +351,19 @@ async function getRecords(filters = {}) {
 
   const baseSQL = `FROM "${tbl}" WHERE ${where}`;
 
-  const [dataResult, countResult] = await Promise.all([
-    query(`SELECT record_id, true_type, true_subtype, pred_type, pred_subtype,
-                  attributes, metadata
-           ${baseSQL} ORDER BY record_id LIMIT $${p} OFFSET $${p + 1}`,
-      [...params, limit, offset]),
-    query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
-  ]);
+  let dataResult, countResult;
+  try {
+    [dataResult, countResult] = await Promise.all([
+      query(`SELECT request_id, true_type, true_subtype, pred_type, pred_subtype,
+                    attributes, metadata
+             ${baseSQL} ORDER BY request_id LIMIT $${p} OFFSET $${p + 1}`,
+        [...params, limit, offset]),
+      query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+    ]);
+  } catch (err) {
+    if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl}`); return { data: [], pagination: { total: 0, limit, offset, pages: 0 } }; }
+    throw err;
+  }
 
   const total = parseInt(countResult.rows[0].total);
   return {
