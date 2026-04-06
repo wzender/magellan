@@ -42,16 +42,21 @@ function isTableMissing(err) {
 // Assigns stable synthetic run_ids (row order from leaderboard) so the rest
 // of the app can use integer IDs without knowing about table names.
 
-let _runIndex = null;
-
 async function getRunIndex() {
-  if (_runIndex) return _runIndex;
 
-  const result = await query(
-    `SELECT run_id, nof_items, subtype_accuracy, description, benchmark
-     FROM "leaderboard-table"
-     ORDER BY run_id ASC`
-  );
+  const [result, tablesResult] = await Promise.all([
+    query(
+      `SELECT run_id, nof_items, subtype_accuracy, description, benchmark
+       FROM "leaderboard-table"
+       ORDER BY run_id ASC`
+    ),
+    query(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = current_schema()`
+    ),
+  ]);
+
+  const existingTables = new Set(tablesResult.rows.map(r => r.table_name));
 
   const benchmarks = [];
   const seenBenchmarks = new Map(); // benchmark_name -> id
@@ -87,11 +92,11 @@ async function getRunIndex() {
       subtype_accuracy:    parseFloat(row.subtype_accuracy) || 0,
       subtype_f1_weighted: parseFloat(row.subtype_accuracy) || 0, // use accuracy as proxy
       benchmark_length:    parseInt(row.nof_items) || 0,
+      table_exists:        existingTables.has(tableName),
     });
   });
 
-  _runIndex = { benchmarks, runs, leaderboard };
-  return _runIndex;
+  return { benchmarks, runs, leaderboard };
 }
 
 function runById(runs, id) {

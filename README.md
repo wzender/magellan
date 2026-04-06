@@ -111,6 +111,145 @@ docker compose up --build
 
 ---
 
+## Kubernetes / Helm
+
+### Prerequisites
+
+- [`helm`](https://helm.sh/docs/intro/install/) and `kubectl` installed
+- A running cluster (local or remote)
+
+For a **local cluster** the easiest option is [minikube](https://minikube.sigs.k8s.io/):
+
+```bash
+minikube start --memory=4096 --cpus=2
+# point your shell at minikube's Docker daemon so images are available without a registry
+eval $(minikube docker-env)
+```
+
+If minikube fails with TLS handshake timeouts on Ubuntu 22.04, switch iptables to legacy mode first:
+
+```bash
+sudo update-alternatives --set iptables /usr/sbin/iptables-legacy
+sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+minikube delete && minikube start
+```
+
+### Create the chart
+
+```bash
+helm create magellan
+# remove unused templates
+rm -rf magellan/templates/hpa.yaml \
+       magellan/templates/ingress.yaml \
+       magellan/templates/serviceaccount.yaml \
+       magellan/templates/tests
+```
+
+### `values.yaml`
+
+```yaml
+image:
+  repository: magellan
+  tag: latest
+  pullPolicy: IfNotPresent   # use Never when image is built locally into minikube
+
+service:
+  port: 5000
+
+env:
+  DATA_SOURCE: postgres
+  DB_SCHEMA: magellan
+  PORT: "5000"
+  NODE_ENV: production
+
+# DATABASE_URL is sensitive — kept in a Secret, not here
+databaseUrlSecret:
+  name: magellan-db-secret
+  key: DATABASE_URL
+
+replicaCount: 1
+```
+
+### Secret (create once, outside Helm)
+
+```yaml
+# secret.yaml — do not commit this file
+apiVersion: v1
+kind: Secret
+metadata:
+  name: magellan-db-secret
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://user:pass@host:5432/dbname"
+```
+
+```bash
+kubectl apply -f secret.yaml
+```
+
+### `templates/deployment.yaml` — env section
+
+Replace the generated `env:` block with:
+
+```yaml
+env:
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: {{ .Values.databaseUrlSecret.name }}
+        key: {{ .Values.databaseUrlSecret.key }}
+  {{- range $key, $val := .Values.env }}
+  - name: {{ $key }}
+    value: {{ $val | quote }}
+  {{- end }}
+```
+
+Also set the container port:
+
+```yaml
+ports:
+  - containerPort: {{ .Values.service.port }}
+```
+
+### Build and install
+
+```bash
+# Build image into minikube's Docker daemon
+docker build -t magellan:latest .
+
+# Install
+helm install magellan ./magellan --set image.pullPolicy=Never
+
+# Upgrade after changes
+helm upgrade magellan ./magellan
+
+# Open in browser (minikube only)
+minikube service magellan
+```
+
+### Override values per environment
+
+```bash
+helm upgrade --install magellan ./magellan \
+  --set image.tag=v1.2.3 \
+  --set env.DB_SCHEMA=staging \
+  --set databaseUrlSecret.name=staging-db-secret
+```
+
+### CSV backend (no Postgres needed)
+
+Useful for a quick smoke-test with no database:
+
+```bash
+helm install magellan ./magellan \
+  --set image.pullPolicy=Never \
+  --set env.DATA_SOURCE=csv
+```
+
+No secret needed in this mode.
+
+---
+
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -184,7 +323,7 @@ Copy `.env.example` to `.env` and fill in your values.
 
 The connection string is read from the `DATABASE_URL` environment variable. Set it in your `.env` file (copied from `.env.example`):
 
-```
+```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/classification_eval
 DB_SCHEMA=magellan
 DATA_SOURCE=postgres
@@ -225,6 +364,7 @@ The benchmark name is read from the `benchmark` column. Multiple rows with the s
 If your environment uses different table or column names, the only file to edit is [server/db-loader.js](server/db-loader.js):
 
 1. **Different leaderboard table name** — change the table name in the `getRunIndex` query (line ~50):
+
    ```js
    FROM "leaderboard-table"   // ← rename to match your table
    ```

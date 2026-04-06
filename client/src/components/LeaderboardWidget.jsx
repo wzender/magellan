@@ -190,15 +190,19 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
           {sortedData.map((row, idx) => (
             <tr
               key={row.run_id}
-              onClick={() => onRunSelect && onRunSelect(row.run_id)}
-              className={selectedRuns.includes(row.run_id) ? 'selected' : ''}
-              style={{ cursor: onRunSelect ? 'pointer' : 'default' }}
+              onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
+              className={[
+                selectedRuns.includes(row.run_id) ? 'selected' : '',
+                row.table_exists === false ? 'table-missing' : '',
+              ].filter(Boolean).join(' ')}
+              style={{ cursor: row.table_exists === false ? 'not-allowed' : onRunSelect ? 'pointer' : 'default' }}
+              title={row.table_exists === false ? `Table "${row.run_name}" not found in the database` : undefined}
             >
               {columns.map(col => {
                 switch (col.key) {
                   case 'select': {
                     const isChecked = selectedRuns.includes(row.run_id);
-                    const isDisabled = selectedRuns.length >= 2 && !isChecked;
+                    const isDisabled = (selectedRuns.length >= 2 && !isChecked) || row.table_exists === false;
                     return (
                       <td
                         key={`${row.run_id}-${col.key}`}

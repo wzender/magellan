@@ -304,6 +304,11 @@ select:focus {
   background: #f8faff;
 }
 
+.leaderboard-table tbody tr.table-missing td {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
 .leaderboard-table tbody tr.selected td {
   background: var(--primary-light);
   font-weight: 600;
