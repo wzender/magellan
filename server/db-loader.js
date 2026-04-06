@@ -10,7 +10,7 @@
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
  *   e.g. "20261230-1445-Test-benchmark"
- *   columns: request_id, true_type, true_subtype, pred_type, pred_subtype,
+ *   columns: record_id, true_type, true_subtype, pred_type, pred_subtype,
  *            attributes, metadata
  *
  * Benchmarks are read directly from the "benchmark" column in leaderboard-table.
@@ -66,7 +66,7 @@ async function getRunIndex() {
   result.rows.forEach((row, i) => {
     const syntheticRunId = i + 1;
     const tableName      = row.run_id;
-    const benchmarkName  = row.benchmark || tableName;
+    const benchmarkName  = row.benchmark || row.run_id.replace(/^\d{8}-\d{4}-/, '').replace(/-/g, ' ');
 
     if (!seenBenchmarks.has(benchmarkName)) {
       const newId = seenBenchmarks.size + 1;
@@ -244,7 +244,7 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
               r1.true_subtype AS true_subtype,
               COUNT(*)        AS cnt
        FROM "${tbl1}" r1
-       JOIN "${tbl2}" r2 ON r1.request_id = r2.request_id
+       JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id
        WHERE r1.pred_subtype <> r2.pred_subtype
        GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
     );
@@ -314,16 +314,16 @@ async function getRecords(filters = {}) {
     if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
     if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
 
-    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.request_id = r2.request_id WHERE ${where}`;
+    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id WHERE ${where}`;
 
     let dataResult, countResult;
     try {
       [dataResult, countResult] = await Promise.all([
-        query(`SELECT r1.request_id,
+        query(`SELECT r1.record_id,
                       r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
                       r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
                       r1.attributes, r1.metadata
-               ${baseSQL} ORDER BY r1.request_id LIMIT $${p} OFFSET $${p + 1}`,
+               ${baseSQL} ORDER BY r1.record_id LIMIT $${p} OFFSET $${p + 1}`,
           [...params, limit, offset]),
         query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
       ]);
@@ -359,9 +359,9 @@ async function getRecords(filters = {}) {
   let dataResult, countResult;
   try {
     [dataResult, countResult] = await Promise.all([
-      query(`SELECT request_id, true_type, true_subtype, pred_type, pred_subtype,
+      query(`SELECT record_id, true_type, true_subtype, pred_type, pred_subtype,
                     attributes, metadata
-             ${baseSQL} ORDER BY request_id LIMIT $${p} OFFSET $${p + 1}`,
+             ${baseSQL} ORDER BY record_id LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
     ]);

@@ -436,6 +436,7 @@ function Dashboard() {
               onSubtypeCellClick={handleSubtypeCellClick}
               loading={loading}
               recordsData={filteredRecordsData}
+              allRecordsData={allRecordsData}
             />
           ) : isTransitionMode ? (
             <TransitionMatrixPanel
