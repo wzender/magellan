@@ -3,7 +3,8 @@ import RowLevelTable from './RowLevelTable';
 
 function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData }) {
   const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors'
-  const [expandedPair, setExpandedPair] = useState(null); // 'trueSubtype|||predSubtype'
+  const [expandedGroup, setExpandedGroup] = useState(null); // trueSubtype string
+  const [expandedPair, setExpandedPair] = useState(null);   // predSubtype string within expandedGroup
   const [shameFilter, setShameFilter] = useState(null);
   const [severityFilter, setSeverityFilter] = useState(null); // null | 'both' | 'subtype'
   // ── Error Explorer: compute error pairs from all records ──────────────────
@@ -58,6 +59,19 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
     );
     return { ...recordsData, data: rows, pagination: { ...recordsData.pagination, total: rows.length } };
   }, [recordsData, shameFilter]);
+
+  // ── Error Explorer: group by trueSubtype (must be before early returns) ────
+  const groupedPairs = useMemo(() => {
+    const groups = {};
+    errorPairs.forEach(pair => {
+      if (!groups[pair.trueSubtype]) {
+        groups[pair.trueSubtype] = { trueSubtype: pair.trueSubtype, pairs: [], totalCount: 0 };
+      }
+      groups[pair.trueSubtype].pairs.push(pair);
+      groups[pair.trueSubtype].totalCount += pair.count;
+    });
+    return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
+  }, [errorPairs]);
 
   if (loading) return <div className="loading">Loading confusion matrix...</div>;
   if (!data) return <div className="no-data">No data available</div>;
@@ -160,13 +174,14 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
       return <div className="error-explorer-empty">No errors found — this run is perfect!</div>;
     }
 
-    const visiblePairs = severityFilter === 'both'
-      ? errorPairs.filter(p => p.typeMismatch)
-      : severityFilter === 'subtype'
-        ? errorPairs.filter(p => !p.typeMismatch)
-        : errorPairs;
-
-    const visibleMax = Math.max(1, ...visiblePairs.map(p => p.count));
+    const visibleGroups = groupedPairs
+      .map(group => ({
+        ...group,
+        pairs: severityFilter === 'both'    ? group.pairs.filter(p => p.typeMismatch)
+             : severityFilter === 'subtype' ? group.pairs.filter(p => !p.typeMismatch)
+             : group.pairs,
+      }))
+      .filter(group => group.pairs.length > 0);
 
     return (
       <div className="error-explorer">
@@ -178,7 +193,6 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
           <button
             className={`error-filter-chip severity-both-chip${severityFilter === 'both' ? ' active' : ''}`}
             onClick={() => setSeverityFilter(severityFilter === 'both' ? null : 'both')}
-            title="Show type+subtype errors only"
           >
             <strong>{typeAndSubtypeErrors}</strong> type+subtype wrong
           </button>
@@ -186,52 +200,74 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
           <button
             className={`error-filter-chip severity-subtype-chip${severityFilter === 'subtype' ? ' active' : ''}`}
             onClick={() => setSeverityFilter(severityFilter === 'subtype' ? null : 'subtype')}
-            title="Show subtype-only errors only"
           >
             <strong>{totalErrors - typeAndSubtypeErrors}</strong> subtype only
           </button>
         </div>
 
-        <div className="error-pairs-list">
-          {visiblePairs.map((pair, i) => {
-            const pairKey = `${pair.trueSubtype}|||${pair.predSubtype}`;
-            const isExpanded = expandedPair === pairKey;
-            const barPct = (pair.count / visibleMax) * 100;
-            const pairRecordsData = {
-              data: pair.records,
-              pagination: { total: pair.records.length, page: 0, limit: pair.records.length, pages: 1 }
-            };
+        <div className="error-groups-list">
+          {visibleGroups.map(group => {
+            const groupTotal = group.pairs.reduce((s, p) => s + p.count, 0);
+            const isGroupOpen = expandedGroup === group.trueSubtype;
+
+            // Records to show: filtered to expandedPair if set, else all for this group
+            const activeRecords = isGroupOpen
+              ? expandedPair
+                ? group.pairs.find(p => p.predSubtype === expandedPair)?.records ?? []
+                : group.pairs.flatMap(p => p.records)
+              : null;
+
+            const recordsData = activeRecords
+              ? { data: activeRecords, pagination: { total: activeRecords.length, page: 0, limit: activeRecords.length, pages: 1 } }
+              : null;
+
             return (
-              <div key={pairKey} className={`error-pair-row${isExpanded ? ' error-pair-expanded' : ''}`}>
-                <div className="error-pair-header" onClick={() => setExpandedPair(isExpanded ? null : pairKey)}>
-                  <span className="error-pair-rank">#{i + 1}</span>
-                  <span className="error-pair-count-badge">{pair.count}</span>
-                  <span className={`error-severity-badge ${pair.typeMismatch ? 'severity-both' : 'severity-subtype'}`}>
-                    {pair.typeMismatch ? 'type+subtype' : 'subtype only'}
+              <div key={group.trueSubtype} className={`error-group-row${isGroupOpen ? ' error-group-open' : ''}`}>
+                <div className="error-group-label">
+                  <span
+                    className={`error-group-true${isGroupOpen ? ' active' : ''}`}
+                    onClick={() => {
+                      if (isGroupOpen) { setExpandedGroup(null); setExpandedPair(null); }
+                      else { setExpandedGroup(group.trueSubtype); setExpandedPair(null); }
+                    }}
+                    title={isGroupOpen ? 'Click to collapse' : 'Click to show all misclassified records'}
+                  >
+                    {group.trueSubtype}
                   </span>
-                  <span className="error-pair-labels">
-                    <span className="error-pair-true">{pair.trueSubtype}</span>
-                    <span className="error-pair-arrow">→</span>
-                    <span className="error-pair-pred">{pair.predSubtype}</span>
-                  </span>
-                  <span className="error-pair-metric" title="% of all errors">
-                    {pair.pctErrors < 0.001 ? '< 0.1%' : `${(pair.pctErrors * 100).toFixed(1)}%`}
-                    <span className="error-pair-metric-label">of errors</span>
-                  </span>
-                  <div className="error-pair-bar-track">
-                    <div className="error-pair-bar-fill" style={{ width: `${barPct}%` }}>
-                      <span className="error-pair-bar-label">{pair.count}</span>
-                    </div>
-                  </div>
-                  <span className="error-pair-chevron">{isExpanded ? '▲' : '▼'}</span>
+                  <span className="error-group-total">{groupTotal}</span>
                 </div>
-                {isExpanded && (
+                <div className="error-group-preds">
+                  {group.pairs.map(pair => {
+                    const isActive = isGroupOpen && expandedPair === pair.predSubtype;
+                    return (
+                      <button
+                        key={pair.predSubtype}
+                        className={`error-pred-badge ${pair.typeMismatch ? 'pred-badge-both' : 'pred-badge-subtype'}${isActive ? ' active' : ''}`}
+                        onClick={() => {
+                          if (!isGroupOpen) {
+                            setExpandedGroup(group.trueSubtype);
+                            setExpandedPair(pair.predSubtype);
+                          } else if (expandedPair === pair.predSubtype) {
+                            setExpandedPair(null); // clear filter → show all
+                          } else {
+                            setExpandedPair(pair.predSubtype);
+                          }
+                        }}
+                        title={pair.typeMismatch ? 'Type + subtype wrong' : 'Subtype only'}
+                      >
+                        {pair.predSubtype}
+                        <span className="pred-badge-count">{pair.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {recordsData && (
                   <div className="error-pair-records">
                     <RowLevelTable
-                      key={pairKey}
-                      data={pairRecordsData}
+                      key={`${group.trueSubtype}|||${expandedPair || '*'}`}
+                      data={recordsData}
                       showRun2Columns={false}
-                      selectedCell={{ trueSubtype: pair.trueSubtype, predSubtype: pair.predSubtype }}
+                      selectedCell={expandedPair ? { trueSubtype: group.trueSubtype, predSubtype: expandedPair } : null}
                     />
                   </div>
                 )}
