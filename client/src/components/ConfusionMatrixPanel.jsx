@@ -254,34 +254,33 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                       </span>
                       <span className="error-group-total error-group-total-cross">{group.totalCount}</span>
                     </div>
-                    <div className="error-group-preds">
-                      {group.pairs.map((pair) => {
-                        const pairKey = `${pair.trueSubtype}|||${pair.predSubtype}`;
-                        const isActive = isOpen && expandedCrossPairKey === pairKey;
-                        return (
-                          <button
-                            key={pairKey}
-                            className={`error-pred-badge pred-badge-both${isActive ? ' active' : ''}`}
-                            onClick={() => {
-                              if (!isOpen) {
-                                setExpandedCrossGroupKey(group.key); setExpandedGroup(null); setExpandedPair(null);
-                                setExpandedCrossPairKey(pairKey);
-                              } else if (expandedCrossPairKey === pairKey) {
-                                setExpandedCrossPairKey(null);
-                              } else {
-                                setExpandedCrossPairKey(pairKey);
-                              }
-                            }}
-                            title={`${pair.trueSubtype} predicted as ${pair.predSubtype}`}
-                          >
-                            <span className="badge-subtype-true">{pair.trueSubtype}</span>
-                            <span className="badge-arrow">→</span>
-                            <span className="badge-subtype-pred">{pair.predSubtype}</span>
-                            <span className="pred-badge-count">{pair.count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {isOpen && (
+                      <div className="error-group-preds">
+                        {group.pairs.map((pair) => {
+                          const pairKey = `${pair.trueSubtype}|||${pair.predSubtype}`;
+                          const isActive = expandedCrossPairKey === pairKey;
+                          return (
+                            <button
+                              key={pairKey}
+                              className={`error-pred-badge pred-badge-both${isActive ? ' active' : ''}`}
+                              onClick={() => {
+                                if (expandedCrossPairKey === pairKey) {
+                                  setExpandedCrossPairKey(null);
+                                } else {
+                                  setExpandedCrossPairKey(pairKey);
+                                }
+                              }}
+                              title={`${pair.trueSubtype} predicted as ${pair.predSubtype}`}
+                            >
+                              <span className="badge-subtype-true">{pair.trueSubtype}</span>
+                              <span className="badge-arrow">→</span>
+                              <span className="badge-subtype-pred">{pair.predSubtype}</span>
+                              <span className="pred-badge-count">{pair.count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {crossRecordsData && (
                       <div className="error-pair-records error-pair-records-cross">
                         <RowLevelTable
@@ -333,30 +332,29 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                       </span>
                       <span className="error-group-total">{group.totalCount}</span>
                     </div>
-                    <div className="error-group-preds">
-                      {group.pairs.map((pair) => {
-                        const isActive = isGroupOpen && expandedPair === pair.predSubtype;
-                        return (
-                          <button
-                            key={pair.predSubtype}
-                            className={`error-pred-badge pred-badge-subtype${isActive ? ' active' : ''}`}
-                            onClick={() => {
-                              if (!isGroupOpen) {
-                                setExpandedGroup(group.trueSubtype); setExpandedCrossGroupKey(null); setExpandedCrossPairKey(null);
-                                setExpandedPair(pair.predSubtype);
-                              } else if (expandedPair === pair.predSubtype) {
-                                setExpandedPair(null);
-                              } else {
-                                setExpandedPair(pair.predSubtype);
-                              }
-                            }}
-                          >
-                            {pair.predSubtype}
-                            <span className="pred-badge-count">{pair.count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {isGroupOpen && (
+                      <div className="error-group-preds">
+                        {group.pairs.map((pair) => {
+                          const isActive = expandedPair === pair.predSubtype;
+                          return (
+                            <button
+                              key={pair.predSubtype}
+                              className={`error-pred-badge pred-badge-subtype${isActive ? ' active' : ''}`}
+                              onClick={() => {
+                                if (expandedPair === pair.predSubtype) {
+                                  setExpandedPair(null);
+                                } else {
+                                  setExpandedPair(pair.predSubtype);
+                                }
+                              }}
+                            >
+                              {pair.predSubtype}
+                              <span className="pred-badge-count">{pair.count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {withinRecordsData && (
                       <div className="error-pair-records">
                         <RowLevelTable
