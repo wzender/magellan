@@ -3,8 +3,10 @@ import RowLevelTable from './RowLevelTable';
 
 function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData }) {
   const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors'
-  const [expandedGroup, setExpandedGroup] = useState(null); // trueSubtype string
-  const [expandedPair, setExpandedPair] = useState(null);   // predSubtype string within expandedGroup
+  const [expandedGroup, setExpandedGroup] = useState(null);         // trueSubtype (within-type section)
+  const [expandedPair, setExpandedPair] = useState(null);           // predSubtype within expandedGroup
+  const [expandedCrossGroupKey, setExpandedCrossGroupKey] = useState(null); // "trueType|||predType"
+  const [expandedCrossPairKey, setExpandedCrossPairKey] = useState(null);   // "trueSubtype|||predSubtype"
   const [shameFilter, setShameFilter] = useState(null);
   const [severityFilter, setSeverityFilter] = useState(null); // null | 'both' | 'subtype'
   // ── Error Explorer: compute error pairs from all records ──────────────────
@@ -60,12 +62,24 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
     return { ...recordsData, data: rows, pagination: { ...recordsData.pagination, total: rows.length } };
   }, [recordsData, shameFilter]);
 
-  // ── Error Explorer: group by trueSubtype (must be before early returns) ────
-  const groupedPairs = useMemo(() => {
+  // ── Error Explorer: cross-type groups (TypeA→TypeB) ─────────────────────
+  const crossTypeGroups = useMemo(() => {
     const groups = {};
-    errorPairs.forEach(pair => {
+    errorPairs.filter(p => p.typeMismatch).forEach(pair => {
+      const key = `${pair.trueType}|||${pair.predType}`;
+      if (!groups[key]) groups[key] = { key, trueType: pair.trueType, predType: pair.predType, pairs: [], totalCount: 0 };
+      groups[key].pairs.push(pair);
+      groups[key].totalCount += pair.count;
+    });
+    return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
+  }, [errorPairs]);
+
+  // ── Error Explorer: within-type groups (same type, wrong subtype) ─────────
+  const withinTypeGroups = useMemo(() => {
+    const groups = {};
+    errorPairs.filter(p => !p.typeMismatch).forEach(pair => {
       if (!groups[pair.trueSubtype]) {
-        groups[pair.trueSubtype] = { trueSubtype: pair.trueSubtype, pairs: [], totalCount: 0 };
+        groups[pair.trueSubtype] = { trueSubtype: pair.trueSubtype, trueType: pair.trueType, pairs: [], totalCount: 0 };
       }
       groups[pair.trueSubtype].pairs.push(pair);
       groups[pair.trueSubtype].totalCount += pair.count;
@@ -168,20 +182,15 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
     return fwd >= 3 && fwd > rev * 2;
   };
 
+
   // ── Error Explorer renderer ───────────────────────────────────────────────
   const renderErrorExplorer = () => {
     if (errorPairs.length === 0) {
       return <div className="error-explorer-empty">No errors found — this run is perfect!</div>;
     }
 
-    const visibleGroups = groupedPairs
-      .map(group => ({
-        ...group,
-        pairs: severityFilter === 'both'    ? group.pairs.filter(p => p.typeMismatch)
-             : severityFilter === 'subtype' ? group.pairs.filter(p => !p.typeMismatch)
-             : group.pairs,
-      }))
-      .filter(group => group.pairs.length > 0);
+    const showCrossType = severityFilter !== 'subtype';
+    const showWithinType = severityFilter !== 'both';
 
     return (
       <div className="error-explorer">
@@ -194,86 +203,176 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
             className={`error-filter-chip severity-both-chip${severityFilter === 'both' ? ' active' : ''}`}
             onClick={() => setSeverityFilter(severityFilter === 'both' ? null : 'both')}
           >
-            <strong>{typeAndSubtypeErrors}</strong> type+subtype wrong
+            <strong>{typeAndSubtypeErrors}</strong> cross-type
           </button>
           <span className="error-explorer-divider">·</span>
           <button
             className={`error-filter-chip severity-subtype-chip${severityFilter === 'subtype' ? ' active' : ''}`}
             onClick={() => setSeverityFilter(severityFilter === 'subtype' ? null : 'subtype')}
           >
-            <strong>{totalErrors - typeAndSubtypeErrors}</strong> subtype only
+            <strong>{totalErrors - typeAndSubtypeErrors}</strong> within-type
           </button>
         </div>
 
         <div className="error-groups-list">
-          {visibleGroups.map(group => {
-            const groupTotal = group.pairs.reduce((s, p) => s + p.count, 0);
-            const isGroupOpen = expandedGroup === group.trueSubtype;
 
-            // Records to show: filtered to expandedPair if set, else all for this group
-            const activeRecords = isGroupOpen
-              ? expandedPair
-                ? group.pairs.find(p => p.predSubtype === expandedPair)?.records ?? []
-                : group.pairs.flatMap(p => p.records)
-              : null;
-
-            const recordsData = activeRecords
-              ? { data: activeRecords, pagination: { total: activeRecords.length, page: 0, limit: activeRecords.length, pages: 1 } }
-              : null;
-
-            return (
-              <div key={group.trueSubtype} className={`error-group-row${isGroupOpen ? ' error-group-open' : ''}`}>
-                <div className="error-group-label">
-                  <span
-                    className={`error-group-true${isGroupOpen ? ' active' : ''}`}
-                    onClick={() => {
-                      if (isGroupOpen) { setExpandedGroup(null); setExpandedPair(null); }
-                      else { setExpandedGroup(group.trueSubtype); setExpandedPair(null); }
-                    }}
-                    title={isGroupOpen ? 'Click to collapse' : 'Click to show all misclassified records'}
-                  >
-                    {group.trueSubtype}
-                  </span>
-                  <span className="error-group-total">{groupTotal}</span>
-                </div>
-                <div className="error-group-preds">
-                  {group.pairs.map(pair => {
-                    const isActive = isGroupOpen && expandedPair === pair.predSubtype;
-                    return (
-                      <button
-                        key={pair.predSubtype}
-                        className={`error-pred-badge ${pair.typeMismatch ? 'pred-badge-both' : 'pred-badge-subtype'}${isActive ? ' active' : ''}`}
-                        onClick={() => {
-                          if (!isGroupOpen) {
-                            setExpandedGroup(group.trueSubtype);
-                            setExpandedPair(pair.predSubtype);
-                          } else if (expandedPair === pair.predSubtype) {
-                            setExpandedPair(null); // clear filter → show all
-                          } else {
-                            setExpandedPair(pair.predSubtype);
-                          }
-                        }}
-                        title={pair.typeMismatch ? 'Type + subtype wrong' : 'Subtype only'}
-                      >
-                        {pair.predSubtype}
-                        <span className="pred-badge-count">{pair.count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {recordsData && (
-                  <div className="error-pair-records">
-                    <RowLevelTable
-                      key={`${group.trueSubtype}|||${expandedPair || '*'}`}
-                      data={recordsData}
-                      showRun2Columns={false}
-                      selectedCell={expandedPair ? { trueSubtype: group.trueSubtype, predSubtype: expandedPair } : null}
-                    />
-                  </div>
-                )}
+          {/* ── Cross-type errors (type AND subtype wrong) ── */}
+          {showCrossType && crossTypeGroups.length > 0 && (
+            <div className="error-section">
+              <div className="error-section-header error-section-cross">
+                <span className="error-section-icon">&#9888;</span>
+                Cross-type errors
+                <span className="error-section-badge error-section-badge-cross">{typeAndSubtypeErrors}</span>
+                <span className="error-section-hint">type and subtype both wrong</span>
               </div>
-            );
-          })}
+              {crossTypeGroups.map(group => {
+                const isOpen = expandedCrossGroupKey === group.key;
+                const activePair = isOpen
+                  ? group.pairs.find(p => `${p.trueSubtype}|||${p.predSubtype}` === expandedCrossPairKey)
+                  : null;
+                const activeRecords = isOpen
+                  ? activePair ? activePair.records : group.pairs.flatMap(p => p.records)
+                  : null;
+                const crossRecordsData = activeRecords
+                  ? { data: activeRecords, pagination: { total: activeRecords.length, page: 0, limit: activeRecords.length, pages: 1 } }
+                  : null;
+
+                return (
+                  <div key={group.key} className={`error-group-row error-group-row-cross${isOpen ? ' error-group-open' : ''}`}>
+                    <div className="error-group-label">
+                      <span
+                        className={`error-type-pair${isOpen ? ' active' : ''}`}
+                        onClick={() => {
+                          if (isOpen) { setExpandedCrossGroupKey(null); setExpandedCrossPairKey(null); }
+                          else { setExpandedCrossGroupKey(group.key); setExpandedGroup(null); setExpandedPair(null); setExpandedCrossPairKey(null); }
+                        }}
+                        title={isOpen ? 'Click to collapse' : 'Click to show records'}
+                      >
+                        <span className="error-type-label error-type-true">{group.trueType}</span>
+                        <span className="error-type-arrow">→</span>
+                        <span className="error-type-label error-type-pred">{group.predType}</span>
+                      </span>
+                      <span className="error-group-total error-group-total-cross">{group.totalCount}</span>
+                    </div>
+                    <div className="error-group-preds">
+                      {group.pairs.map((pair) => {
+                        const pairKey = `${pair.trueSubtype}|||${pair.predSubtype}`;
+                        const isActive = isOpen && expandedCrossPairKey === pairKey;
+                        return (
+                          <button
+                            key={pairKey}
+                            className={`error-pred-badge pred-badge-both${isActive ? ' active' : ''}`}
+                            onClick={() => {
+                              if (!isOpen) {
+                                setExpandedCrossGroupKey(group.key); setExpandedGroup(null); setExpandedPair(null);
+                                setExpandedCrossPairKey(pairKey);
+                              } else if (expandedCrossPairKey === pairKey) {
+                                setExpandedCrossPairKey(null);
+                              } else {
+                                setExpandedCrossPairKey(pairKey);
+                              }
+                            }}
+                            title={`${pair.trueSubtype} predicted as ${pair.predSubtype}`}
+                          >
+                            <span className="badge-subtype-true">{pair.trueSubtype}</span>
+                            <span className="badge-arrow">→</span>
+                            <span className="badge-subtype-pred">{pair.predSubtype}</span>
+                            <span className="pred-badge-count">{pair.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {crossRecordsData && (
+                      <div className="error-pair-records error-pair-records-cross">
+                        <RowLevelTable
+                          key={`cross:${group.key}|||${expandedCrossPairKey || '*'}`}
+                          data={crossRecordsData}
+                          showRun2Columns={false}
+                          selectedCell={activePair ? { trueSubtype: activePair.trueSubtype, predSubtype: activePair.predSubtype } : null}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Within-type errors (type correct, subtype wrong) ── */}
+          {showWithinType && withinTypeGroups.length > 0 && (
+            <div className="error-section">
+              <div className="error-section-header error-section-within">
+                Same-type, wrong subtype
+                <span className="error-section-badge error-section-badge-within">{totalErrors - typeAndSubtypeErrors}</span>
+                <span className="error-section-hint">type correct, subtype wrong</span>
+              </div>
+              {withinTypeGroups.map(group => {
+                const isGroupOpen = expandedGroup === group.trueSubtype;
+                const activeRecords = isGroupOpen
+                  ? expandedPair
+                    ? group.pairs.find(p => p.predSubtype === expandedPair)?.records ?? []
+                    : group.pairs.flatMap(p => p.records)
+                  : null;
+                const withinRecordsData = activeRecords
+                  ? { data: activeRecords, pagination: { total: activeRecords.length, page: 0, limit: activeRecords.length, pages: 1 } }
+                  : null;
+
+                return (
+                  <div key={group.trueSubtype} className={`error-group-row${isGroupOpen ? ' error-group-open' : ''}`}>
+                    <div className="error-group-label">
+                      <span className="error-group-type-hint">{group.trueType}</span>
+                      <span
+                        className={`error-group-true${isGroupOpen ? ' active' : ''}`}
+                        onClick={() => {
+                          if (isGroupOpen) { setExpandedGroup(null); setExpandedPair(null); }
+                          else { setExpandedGroup(group.trueSubtype); setExpandedCrossGroupKey(null); setExpandedCrossPairKey(null); setExpandedPair(null); }
+                        }}
+                        title={isGroupOpen ? 'Click to collapse' : 'Click to show all misclassified records'}
+                      >
+                        {group.trueSubtype}
+                      </span>
+                      <span className="error-group-total">{group.totalCount}</span>
+                    </div>
+                    <div className="error-group-preds">
+                      {group.pairs.map((pair) => {
+                        const isActive = isGroupOpen && expandedPair === pair.predSubtype;
+                        return (
+                          <button
+                            key={pair.predSubtype}
+                            className={`error-pred-badge pred-badge-subtype${isActive ? ' active' : ''}`}
+                            onClick={() => {
+                              if (!isGroupOpen) {
+                                setExpandedGroup(group.trueSubtype); setExpandedCrossGroupKey(null); setExpandedCrossPairKey(null);
+                                setExpandedPair(pair.predSubtype);
+                              } else if (expandedPair === pair.predSubtype) {
+                                setExpandedPair(null);
+                              } else {
+                                setExpandedPair(pair.predSubtype);
+                              }
+                            }}
+                          >
+                            {pair.predSubtype}
+                            <span className="pred-badge-count">{pair.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {withinRecordsData && (
+                      <div className="error-pair-records">
+                        <RowLevelTable
+                          key={`within:${group.trueSubtype}|||${expandedPair || '*'}`}
+                          data={withinRecordsData}
+                          showRun2Columns={false}
+                          selectedCell={expandedPair ? { trueSubtype: group.trueSubtype, predSubtype: expandedPair } : null}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
         </div>
       </div>
     );
