@@ -79,7 +79,7 @@ async function seedDatabase() {
           const values = batch
             .map(
               (record, idx) =>
-                `($${idx * 8 + 1}, $${idx * 8 + 2}, $${idx * 8 + 3}, $${idx * 8 + 4}, $${idx * 8 + 5}, $${idx * 8 + 6}, $${idx * 8 + 7}, $${idx * 8 + 8})`
+                `($${idx * 9 + 1}, $${idx * 9 + 2}, $${idx * 9 + 3}, $${idx * 9 + 4}, $${idx * 9 + 5}, $${idx * 9 + 6}, $${idx * 9 + 7}, $${idx * 9 + 8}, $${idx * 9 + 9})`
             )
             .join(',');
 
@@ -87,6 +87,7 @@ async function seedDatabase() {
             runId,
             r.request_id,
             JSON.stringify(r.attributes),
+            JSON.stringify(r.attributes_en),
             JSON.stringify(r.metadata),
             r.true_type,
             r.pred_type,
@@ -95,7 +96,7 @@ async function seedDatabase() {
           ]);
 
           await query(
-            `INSERT INTO run_results (run_id, request_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype)
+            `INSERT INTO run_results (run_id, request_id, attributes, attributes_en, metadata, true_type, pred_type, true_subtype, pred_subtype)
              VALUES ${values}`,
             flatParams
           );

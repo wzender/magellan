@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-const JSON_KEYS = ['attributes', 'metadata'];
+const JSON_KEYS = ['attributes', 'attributes_en', 'metadata'];
 
 function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds }) {
   const [currentPage, setCurrentPage] = useState(0);
@@ -85,6 +85,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setColumnFilters({});
   }, [data]);
 
+  const [attrLang, setAttrLang] = useState('original');
   const [columnFilters, setColumnFilters] = useState({});
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
@@ -359,6 +360,18 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                           {col.label}
                           {!col.isGroup && sortConfig.key === col.key && (sortConfig.direction === 'asc' ? ' ▲' : ' ▼')}
                         </div>
+                        {col.key === 'attributes' && (
+                          <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                            <button
+                              className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`}
+                              onClick={() => setAttrLang('original')}
+                            >orig</button>
+                            <button
+                              className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`}
+                              onClick={() => setAttrLang('en')}
+                            >EN</button>
+                          </div>
+                        )}
                       </div>
                       {!col.isGroup && rowIndex === columns.headerRows.length - 1 && actualIndex < columns.columns.length - 1 && (
                         <div
@@ -430,8 +443,10 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'pred_subtype':   return <td key={`${record.id}-pred_subtype`}>{record.pred_subtype}</td>;
                     case 'run2_pred_type': return <td key={`${record.id}-run2_pred_type`}>{record.run2_pred_type || '-'}</td>;
                     case 'run2_pred_subtype': return <td key={`${record.id}-run2_pred_subtype`}>{record.run2_pred_subtype || '-'}</td>;
-                    case 'attributes':
-                      return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(record.attributes, `${record.id}-attributes`, 'Attributes')}</td>;
+                    case 'attributes': {
+                      const attrsObj = attrLang === 'en' ? record.attributes_en : record.attributes;
+                      return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(attrsObj, `${record.id}-attributes`, 'Attributes')}</td>;
+                    }
                     case 'metadata':
                       return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(record.metadata, `${record.id}-metadata`, 'Metadata')}</td>;
                     default:

@@ -44,38 +44,83 @@ function generateTaxonomy() {
   return { types, subtypeMap };
 }
 
+const ADJECTIVES_EN = ['red', 'blue', 'large', 'small', 'premium', 'standard', 'deluxe', 'basic', 'professional', 'consumer'];
+const ADJECTIVES_HE = ['אדום', 'כחול', 'גדול', 'קטן', 'פרמיום', 'סטנדרטי', 'דלוקס', 'בסיסי', 'מקצועי', 'צרכני'];
+const CATEGORIES_EN = ['electronics', 'clothing', 'furniture', 'food', 'books', 'toys', 'sports', 'music', 'art', 'home'];
+const CATEGORIES_HE = ['אלקטרוניקה', 'ביגוד', 'ריהוט', 'מזון', 'ספרים', 'צעצועים', 'ספורט', 'מוזיקה', 'אמנות', 'בית'];
+const BRANDS_EN = ['BrandA', 'BrandB', 'BrandC', 'BrandD', 'BrandE', 'Generic', 'Premium', 'Store Brand', 'Luxury', 'Budget'];
+const BRANDS_HE = ['מותג א', 'מותג ב', 'מותג ג', 'מותג ד', 'מותג ה', 'גנרי', 'פרמיום', 'מותג חנות', 'יוקרה', 'תקציב'];
+const MATERIALS_EN = ['Cotton', 'Polyester', 'Wool', 'Silk', 'Nylon', 'Leather', 'Metal', 'Plastic', 'Wood', 'Glass'];
+const MATERIALS_HE = ['כותנה', 'פוליאסטר', 'צמר', 'משי', 'ניילון', 'עור', 'מתכת', 'פלסטיק', 'עץ', 'זכוכית'];
+
 /**
- * Generate realistic item attributes as large JSON objects
+ * Generate realistic item attributes as large JSON objects.
+ * Returns { en, he } — caller picks which to store in which column.
  */
 function generateAttributes() {
-  const adjectives = ['red', 'blue', 'large', 'small', 'premium', 'standard', 'deluxe', 'basic', 'professional', 'consumer'];
-  const categories = ['electronics', 'clothing', 'furniture', 'food', 'books', 'toys', 'sports', 'music', 'art', 'home'];
-  const brands = ['BrandA', 'BrandB', 'BrandC', 'BrandD', 'BrandE', 'Generic', 'Premium', 'Store Brand', 'Luxury', 'Budget'];
-
-  return {
-    name: `Item_${Math.random().toString(36).substring(7)}`,
-    description: `A ${adjectives[Math.floor(Math.random() * adjectives.length)]} ${categories[Math.floor(Math.random() * categories.length)]} product`,
-    brand: brands[Math.floor(Math.random() * brands.length)],
-    price: Math.round(Math.random() * 10000) / 100,
-    rating: (Math.random() * 5).toFixed(1),
-    inventory: Math.floor(Math.random() * 1000),
-    color: adjectives[Math.floor(Math.random() * adjectives.length)],
-    size: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size'][Math.floor(Math.random() * 7)],
-    material: ['Cotton', 'Polyester', 'Wool', 'Silk', 'Nylon', 'Leather', 'Metal', 'Plastic', 'Wood', 'Glass'][Math.floor(Math.random() * 10)],
-    weight: Math.round(Math.random() * 10000) / 100,
-    dimensions: {
-      length: Math.round(Math.random() * 500),
-      width: Math.round(Math.random() * 500),
-      height: Math.round(Math.random() * 500)
-    },
-    tags: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, () =>
-      categories[Math.floor(Math.random() * categories.length)]
-    ),
-    sku: `SKU-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-    upc: `${Math.floor(Math.random() * 1000000000000)}`,
-    createdDate: new Date(Date.now() - Math.random() * 31536000000).toISOString(),
-    lastModified: new Date(Date.now() - Math.random() * 2592000000).toISOString(),
+  const adjIdx = Math.floor(Math.random() * ADJECTIVES_EN.length);
+  const catIdx = Math.floor(Math.random() * CATEGORIES_EN.length);
+  const brandIdx = Math.floor(Math.random() * BRANDS_EN.length);
+  const matIdx = Math.floor(Math.random() * MATERIALS_EN.length);
+  const colorIdx = Math.floor(Math.random() * ADJECTIVES_EN.length);
+  const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size'];
+  const sizeVal = sizes[Math.floor(Math.random() * sizes.length)];
+  const numTags = Math.floor(Math.random() * 5) + 1;
+  const tagIndices = Array.from({ length: numTags }, () => Math.floor(Math.random() * CATEGORIES_EN.length));
+  const price = Math.round(Math.random() * 10000) / 100;
+  const rating = (Math.random() * 5).toFixed(1);
+  const inventory = Math.floor(Math.random() * 1000);
+  const weight = Math.round(Math.random() * 10000) / 100;
+  const dimensions = {
+    length: Math.round(Math.random() * 500),
+    width: Math.round(Math.random() * 500),
+    height: Math.round(Math.random() * 500),
   };
+  const sku = `SKU-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const upc = `${Math.floor(Math.random() * 1000000000000)}`;
+  const createdDate = new Date(Date.now() - Math.random() * 31536000000).toISOString();
+  const lastModified = new Date(Date.now() - Math.random() * 2592000000).toISOString();
+  const itemCode = Math.random().toString(36).substring(7);
+
+  const en = {
+    name: `Item_${itemCode}`,
+    description: `A ${ADJECTIVES_EN[adjIdx]} ${CATEGORIES_EN[catIdx]} product`,
+    brand: BRANDS_EN[brandIdx],
+    price,
+    rating,
+    inventory,
+    color: ADJECTIVES_EN[colorIdx],
+    size: sizeVal,
+    material: MATERIALS_EN[matIdx],
+    weight,
+    dimensions,
+    tags: tagIndices.map(i => CATEGORIES_EN[i]),
+    sku,
+    upc,
+    createdDate,
+    lastModified,
+  };
+
+  const he = {
+    name: `פריט_${itemCode}`,
+    description: `מוצר ${CATEGORIES_HE[catIdx]} ${ADJECTIVES_HE[adjIdx]}`,
+    brand: BRANDS_HE[brandIdx],
+    price,
+    rating,
+    inventory,
+    color: ADJECTIVES_HE[colorIdx],
+    size: sizeVal,
+    material: MATERIALS_HE[matIdx],
+    weight,
+    dimensions,
+    tags: tagIndices.map(i => CATEGORIES_HE[i]),
+    sku,
+    upc,
+    createdDate,
+    lastModified,
+  };
+
+  return { en, he };
 }
 
 /**
@@ -136,9 +181,11 @@ function generateBenchmarkData(taxonomy, numRecords = 2000) {
       predSubtype = subtypeMap[predType][randomSubIdx];
     }
 
+    const attrs = generateAttributes();
     records.push({
       request_id: `REC-${String(i + 1).padStart(6, '0')}`,
-      attributes: generateAttributes(),
+      attributes: attrs.he,
+      attributes_en: attrs.en,
       metadata: generateMetadata(),
       true_type: trueType,
       pred_type: predType,

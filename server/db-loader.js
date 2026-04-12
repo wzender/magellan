@@ -30,8 +30,9 @@ function tryParseJson(value) {
 function parseJsonFields(row) {
   return {
     ...row,
-    attributes: tryParseJson(row.attributes),
-    metadata:   tryParseJson(row.metadata),
+    attributes:    tryParseJson(row.attributes),
+    attributes_en: tryParseJson(row.attributes_en),
+    metadata:      tryParseJson(row.metadata),
   };
 }
 
@@ -349,7 +350,7 @@ async function getRecords(filters = {}) {
         query(`SELECT r1.${idCol1} AS request_id,
                       r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
                       r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
-                      r1.attributes, r1.metadata
+                      r1.attributes, r1.attributes_en, r1.metadata
                ${baseSQL} ORDER BY r1.${idCol1} LIMIT $${p} OFFSET $${p + 1}`,
           [...params, limit, offset]),
         query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
@@ -388,7 +389,7 @@ async function getRecords(filters = {}) {
   try {
     [dataResult, countResult] = await Promise.all([
       query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
-                    attributes, metadata
+                    attributes, attributes_en, metadata
              ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),

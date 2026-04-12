@@ -89,8 +89,9 @@ function loadData() {
         true_subtype: r.true_subtype,
         pred_type:    r.pred_type,
         pred_subtype: r.pred_subtype,
-        attributes:   tryParseJson(r.attributes),
-        metadata:     tryParseJson(r.metadata),
+        attributes:    tryParseJson(r.attributes),
+        attributes_en: tryParseJson(r.attributes_en),
+        metadata:      tryParseJson(r.metadata),
       });
     });
   });
