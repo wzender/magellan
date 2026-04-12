@@ -455,6 +455,7 @@ function Dashboard() {
               recordsData={filteredRecordsData}
               allRecordsData={allRecordsData}
               onExportAll={fetchAllConfusionRecords}
+              benchmarkId={selectedBenchmark}
             />
           ) : isTransitionMode ? (
             <TransitionMatrixPanel

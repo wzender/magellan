@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'metadata'];
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
@@ -92,6 +92,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [toast, setToast] = useState(null);
   const [copiedCell, setCopiedCell] = useState(null);
   const [exporting, setExporting] = useState(false); // 'csv' | 'excel' | false
+  const [addingAllToRetag, setAddingAllToRetag] = useState(false);
   const tableRef = useRef(null);
 
   if (!data || !data.data) return <div>No records</div>;
@@ -283,6 +284,24 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     <div className="row-level-table-panel">
       <div className="table-toolbar">
         <h3>{tableTitle} ({data.pagination.total} total)</h3>
+        {onAddToRetag && (
+          <button
+            className="add-all-to-retag-btn"
+            disabled={addingAllToRetag}
+            title="Add all records (beyond current page) to retag list"
+            onClick={async () => {
+              setAddingAllToRetag(true);
+              try {
+                const allData = await getExportData('_retag');
+                if (allData) allData.forEach(r => onAddToRetag(r));
+              } finally {
+                setAddingAllToRetag(false);
+              }
+            }}
+          >
+            {addingAllToRetag ? 'Adding…' : '+ Add All to Retag'}
+          </button>
+        )}
         <button className="export-csv-btn" onClick={exportToCsv} disabled={!!exporting} title="Export all filtered rows to CSV">
           {exporting === 'csv' ? 'Exporting…' : 'Export to CSV'}
         </button>
@@ -379,6 +398,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'request_id': {
                       const run1Correct = record.true_type === record.pred_type && record.true_subtype === record.pred_subtype;
                       const run2Correct = record.true_type === record.run2_pred_type && record.true_subtype === record.run2_pred_subtype;
+                      const alreadyRetagged = retagIds && retagIds.has(record.request_id);
                       return (
                         <td key={`${record.id}-request_id`}>
                           <div className="record-id-cell">
@@ -391,6 +411,15 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                               <span className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`} title={run1Correct ? 'Correct' : 'Incorrect'} />
                             )}
                             <span>{record.request_id}</span>
+                            {onAddToRetag && (
+                              <button
+                                className={`add-to-retag-btn${alreadyRetagged ? ' add-to-retag-btn--tagged' : ''}`}
+                                onClick={e => { e.stopPropagation(); onAddToRetag(record); }}
+                                title={alreadyRetagged ? 'Already in retag list' : 'Add to retag list'}
+                              >
+                                {alreadyRetagged ? '✓ Retagged' : '+ Retag'}
+                              </button>
+                            )}
                           </div>
                         </td>
                       );

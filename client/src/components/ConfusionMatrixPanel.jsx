@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import RowLevelTable from './RowLevelTable';
+import RetagPanel from './RetagPanel';
 
-function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData, onExportAll }) {
-  const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors'
+function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData, onExportAll, benchmarkId }) {
+  const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors' | 'retag'
+  const [retagList, setRetagList] = useState([]); // [{ record, retag_subtype: '' }]
   const [expandedGroup, setExpandedGroup] = useState(null);         // trueSubtype (within-type section)
   const [expandedPair, setExpandedPair] = useState(null);           // predSubtype within expandedGroup
   const [expandedCrossGroupKey, setExpandedCrossGroupKey] = useState(null); // "trueType|||predType"
@@ -41,6 +43,83 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
   const totalErrors = errorPairs.reduce((s, p) => s + p.count, 0);
   const typeAndSubtypeErrors = errorPairs.filter(p => p.typeMismatch).reduce((s, p) => s + p.count, 0);
   const maxCount = Math.max(1, ...errorPairs.map(p => p.count));
+
+  // ── Retag state helpers ───────────────────────────────────────────────────
+  const retagIds = useMemo(() => new Set(retagList.map(r => r.record.request_id)), [retagList]);
+
+  const allSubtypes = useMemo(() => {
+    if (!allRecordsData?.data) return [];
+    const s = new Set();
+    allRecordsData.data.forEach(r => {
+      if (r.true_subtype) s.add(r.true_subtype);
+      if (r.pred_subtype) s.add(r.pred_subtype);
+    });
+    return [...s].sort();
+  }, [allRecordsData]);
+
+  // ── Persist retag to server ───────────────────────────────────────────────
+  const saveRetag = useCallback(async (list) => {
+    if (!benchmarkId) return;
+    try {
+      await fetch('/api/retag', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          benchmark_id: benchmarkId,
+          entries: list.map(({ record, retag_subtype }) => ({
+            request_id: record.request_id,
+            retag_subtype: retag_subtype || '',
+            record,
+          })),
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to save retag data', err);
+    }
+  }, [benchmarkId]);
+
+  // Load saved retag entries whenever the benchmark changes
+  useEffect(() => {
+    if (!benchmarkId) { setRetagList([]); return; }
+    fetch(`/api/retag?benchmark_id=${benchmarkId}`)
+      .then(r => r.json())
+      .then(entries => {
+        if (!Array.isArray(entries)) return;
+        setRetagList(
+          entries
+            .filter(e => e.record)
+            .map(e => ({ record: e.record, retag_subtype: e.retag_subtype || '' }))
+        );
+      })
+      .catch(err => console.error('Failed to load retag data', err));
+  }, [benchmarkId]);
+
+  const handleAddToRetag = (record) => {
+    setRetagList(prev => {
+      if (prev.some(r => r.record.request_id === record.request_id)) return prev;
+      const next = [...prev, { record, retag_subtype: '' }];
+      saveRetag(next);
+      return next;
+    });
+  };
+
+  const handleSetRetagSubtype = (request_id, subtype) => {
+    setRetagList(prev => {
+      const next = prev.map(r =>
+        r.record.request_id === request_id ? { ...r, retag_subtype: subtype } : r
+      );
+      saveRetag(next);
+      return next;
+    });
+  };
+
+  const handleRemoveFromRetag = (request_id) => {
+    setRetagList(prev => {
+      const next = prev.filter(r => r.record.request_id !== request_id);
+      saveRetag(next);
+      return next;
+    });
+  };
 
   // ── Shame list (matrix view) ──────────────────────────────────────────────
   const shameList = useMemo(() => {
@@ -288,6 +367,8 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                           data={crossRecordsData}
                           showRun2Columns={false}
                           selectedCell={activePair ? { trueSubtype: activePair.trueSubtype, predSubtype: activePair.predSubtype } : null}
+                          onAddToRetag={handleAddToRetag}
+                          retagIds={retagIds}
                         />
                       </div>
                     )}
@@ -362,6 +443,8 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                           data={withinRecordsData}
                           showRun2Columns={false}
                           selectedCell={expandedPair ? { trueSubtype: group.trueSubtype, predSubtype: expandedPair } : null}
+                          onAddToRetag={handleAddToRetag}
+                          retagIds={retagIds}
                         />
                       </div>
                     )}
@@ -399,10 +482,29 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
               </span>
             )}
           </button>
+          <button
+            className={`view-mode-btn${viewMode === 'retag' ? ' active' : ''}`}
+            onClick={() => setViewMode('retag')}
+          >
+            Retag
+            {retagList.length > 0 && (
+              <span className={`view-mode-pill${viewMode === 'retag' ? ' active' : ''}`}>
+                {retagList.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
-      {viewMode === 'errors' ? renderErrorExplorer() : (
+      {viewMode === 'retag' ? (
+        <RetagPanel
+          retagList={retagList}
+          allSubtypes={allSubtypes}
+          onSetSubtype={handleSetRetagSubtype}
+          onRemove={handleRemoveFromRetag}
+          onClear={() => { setRetagList([]); saveRetag([]); }}
+        />
+      ) : viewMode === 'errors' ? renderErrorExplorer() : (
         <>
           {/* ── Type Confusion Matrix Panel ── */}
           <div className="matrix-panel">
@@ -597,6 +699,8 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                 data={displayRecords}
                 showRun2Columns={false}
                 selectedCell={selectedCell}
+                onAddToRetag={handleAddToRetag}
+                retagIds={retagIds}
                 onExport={onExportAll ? async () => {
                   const result = await onExportAll();
                   if (!shameFilter) return result;
