@@ -208,3 +208,4 @@ __marimo__/
 node_modules
 package-lock.json
 minikube-linux-amd64
+.codex

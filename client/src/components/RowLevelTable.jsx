@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'metadata'];
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2' }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
@@ -90,6 +91,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [resizeStartX, setResizeStartX] = useState(0);
   const [toast, setToast] = useState(null);
   const [copiedCell, setCopiedCell] = useState(null);
+  const [exporting, setExporting] = useState(false); // 'csv' | 'excel' | false
   const tableRef = useRef(null);
 
   if (!data || !data.data) return <div>No records</div>;
@@ -206,10 +208,87 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         : 'Transition Record Details')
     : 'Record Details';
 
+  const getExportData = async (kind) => {
+    let exportData = sortedData;
+    if (onExport) {
+      setExporting(kind);
+      try {
+        const result = await onExport();
+        exportData = (result.data || []).filter(record =>
+          Object.entries(columnFilters).every(([key, val]) =>
+            !val || String(record[key] ?? '').toLowerCase().includes(val.toLowerCase())
+          )
+        );
+        if (sortConfig.key) {
+          exportData = [...exportData].sort((a, b) => {
+            const aVal = a[sortConfig.key] ?? '';
+            const bVal = b[sortConfig.key] ?? '';
+            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+          });
+        }
+      } catch (e) {
+        console.error('Export failed', e);
+        setExporting(false);
+        return null;
+      }
+      setExporting(false);
+    }
+    return exportData;
+  };
+
+  const exportToCsv = async () => {
+    const cols = columns.columns;
+    const exportData = await getExportData('csv');
+    if (!exportData) return;
+    const headers = cols.map(col => col.label);
+    const rows = exportData.map(record =>
+      cols.map(col => {
+        const val = record[col.key];
+        if (JSON_KEYS.includes(col.key)) return JSON.stringify(val ?? '');
+        const str = String(val ?? '');
+        return str.includes(',') || str.includes('"') || str.includes('\n')
+          ? `"${str.replace(/"/g, '""')}"` : str;
+      })
+    );
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToExcel = async () => {
+    const cols = columns.columns;
+    const exportData = await getExportData('excel');
+    if (!exportData) return;
+    const headers = cols.map(col => col.label);
+    const rows = exportData.map(record =>
+      cols.map(col => {
+        const val = record[col.key];
+        return JSON_KEYS.includes(col.key) ? JSON.stringify(val ?? '') : (val ?? '');
+      })
+    );
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Records');
+    XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
+  };
+
   return (
     <div className="row-level-table-panel">
       <div className="table-toolbar">
         <h3>{tableTitle} ({data.pagination.total} total)</h3>
+        <button className="export-csv-btn" onClick={exportToCsv} disabled={!!exporting} title="Export all filtered rows to CSV">
+          {exporting === 'csv' ? 'Exporting…' : 'Export to CSV'}
+        </button>
+        <button className="export-csv-btn" onClick={exportToExcel} disabled={!!exporting} title="Export all filtered rows to Excel">
+          {exporting === 'excel' ? 'Exporting…' : 'Export to Excel'}
+        </button>
         <div className="row-height-control">
           <span className="row-height-label">Row height:</span>
           {ROW_HEIGHT_OPTIONS.map(opt => (

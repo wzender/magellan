@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
-function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [] }) {
+function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [], onExportAll }) {
   const [indicatorFilter, setIndicatorFilter] = useState(null);
   const [persistentFilter, setPersistentFilter] = useState(null);
 
@@ -232,6 +232,28 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
             selectedCell={selectedCell}
             run1Name={selectedRunNames[0] || 'Run 1'}
             run2Name={selectedRunNames[1] || 'Run 2'}
+            onExport={onExportAll ? async () => {
+              let result = await onExportAll();
+              let rows = result.data || [];
+              if (indicatorFilter) {
+                rows = rows.filter(row => {
+                  const r1Correct = row.pred_subtype === row.true_subtype;
+                  const r2Correct = row.run2_pred_subtype === row.true_subtype;
+                  if (indicatorFilter === 'run1-correct') return r1Correct && !r2Correct;
+                  if (indicatorFilter === 'run2-correct') return r2Correct && !r1Correct;
+                  if (indicatorFilter === 'both-wrong') return !r1Correct && !r2Correct;
+                  return true;
+                });
+              }
+              if (persistentFilter) {
+                rows = rows.filter(row =>
+                  row.true_subtype === persistentFilter &&
+                  row.pred_subtype !== row.true_subtype &&
+                  row.run2_pred_subtype !== row.true_subtype
+                );
+              }
+              return { ...result, data: rows };
+            } : undefined}
           />
         </div>
       )}

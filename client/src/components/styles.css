@@ -978,6 +978,21 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   margin: 0;
   flex: 1;
 }
+.export-csv-btn {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.export-csv-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
 .row-height-control {
   display: flex;
   align-items: center;

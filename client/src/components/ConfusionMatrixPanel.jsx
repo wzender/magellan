@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
-function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData }) {
+function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData, onExportAll }) {
   const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors'
   const [expandedGroup, setExpandedGroup] = useState(null);         // trueSubtype (within-type section)
   const [expandedPair, setExpandedPair] = useState(null);           // predSubtype within expandedGroup
@@ -597,6 +597,14 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                 data={displayRecords}
                 showRun2Columns={false}
                 selectedCell={selectedCell}
+                onExport={onExportAll ? async () => {
+                  const result = await onExportAll();
+                  if (!shameFilter) return result;
+                  const rows = (result.data || []).filter(r =>
+                    r.true_subtype === shameFilter && r.pred_subtype !== r.true_subtype
+                  );
+                  return { ...result, data: rows };
+                } : undefined}
               />
             </div>
           )}

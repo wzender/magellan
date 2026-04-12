@@ -359,6 +359,23 @@ function Dashboard() {
     fetchTransitionRecords();
   }, [selectedCell, selectedRuns, isTransitionMode]);
 
+  const fetchAllConfusionRecords = async () => {
+    let url = `/api/records?run_id=${selectedRuns[0]}&limit=999999`;
+    if (filter === 'incorrect') url += '&filter=incorrect';
+    if (selectedTypePair) url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
+    if (selectedSubtypePair) url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
+    const resp = await fetch(url);
+    return resp.json();
+  };
+
+  const fetchAllTransitionRecords = async () => {
+    let url = `/api/records?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&limit=999999`;
+    if (selectedCell?.run1) url += `&run1_pred_subtype=${encodeURIComponent(selectedCell.run1)}`;
+    if (selectedCell?.run2) url += `&run2_pred_subtype=${encodeURIComponent(selectedCell.run2)}`;
+    const resp = await fetch(url);
+    return resp.json();
+  };
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -437,6 +454,7 @@ function Dashboard() {
               loading={loading}
               recordsData={filteredRecordsData}
               allRecordsData={allRecordsData}
+              onExportAll={fetchAllConfusionRecords}
             />
           ) : isTransitionMode ? (
             <TransitionMatrixPanel
@@ -446,6 +464,7 @@ function Dashboard() {
               loading={loading}
               recordsData={filteredRecordsData}
               selectedRunNames={selectedRunNames}
+              onExportAll={fetchAllTransitionRecords}
             />
           ) : (
             <div className="no-selection">Please select 1 or 2 runs to view matrices</div>
