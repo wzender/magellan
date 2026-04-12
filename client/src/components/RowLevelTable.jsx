@@ -286,7 +286,14 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     const allData = await getExportData('_translate');
     if (!allData || allData.length === 0) return;
 
-    const records = allData.map(r => ({ request_id: r.request_id, attributes: r.attributes }));
+    const records = allData
+      .filter(r => !r.attributes_en || Object.keys(r.attributes_en).length === 0)
+      .map(r => ({ request_id: r.request_id, attributes: r.attributes }));
+
+    if (records.length === 0) {
+      setToast('All records already have English attributes.');
+      return;
+    }
     setTranslating({ done: 0, total: records.length });
 
     try {
