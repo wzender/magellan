@@ -156,7 +156,7 @@ sequenceDiagram
     par transition matrix + all records
         Dashboard->>API: GET /api/transition-matrix?run_id1=R1&run_id2=R2&min_count=N
         API->>CSVLoader: getTransitionMatrix(R1, R2, minCount)
-        Note over CSVLoader: join by record_id, keep only changed subtypes,<br/>compute run1Correct/run2Correct/bothWrong per cell
+        Note over CSVLoader: join by request_id, keep only changed subtypes,<br/>compute run1Correct/run2Correct/bothWrong per cell
         CSVLoader-->>API: rows, cols, data
         API-->>Dashboard: transitionMatrixData
         Dashboard->>Dashboard: setTransitionMatrixData(...)
@@ -164,7 +164,7 @@ sequenceDiagram
     and
         Dashboard->>API: GET /api/records?run_id1=R1&run_id2=R2&limit=1000
         API->>CSVLoader: getRecords({run_id1, run_id2})
-        Note over CSVLoader: join R1+R2 by record_id,<br/>keep only records where pred_subtype differs
+        Note over CSVLoader: join R1+R2 by request_id,<br/>keep only records where pred_subtype differs
         CSVLoader-->>API: combined records[]
         API-->>Dashboard: allRecordsData
         Dashboard->>Dashboard: setAllRecordsData / setFilteredRecordsData

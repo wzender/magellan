@@ -84,7 +84,7 @@ function loadData() {
       run_results.push({
         id:           run.id * 100000 + idx,
         run_id:       run.id,
-        record_id:    r.rec_id,
+        request_id:    r.request_id,
         true_type:    r.true_type,
         true_subtype: r.true_subtype,
         pred_type:    r.pred_type,
@@ -178,12 +178,12 @@ function getTransitionMatrix(runId1, runId2, minCount = 1) {
   const data = loadData();
   const run1Map = {};
   data.run_results.filter(r => r.run_id === runId1).forEach(r => {
-    run1Map[r.record_id] = { pred_subtype: r.pred_subtype, true_subtype: r.true_subtype };
+    run1Map[r.request_id] = { pred_subtype: r.pred_subtype, true_subtype: r.true_subtype };
   });
 
   const transitionData = {};
   data.run_results.filter(r => r.run_id === runId2).forEach(r => {
-    const r1 = run1Map[r.record_id];
+    const r1 = run1Map[r.request_id];
     if (!r1 || r1.pred_subtype === r.pred_subtype) return;
 
     const run1Pred    = r1.pred_subtype;
@@ -228,12 +228,12 @@ function getRecords(filters = {}) {
     const runId2 = filters.run_id2;
 
     const run2Map = {};
-    data.run_results.filter(r => r.run_id === runId2).forEach(r => { run2Map[r.record_id] = r; });
+    data.run_results.filter(r => r.run_id === runId2).forEach(r => { run2Map[r.request_id] = r; });
 
     let combined = data.run_results
       .filter(r => r.run_id === runId1)
       .map(r1 => {
-        const r2 = run2Map[r1.record_id];
+        const r2 = run2Map[r1.request_id];
         if (!r2) return null;
         return { ...r1, run2_pred_type: r2.pred_type, run2_pred_subtype: r2.pred_subtype };
       })

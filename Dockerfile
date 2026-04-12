@@ -1,24 +1,37 @@
-FROM node:21-slim
+FROM node:20-slim
 
 WORKDIR /app
 
+# Reduce npm parallelism on constrained environments.
+ENV npm_config_jobs=1
+
 # Install server dependencies
 COPY package.json ./
-RUN npm install --omit=dev
+RUN echo "==> Installing server dependencies in $(pwd)" && \
+	npm install --omit=dev
 
-# Install client dependencies and build
-COPY client/package.json ./client/
-RUN cd client && npm install
+# Install client dependencies and build frontend
+WORKDIR /app/client
+COPY client/package.json ./
+RUN echo "==> Installing client dependencies in $(pwd)" && \
+	npm install
 
-COPY client/ ./client/
+COPY client/ ./
+RUN echo "==> Building client in $(pwd)" && \
+	npm run build
+
+WORKDIR /app
 
 # Copy server and data
 COPY server/ ./server/
 COPY data/ ./data/
-COPY start.sh ./start.sh
+RUN echo "==> Runtime files prepared in $(pwd)" && \
+	ls -la && \
+	ls -la client && \
+	ls -la server
 
-RUN chmod +x ./start.sh
+WORKDIR /app
 
 EXPOSE 5000
 
-CMD ["./start.sh"]
+CMD ["node", "server/index.js"]

@@ -27,7 +27,7 @@ CREATE TABLE runs (
 CREATE TABLE run_results (
   id SERIAL PRIMARY KEY,
   run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-  record_id VARCHAR(255) NOT NULL,
+  request_id VARCHAR(255) NOT NULL,
   attributes JSONB,
   metadata JSONB,
   true_type VARCHAR(100) NOT NULL,
@@ -67,4 +67,4 @@ CREATE INDEX idx_run_results_attributes ON run_results USING GIN(attributes);
 CREATE INDEX idx_run_results_metadata ON run_results USING GIN(metadata);
 
 -- Index for transition matrix queries (comparing two runs)
-CREATE INDEX idx_run_results_record_id ON run_results(record_id, run_id);
+CREATE INDEX idx_run_results_request_id ON run_results(request_id, run_id);

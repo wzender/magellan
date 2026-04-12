@@ -349,7 +349,7 @@ The schema is documented and queried in [server/db-loader.js](server/db-loader.j
 
 | Column | Type | Description |
 | --- | --- | --- |
-| `record_id` | text | Stable identifier used to join two runs in transition-matrix mode |
+| `request_id` | text | Stable identifier used to join two runs in transition-matrix mode |
 | `true_type` | text | Ground-truth type label |
 | `true_subtype` | text | Ground-truth subtype label |
 | `pred_type` | text | Predicted type label |
@@ -373,7 +373,7 @@ If your environment uses different table or column names, the only file to edit 
 
 3. **Different per-run table naming convention** — the `extractBenchmarkName` helper (line ~32) splits the table name on `-` and drops the first two segments (`YYYYMMDD` and `HHMM`). Adjust that function if your tables follow a different naming pattern.
 
-4. **Different per-run column names** — every SQL query in `db-loader.js` that touches per-run tables selects `record_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes`, `metadata`. Search for those names and replace them with your column names. The rest of the app only sees the data after `db-loader.js` has mapped it, so no other files need changing.
+4. **Different per-run column names** — every SQL query in `db-loader.js` that touches per-run tables selects `request_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes`, `metadata`. Search for those names and replace them with your column names. The rest of the app only sees the data after `db-loader.js` has mapped it, so no other files need changing.
 
 5. **Different schema name** — just change `DB_SCHEMA` in your `.env`; the pool in [server/db.js](server/db.js) sets `search_path` dynamically from that variable.
 

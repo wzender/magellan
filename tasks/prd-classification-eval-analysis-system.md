@@ -47,7 +47,7 @@ To provide an all-in-one, modern dashboard for robust evaluation, benchmarking, 
 3. The system must allow users to filter predictions: all vs only incorrect subtype predictions.
 4. The system must allow users to select a specific run and display its type confusion matrix.
 5. Clicking a cell in the type confusion matrix must display the subtype confusion matrix for the relevant type pair.
-6. Clicking a cell in the subtype confusion matrix must display a row-level data table containing all relevant records, with columns: record_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype.
+6. Clicking a cell in the subtype confusion matrix must display a row-level data table containing all relevant records, with columns: request_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype.
 7. The system must support comparing two runs of the same benchmark via a transition matrix (showing subtype label transitions between runs).
 8. The transition matrix must support filtering by a minimum number of changed records (stepper 1–999).
 9. Clicking a transition cell must show the corresponding row-level records.
@@ -183,8 +183,8 @@ All endpoints are prefixed `/api/`:
 #### Row-Level Table
 
 - Shown below the active matrix panel
-- Single-run columns: record_id, true_type, pred_type, true_subtype, pred_subtype, attributes, metadata
-- Dual-run columns: record_id, true type/subtype, Run 1 predictions, Run 2 predictions, attributes, metadata
+- Single-run columns: request_id, true_type, pred_type, true_subtype, pred_subtype, attributes, metadata
+- Dual-run columns: request_id, true type/subtype, Run 1 predictions, Run 2 predictions, attributes, metadata
 - Features: sortable, per-column text filter, resizable columns, reorderable columns, page size (20/50/All), row height selector (1-line / 2-line / 3-line / Auto)
 - JSON cells: pretty-printed with Copy button and toast notification on copy
 

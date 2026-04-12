@@ -23,7 +23,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { label: 'Details', colspan: 2, isGroup: true }
           ],
           [
-            { key: 'record_id', label: 'Record ID', width: 100, isGroup: false },
+            { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
             { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
             { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
             { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
@@ -35,7 +35,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ]
         ],
         columns: [
-          { key: 'record_id', label: 'Record ID', width: 100 },
+          { key: 'request_id', label: 'Request ID', width: 100 },
           { key: 'true_type', label: 'True Type', width: 100 },
           { key: 'true_subtype', label: 'True Subtype', width: 120 },
           { key: 'pred_type', label: 'Pred Type', width: 100 },
@@ -50,7 +50,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
       return {
         headerRows: [
           [
-            { key: 'record_id', label: 'Record ID', width: 100, isGroup: false },
+            { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
             { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
             { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
             { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
@@ -60,7 +60,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ]
         ],
         columns: [
-          { key: 'record_id', label: 'Record ID', width: 100 },
+          { key: 'request_id', label: 'Request ID', width: 100 },
           { key: 'true_type', label: 'True Type', width: 100 },
           { key: 'pred_type', label: 'Pred Type', width: 100 },
           { key: 'true_subtype', label: 'True Subtype', width: 120 },
@@ -376,11 +376,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
               <tr key={record.id} className="record-row">
                 {columns.columns.map(col => {
                   switch (col.key) {
-                    case 'record_id': {
+                    case 'request_id': {
                       const run1Correct = record.true_type === record.pred_type && record.true_subtype === record.pred_subtype;
                       const run2Correct = record.true_type === record.run2_pred_type && record.true_subtype === record.run2_pred_subtype;
                       return (
-                        <td key={`${record.id}-record_id`}>
+                        <td key={`${record.id}-request_id`}>
                           <div className="record-id-cell">
                             {showRun2Columns ? (
                               <>
@@ -390,7 +390,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                             ) : (
                               <span className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`} title={run1Correct ? 'Correct' : 'Incorrect'} />
                             )}
-                            <span>{record.record_id}</span>
+                            <span>{record.request_id}</span>
                           </div>
                         </td>
                       );

@@ -1,0 +1,50 @@
+replicaCount: 1
+
+image:
+  repository: magellan
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 5000
+
+probes:
+  readiness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    path: /health
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  startup:
+    path: /health
+    failureThreshold: 30
+    periodSeconds: 5
+
+env:
+  DATA_SOURCE: csv
+  DB_SCHEMA: magellan
+  NODE_ENV: production
+  PORT: "5000"
+
+databaseUrlSecret:
+  enabled: false
+  name: magellan-db-secret
+  key: DATABASE_URL
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

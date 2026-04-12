@@ -116,7 +116,7 @@ describe('API Endpoints', () => {
       const mockRecords = [
         {
           id: 1,
-          record_id: 'REC-000001',
+          request_id: 'REC-000001',
           true_type: 'Product',
           pred_type: 'Product',
           true_subtype: 'Physical',

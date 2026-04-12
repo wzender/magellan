@@ -137,7 +137,7 @@ function generateBenchmarkData(taxonomy, numRecords = 2000) {
     }
 
     records.push({
-      record_id: `REC-${String(i + 1).padStart(6, '0')}`,
+      request_id: `REC-${String(i + 1).padStart(6, '0')}`,
       attributes: generateAttributes(),
       metadata: generateMetadata(),
       true_type: trueType,

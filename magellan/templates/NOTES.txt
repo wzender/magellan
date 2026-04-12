@@ -1,0 +1,10 @@
+Magellan has been deployed.
+
+To inspect resources:
+  kubectl get all -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To port-forward locally:
+  kubectl port-forward svc/{{ include "magellan.fullname" . }} 5000:{{ .Values.service.port }}
+
+Then open:
+  http://127.0.0.1:5000

@@ -10,13 +10,15 @@
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
  *   e.g. "20261230-1445-Test-benchmark"
- *   columns: record_id, true_type, true_subtype, pred_type, pred_subtype,
+ *   columns: request_id or record_id, true_type, true_subtype, pred_type,
+ *            pred_subtype,
  *            attributes, metadata
  *
  * Benchmarks are read directly from the "benchmark" column in leaderboard-table.
  */
 
 const { query } = require('./db');
+const idColumnCache = new Map();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,29 @@ function parseJsonFields(row) {
 // Returns true for PostgreSQL "relation does not exist" (42P01)
 function isTableMissing(err) {
   return err.code === '42P01';
+}
+
+async function getIdColumn(tableName) {
+  if (idColumnCache.has(tableName)) return idColumnCache.get(tableName);
+
+  const result = await query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = $1
+       AND column_name IN ('request_id', 'record_id')
+     ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END
+     LIMIT 1`,
+    [tableName]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error(`No request identifier column found for table "${tableName}"`);
+  }
+
+  const columnName = result.rows[0].column_name;
+  idColumnCache.set(tableName, columnName);
+  return columnName;
 }
 
 // ── Run index (cached) ────────────────────────────────────────────────────────
@@ -235,6 +260,7 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
 
   const tbl1 = run1.run_name;
   const tbl2 = run2.run_name;
+  const [idCol1, idCol2] = await Promise.all([getIdColumn(tbl1), getIdColumn(tbl2)]);
 
   let result;
   try {
@@ -244,7 +270,7 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
               r1.true_subtype AS true_subtype,
               COUNT(*)        AS cnt
        FROM "${tbl1}" r1
-       JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id
+       JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2}
        WHERE r1.pred_subtype <> r2.pred_subtype
        GROUP BY r1.pred_subtype, r2.pred_subtype, r1.true_subtype`
     );
@@ -304,6 +330,7 @@ async function getRecords(filters = {}) {
 
     const tbl1 = run1.run_name;
     const tbl2 = run2.run_name;
+    const [idCol1, idCol2] = await Promise.all([getIdColumn(tbl1), getIdColumn(tbl2)]);
 
     const params = [];
     let p = 1;
@@ -314,16 +341,16 @@ async function getRecords(filters = {}) {
     if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
     if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
 
-    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.record_id = r2.record_id WHERE ${where}`;
+    const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2} WHERE ${where}`;
 
     let dataResult, countResult;
     try {
       [dataResult, countResult] = await Promise.all([
-        query(`SELECT r1.record_id,
+        query(`SELECT r1.${idCol1} AS request_id,
                       r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
                       r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
                       r1.attributes, r1.metadata
-               ${baseSQL} ORDER BY r1.record_id LIMIT $${p} OFFSET $${p + 1}`,
+               ${baseSQL} ORDER BY r1.${idCol1} LIMIT $${p} OFFSET $${p + 1}`,
           [...params, limit, offset]),
         query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
       ]);
@@ -344,6 +371,7 @@ async function getRecords(filters = {}) {
   if (!run) return { data: [], pagination: { total: 0, limit, offset, pages: 0 } };
 
   const tbl = run.run_name;
+  const idCol = await getIdColumn(tbl);
   const params = [];
   let p = 1;
   let where = '1=1';
@@ -359,9 +387,9 @@ async function getRecords(filters = {}) {
   let dataResult, countResult;
   try {
     [dataResult, countResult] = await Promise.all([
-      query(`SELECT record_id, true_type, true_subtype, pred_type, pred_subtype,
+      query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
                     attributes, metadata
-             ${baseSQL} ORDER BY record_id LIMIT $${p} OFFSET $${p + 1}`,
+             ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
     ]);

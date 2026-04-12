@@ -34,7 +34,7 @@ A complete, production-ready classification model evaluation platform with:
   * `leaderboard` - Aggregated metrics
 - [x] Optimized indexes on:
   * type/subtype for confusion matrices
-  * record_id for transitions
+  * request_id for transitions
   * JSONB attributes/metadata for filtering
 - [x] Support for large JSON payloads (50MB+ body limit)
 

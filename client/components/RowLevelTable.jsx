@@ -32,7 +32,7 @@ function RowLevelTable({ data }) {
         <table className="records-table">
           <thead>
             <tr>
-              <th>Record ID</th>
+              <th>Request ID</th>
               <th>True Type</th>
               <th>Pred Type</th>
               <th>True Subtype</th>
@@ -45,7 +45,7 @@ function RowLevelTable({ data }) {
             {pageData.map(record => (
               <React.Fragment key={record.id}>
                 <tr className={`record-row ${expandedRows.has(record.id) ? 'expanded' : ''}`}>
-                  <td>{record.record_id}</td>
+                  <td>{record.request_id}</td>
                   <td>{record.true_type}</td>
                   <td>{record.pred_type}</td>
                   <td>{record.true_subtype}</td>

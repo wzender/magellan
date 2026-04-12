@@ -85,7 +85,7 @@ async function seedDatabase() {
 
           const flatParams = batch.flatMap(r => [
             runId,
-            r.record_id,
+            r.request_id,
             JSON.stringify(r.attributes),
             JSON.stringify(r.metadata),
             r.true_type,
@@ -95,7 +95,7 @@ async function seedDatabase() {
           ]);
 
           await query(
-            `INSERT INTO run_results (run_id, record_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype)
+            `INSERT INTO run_results (run_id, request_id, attributes, metadata, true_type, pred_type, true_subtype, pred_subtype)
              VALUES ${values}`,
             flatParams
           );

@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Export this workspace to DOCX via docme",
+      "type": "shell",
+      "command": "/home/eyalshw/gitlab/rafael/ai_team/docme/scripts/export-workspace-docx.sh",
+      "args": [
+        "${workspaceFolder}",
+        "${input:docxOutputPath}",
+        "${input:docxExcludePatterns}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "docxOutputPath",
+      "type": "promptString",
+      "description": "Output .docx path",
+      "default": "${workspaceFolderBasename}.docx"
+    },
+    {
+      "id": "docxExcludePatterns",
+      "type": "promptString",
+      "description": "Optional exclude patterns, comma-separated",
+      "default": ".git,node_modules,venv,*.log,*.docx"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: magellan
+description: Helm chart for deploying the Magellan classification dashboard
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

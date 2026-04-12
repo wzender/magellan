@@ -44,7 +44,7 @@ Table name: `timestamp_run_id_results`
 
 Columns:
 
-* `record_id`
+* `request_id`
 * `attributes` (JSON)
 * `metadata` (JSON)
 * `true_type`
@@ -97,7 +97,7 @@ For a selected run:
 
 **Row-level table columns**:
 
-* `record_id`
+* `request_id`
 * `attributes` (JSON)
 * `metadata` (JSON)
 * `true_type`

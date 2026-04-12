@@ -472,7 +472,7 @@ from colors import COLORS, FONTS
 def make_record_table(show_run2=False, run1_name="Run 1", run2_name="Run 2"):
     if show_run2:
         columns = [
-            {"name": ["",          "Record ID"],    "id": "record_id"},
+            {"name": ["",          "Request ID"],    "id": "request_id"},
             {"name": ["True",      "Type"],          "id": "true_type"},
             {"name": ["True",      "Subtype"],       "id": "true_subtype"},
             {"name": [run1_name,   "Pred Type"],     "id": "pred_type"},
@@ -484,7 +484,7 @@ def make_record_table(show_run2=False, run1_name="Run 1", run2_name="Run 2"):
         ]
     else:
         columns = [
-            {"name": "Record ID",     "id": "record_id"},
+            {"name": "Request ID",     "id": "request_id"},
             {"name": "True Type",     "id": "true_type"},
             {"name": "Pred Type",     "id": "pred_type"},
             {"name": "True Subtype",  "id": "true_subtype"},

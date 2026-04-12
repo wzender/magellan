@@ -42,7 +42,7 @@
   - Parse `attributes` and `metadata` columns with `json.loads` for each run file at load time (cache per run_id).
   - Expose `get_benchmarks()` → list of `{id, name}` dicts (unique benchmark_id/benchmark_name pairs, preserving first-seen order).
   - Expose `get_leaderboard(benchmark_id)` → list of dicts sorted by `subtype_f1_weighted` DESC, each row including: `run_id`, `run_name`, `model_version` (from `model_name` column), `subtype_accuracy`, `subtype_f1_weighted`, `benchmark_length` (count of records in the run file).
-  - Expose `get_run_records(run_id)` → pandas DataFrame with columns: `record_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes` (parsed dict), `metadata` (parsed dict).
+  - Expose `get_run_records(run_id)` → pandas DataFrame with columns: `request_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes` (parsed dict), `metadata` (parsed dict).
   - Run file path convention: `data/runs/{benchmark_id}_{sanitized_run_name}.csv` — apply the same sanitizer as `csv-loader.js`: lowercase, strip leading/trailing `_`, replace non-`[a-z0-9_-]` with `_`.
 
 - [x] **2.2** Add a module-level singleton `loader` in `loader.py`: `loader = CSVLoader() if DATA_SOURCE == "csv" else PostgresLoader()`.
@@ -73,7 +73,7 @@
   - Sort row labels by F1 DESC; cols follow row order for shared labels (diagonal-aligned), then remaining cols appended sorted by F1.
 
 - [x] **3.5** Implement `get_transition_matrix(run_id1, run_id2, min_count=1)` → `{rows, cols, data}`:
-  - Join run1 and run2 records on `record_id`.
+  - Join run1 and run2 records on `request_id`.
   - Keep only records where `run1.pred_subtype != run2.pred_subtype`.
   - For each `(run1_pred, run2_pred)` pair, count: `total`, `run1_correct` (run1 pred == true), `run2_correct` (run2 pred == true), `both_wrong`.
   - Apply `min_count` filter: exclude cells where `total < min_count`.
@@ -81,7 +81,7 @@
 
 - [x] **3.6** Implement `get_records(filters)` → `{data: [...], pagination: {total, limit, offset, pages}}`:
   - Support single-run mode: filter by `run_id`, optional `true_type`, `pred_type`, `true_subtype`, `pred_subtype`, `incorrect_only`.
-  - Support dual-run mode (transition): filter by `run_id1` + `run_id2`, join on `record_id`, keep only changed predictions, optionally filter by `run1_pred_subtype` / `run2_pred_subtype`. Adds `run2_pred_type` and `run2_pred_subtype` columns to each row.
+  - Support dual-run mode (transition): filter by `run_id1` + `run_id2`, join on `request_id`, keep only changed predictions, optionally filter by `run1_pred_subtype` / `run2_pred_subtype`. Adds `run2_pred_type` and `run2_pred_subtype` columns to each row.
   - Apply `limit` / `offset` pagination (default limit=100).
 
 ---
@@ -236,9 +236,9 @@
 
 - [x] **10.1** Implement `make_record_table(show_run2=False, run1_name="Run 1", run2_name="Run 2")` → `dash_table.DataTable`:
   - `id="record-table"`.
-  - Single-run columns: record_id, true_type, pred_type, true_subtype, pred_subtype, attributes_short, metadata_short.
+  - Single-run columns: request_id, true_type, pred_type, true_subtype, pred_subtype, attributes_short, metadata_short.
   - Dual-run columns: use multi-level `name` tuples with `merge_duplicate_headers=True` to produce grouped headers for Run 1 / Run 2 pred columns (see implementation guide §8).
-  - `record_id` column: pre-process rows to add an `_r1_correct` / `_r2_correct` indicator field; use `style_data_conditional` to colour incorrect-prediction rows red-tinted.
+  - `request_id` column: pre-process rows to add an `_r1_correct` / `_r2_correct` indicator field; use `style_data_conditional` to colour incorrect-prediction rows red-tinted.
   - `attributes` and `metadata`: pre-process to `attributes_short` (first 80 chars) for display, full JSON in `tooltip_data` (DataTable built-in tooltip, air-gap safe). Copy capability via `dcc.Clipboard` next to table or a `clientside_callback`.
   - `sort_action="native"`, `filter_action="native"` (per-column text filter built-in), `page_action="native"`, `page_size=20`.
 
@@ -263,7 +263,7 @@
 
 - [x] **11.6** Record table styles: `.json-cell-wrapper`, `.copy-json-btn`, `.json-pretty` (monospace, small font), toast notification.
 
-- [x] **11.7** Correctness dot badges for record_id column (green/red small circles).
+- [x] **11.7** Correctness dot badges for request_id column (green/red small circles).
 
 - [x] **11.8** Persistent failures bar and most-misclassified bar panel styles.
 

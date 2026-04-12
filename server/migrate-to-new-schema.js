@@ -59,7 +59,7 @@ async function migrate() {
 
     await query(`
       CREATE TABLE "${tbl}" (
-        record_id    TEXT,
+        request_id    TEXT,
         true_type    TEXT,
         true_subtype TEXT,
         pred_type    TEXT,
@@ -71,11 +71,11 @@ async function migrate() {
 
     // Bulk-insert from run_results
     await query(`
-      INSERT INTO "${tbl}" (record_id, true_type, true_subtype, pred_type, pred_subtype, attributes, metadata)
-      SELECT record_id, true_type, true_subtype, pred_type, pred_subtype, attributes, metadata
+      INSERT INTO "${tbl}" (request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, metadata)
+      SELECT request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, metadata
       FROM run_results
       WHERE run_id = $1
-      ORDER BY record_id
+      ORDER BY request_id
     `, [run.id]);
 
     // Insert leaderboard row
