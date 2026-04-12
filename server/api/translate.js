@@ -14,8 +14,12 @@
  */
 
 const router = require('express').Router();
-const fetch   = require('node-fetch');
-const { updateTranslation } = require('../csv-loader');
+const fetch  = require('node-fetch');
+
+const loader = process.env.DATA_SOURCE === 'postgres'
+  ? require('../db-loader')
+  : require('../csv-loader');
+const { updateTranslation } = loader;
 
 const OPENAI_API_KEY   = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL     = process.env.OPENAI_MODEL     || 'gpt-4o-mini';

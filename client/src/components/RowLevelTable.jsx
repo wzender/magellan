@@ -241,8 +241,17 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     return exportData;
   };
 
+  const getExportColumns = () => {
+    const cols = [...columns.columns];
+    const attrIdx = cols.findIndex(c => c.key === 'attributes');
+    if (attrIdx !== -1 && !cols.find(c => c.key === 'attributes_en')) {
+      cols.splice(attrIdx + 1, 0, { key: 'attributes_en', label: 'Attributes (EN)', width: 220 });
+    }
+    return cols;
+  };
+
   const exportToCsv = async () => {
-    const cols = columns.columns;
+    const cols = getExportColumns();
     const exportData = await getExportData('csv');
     if (!exportData) return;
     const headers = cols.map(col => col.label);
@@ -266,7 +275,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   };
 
   const exportToExcel = async () => {
-    const cols = columns.columns;
+    const cols = getExportColumns();
     const exportData = await getExportData('excel');
     if (!exportData) return;
     const headers = cols.map(col => col.label);

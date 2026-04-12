@@ -1,5 +1,1958 @@
 {
-  "1": {},
+  "1": {
+    "REC-000020": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000020",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Delivery",
+        "attributes": {
+          "sku": "SKU-XQMO7BN7",
+          "upc": "705418996177",
+          "name": "פריט_k17ksn",
+          "size": "XL",
+          "tags": [
+            "בית",
+            "מוזיקה",
+            "מזון",
+            "ריהוט"
+          ],
+          "brand": "מותג ד",
+          "color": "דלוקס",
+          "price": 54.16,
+          "rating": "1.1",
+          "weight": 81.87,
+          "material": "פוליאסטר",
+          "inventory": 467,
+          "dimensions": {
+            "width": 113,
+            "height": 117,
+            "length": 83
+          },
+          "createdDate": "2025-07-14T10:01:37.308Z",
+          "description": "מוצר אלקטרוניקה בסיסי",
+          "lastModified": "2026-03-15T09:50:02.871Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-XQMO7BN7",
+          "upc": "705418996177",
+          "name": "Item_k17ksn",
+          "size": "XL",
+          "tags": [
+            "Home",
+            "Music",
+            "Food",
+            "Furniture"
+          ],
+          "brand": "Brand D",
+          "color": "Deluxe",
+          "price": 54.16,
+          "rating": "1.1",
+          "weight": 81.87,
+          "material": "Polyester",
+          "inventory": 467,
+          "dimensions": {
+            "width": 113,
+            "height": 117,
+            "length": 83
+          },
+          "createdDate": "2025-07-14T10:01:37.308Z",
+          "description": "Basic electronics product",
+          "lastModified": "2026-03-15T09:50:02.871Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Import",
+          "status": "Active",
+          "verified": true,
+          "confidence": "49.16",
+          "department": "Operations",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-23T16:11:53.070Z"
+        }
+      }
+    },
+    "REC-000039": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000039",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Digital Wallet",
+        "attributes": {
+          "sku": "SKU-VZDWILS5",
+          "upc": "445827311748",
+          "name": "פריט_3ppmxg",
+          "size": "XXL",
+          "tags": [
+            "ריהוט",
+            "ספרים",
+            "ביגוד"
+          ],
+          "brand": "גנרי",
+          "color": "דלוקס",
+          "price": 26.71,
+          "rating": "2.5",
+          "weight": 12.98,
+          "material": "כותנה",
+          "inventory": 252,
+          "dimensions": {
+            "width": 176,
+            "height": 230,
+            "length": 360
+          },
+          "createdDate": "2025-11-02T07:22:35.323Z",
+          "description": "מוצר ספרים פרמיום",
+          "lastModified": "2026-03-12T09:01:03.029Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-VZDWILS5",
+          "upc": "445827311748",
+          "name": "Item_3ppmxg",
+          "size": "XXL",
+          "tags": [
+            "furniture",
+            "books",
+            "clothing"
+          ],
+          "brand": "Generic",
+          "color": "deluxe",
+          "price": 26.71,
+          "rating": "2.5",
+          "weight": 12.98,
+          "material": "Cotton",
+          "inventory": 252,
+          "dimensions": {
+            "width": 176,
+            "height": 230,
+            "length": 360
+          },
+          "createdDate": "2025-11-02T07:22:35.323Z",
+          "description": "A premium books product",
+          "lastModified": "2026-03-12T09:01:03.029Z"
+        },
+        "metadata": {
+          "region": "LATAM",
+          "source": "Web Scrape",
+          "status": "Review",
+          "verified": false,
+          "confidence": "40.60",
+          "department": "Sales",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-11T09:43:38.136Z"
+        }
+      }
+    },
+    "REC-000067": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000067",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Cash",
+        "attributes": {
+          "sku": "SKU-42DO3PKA",
+          "upc": "59010808802",
+          "name": "פריט_bhqa28",
+          "size": "S",
+          "tags": [
+            "צעצועים"
+          ],
+          "brand": "מותג ד",
+          "color": "גדול",
+          "price": 3.36,
+          "rating": "2.5",
+          "weight": 59.86,
+          "material": "כותנה",
+          "inventory": 300,
+          "dimensions": {
+            "width": 346,
+            "height": 238,
+            "length": 150
+          },
+          "createdDate": "2025-10-15T23:20:48.908Z",
+          "description": "מוצר בית צרכני",
+          "lastModified": "2026-03-24T18:54:22.436Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-42DO3PKA",
+          "upc": "59010808802",
+          "name": "Item_bhqa28",
+          "size": "S",
+          "tags": [
+            "toys"
+          ],
+          "brand": "BrandD",
+          "color": "large",
+          "price": 3.36,
+          "rating": "2.5",
+          "weight": 59.86,
+          "material": "Cotton",
+          "inventory": 300,
+          "dimensions": {
+            "width": 346,
+            "height": 238,
+            "length": 150
+          },
+          "createdDate": "2025-10-15T23:20:48.908Z",
+          "description": "A consumer home product",
+          "lastModified": "2026-03-24T18:54:22.436Z"
+        },
+        "metadata": {
+          "region": "APAC",
+          "source": "User Submission",
+          "status": "Archived",
+          "verified": true,
+          "confidence": "57.89",
+          "department": "Support",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-04T12:46:55.713Z"
+        }
+      }
+    },
+    "REC-000239": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000239",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Express",
+        "attributes": {
+          "sku": "SKU-S62I1RC6",
+          "upc": "682397637403",
+          "name": "פריט_8835l",
+          "size": "S",
+          "tags": [
+            "מזון",
+            "ספורט",
+            "ביגוד",
+            "ביגוד"
+          ],
+          "brand": "מותג ה",
+          "color": "דלוקס",
+          "price": 30.66,
+          "rating": "2.6",
+          "weight": 93.62,
+          "material": "פלסטיק",
+          "inventory": 835,
+          "dimensions": {
+            "width": 276,
+            "height": 386,
+            "length": 287
+          },
+          "createdDate": "2026-02-02T16:11:31.388Z",
+          "description": "מוצר אלקטרוניקה אדום",
+          "lastModified": "2026-02-27T05:36:37.831Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-S62I1RC6",
+          "upc": "682397637403",
+          "name": "Item_8835l",
+          "size": "S",
+          "tags": [
+            "Food",
+            "Sport",
+            "Clothing",
+            "Clothing"
+          ],
+          "brand": "Brand A",
+          "color": "Deluxe",
+          "price": 30.66,
+          "rating": "2.6",
+          "weight": 93.62,
+          "material": "Plastic",
+          "inventory": 835,
+          "dimensions": {
+            "width": 276,
+            "height": 386,
+            "length": 287
+          },
+          "createdDate": "2026-02-02T16:11:31.388Z",
+          "description": "Red electronic product",
+          "lastModified": "2026-02-27T05:36:37.831Z"
+        },
+        "metadata": {
+          "region": "US",
+          "source": "Import",
+          "status": "Pending",
+          "verified": true,
+          "confidence": "0.52",
+          "department": "Marketing",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-21T08:25:54.375Z"
+        }
+      }
+    },
+    "REC-000379": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000379",
+        "true_type": "Account",
+        "true_subtype": "Standard",
+        "pred_type": "Account",
+        "pred_subtype": "Developer",
+        "attributes": {
+          "sku": "SKU-HN2COU99",
+          "upc": "196727271224",
+          "name": "פריט_v2gfcl",
+          "size": "One Size",
+          "tags": [
+            "צעצועים",
+            "ריהוט",
+            "מוזיקה"
+          ],
+          "brand": "מותג ה",
+          "color": "בסיסי",
+          "price": 9.85,
+          "rating": "2.4",
+          "weight": 60.4,
+          "material": "פלסטיק",
+          "inventory": 355,
+          "dimensions": {
+            "width": 114,
+            "height": 163,
+            "length": 319
+          },
+          "createdDate": "2025-07-06T21:18:44.409Z",
+          "description": "מוצר ספורט פרמיום",
+          "lastModified": "2026-03-17T11:03:32.181Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-HN2COU99",
+          "upc": "196727271224",
+          "name": "Item_v2gfcl",
+          "size": "One Size",
+          "tags": [
+            "toys",
+            "furniture",
+            "music"
+          ],
+          "brand": "BrandE",
+          "color": "basic",
+          "price": 9.85,
+          "rating": "2.4",
+          "weight": 60.4,
+          "material": "Plastic",
+          "inventory": 355,
+          "dimensions": {
+            "width": 114,
+            "height": 163,
+            "length": 319
+          },
+          "createdDate": "2025-07-06T21:18:44.409Z",
+          "description": "A premium sports product",
+          "lastModified": "2026-03-17T11:03:32.181Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "Manual Entry",
+          "status": "Pending",
+          "verified": true,
+          "confidence": "95.76",
+          "department": "Operations",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-02T01:30:36.649Z"
+        }
+      }
+    },
+    "REC-000418": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000418",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Consultation",
+        "attributes": {
+          "sku": "SKU-NHRGWPIX",
+          "upc": "325799327984",
+          "name": "פריט_3hgtw",
+          "size": "One Size",
+          "tags": [
+            "אמנות",
+            "ספורט",
+            "ביגוד",
+            "ספורט",
+            "ביגוד"
+          ],
+          "brand": "גנרי",
+          "color": "סטנדרטי",
+          "price": 9.55,
+          "rating": "2.9",
+          "weight": 0.59,
+          "material": "פלסטיק",
+          "inventory": 361,
+          "dimensions": {
+            "width": 409,
+            "height": 378,
+            "length": 227
+          },
+          "createdDate": "2025-11-04T14:27:33.037Z",
+          "description": "מוצר ריהוט בסיסי",
+          "lastModified": "2026-03-21T20:48:29.720Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-NHRGWPIX",
+          "upc": "325799327984",
+          "name": "Item_3hgtw",
+          "size": "One Size",
+          "tags": [
+            "art",
+            "sports",
+            "clothing",
+            "sports",
+            "clothing"
+          ],
+          "brand": "Generic",
+          "color": "standard",
+          "price": 9.55,
+          "rating": "2.9",
+          "weight": 0.59,
+          "material": "Plastic",
+          "inventory": 361,
+          "dimensions": {
+            "width": 409,
+            "height": 378,
+            "length": 227
+          },
+          "createdDate": "2025-11-04T14:27:33.037Z",
+          "description": "A basic furniture product",
+          "lastModified": "2026-03-21T20:48:29.720Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "Web Scrape",
+          "status": "Pending",
+          "verified": true,
+          "confidence": "27.54",
+          "department": "Support",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-15T07:12:13.777Z"
+        }
+      }
+    },
+    "REC-000466": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000466",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Bank Transfer",
+        "attributes": {
+          "sku": "SKU-10P6LK7D",
+          "upc": "181945552727",
+          "name": "פריט_8kjyft",
+          "size": "XL",
+          "tags": [
+            "אלקטרוניקה",
+            "מוזיקה"
+          ],
+          "brand": "מותג חנות",
+          "color": "פרמיום",
+          "price": 46.84,
+          "rating": "4.2",
+          "weight": 50.05,
+          "material": "מתכת",
+          "inventory": 290,
+          "dimensions": {
+            "width": 136,
+            "height": 489,
+            "length": 462
+          },
+          "createdDate": "2025-10-14T13:59:56.841Z",
+          "description": "מוצר ספורט סטנדרטי",
+          "lastModified": "2026-03-02T11:23:25.911Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-10P6LK7D",
+          "upc": "181945552727",
+          "name": "Item_8kjyft",
+          "size": "XL",
+          "tags": [
+            "electronics",
+            "music"
+          ],
+          "brand": "Store Brand",
+          "color": "premium",
+          "price": 46.84,
+          "rating": "4.2",
+          "weight": 50.05,
+          "material": "Metal",
+          "inventory": 290,
+          "dimensions": {
+            "width": 136,
+            "height": 489,
+            "length": 462
+          },
+          "createdDate": "2025-10-14T13:59:56.841Z",
+          "description": "A standard sports product",
+          "lastModified": "2026-03-02T11:23:25.911Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "User Submission",
+          "status": "Archived",
+          "verified": true,
+          "confidence": "12.76",
+          "department": "Support",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-05T10:07:02.777Z"
+        }
+      }
+    },
+    "REC-000494": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000494",
+        "true_type": "Account",
+        "true_subtype": "Standard",
+        "pred_type": "Account",
+        "pred_subtype": "Suspended",
+        "attributes": {
+          "sku": "SKU-K7764W8D",
+          "upc": "220817368508",
+          "name": "פריט_3oos8",
+          "size": "XS",
+          "tags": [
+            "אמנות",
+            "ריהוט",
+            "ביגוד",
+            "מוזיקה",
+            "בית"
+          ],
+          "brand": "יוקרה",
+          "color": "אדום",
+          "price": 81.37,
+          "rating": "3.7",
+          "weight": 57.9,
+          "material": "משי",
+          "inventory": 28,
+          "dimensions": {
+            "width": 137,
+            "height": 208,
+            "length": 206
+          },
+          "createdDate": "2025-06-18T03:24:12.092Z",
+          "description": "מוצר ביגוד מקצועי",
+          "lastModified": "2026-03-02T06:59:14.821Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-K7764W8D",
+          "upc": "220817368508",
+          "name": "Item_3oos8",
+          "size": "XS",
+          "tags": [
+            "art",
+            "furniture",
+            "clothing",
+            "music",
+            "home"
+          ],
+          "brand": "Luxury",
+          "color": "red",
+          "price": 81.37,
+          "rating": "3.7",
+          "weight": 57.9,
+          "material": "Silk",
+          "inventory": 28,
+          "dimensions": {
+            "width": 137,
+            "height": 208,
+            "length": 206
+          },
+          "createdDate": "2025-06-18T03:24:12.092Z",
+          "description": "A professional clothing product",
+          "lastModified": "2026-03-02T06:59:14.821Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Import",
+          "status": "Pending",
+          "verified": false,
+          "confidence": "41.50",
+          "department": "Marketing",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-11T17:45:01.251Z"
+        }
+      }
+    },
+    "REC-000775": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000775",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Debit Card",
+        "attributes": {
+          "sku": "SKU-KIDP7M8Y",
+          "upc": "893430481972",
+          "name": "פריט_zgtbd",
+          "size": "XS",
+          "tags": [
+            "צעצועים",
+            "בית",
+            "צעצועים",
+            "מזון"
+          ],
+          "brand": "מותג ג",
+          "color": "קטן",
+          "price": 50.91,
+          "rating": "1.0",
+          "weight": 74.15,
+          "material": "משי",
+          "inventory": 733,
+          "dimensions": {
+            "width": 491,
+            "height": 162,
+            "length": 5
+          },
+          "createdDate": "2025-05-16T06:33:09.935Z",
+          "description": "מוצר בית דלוקס",
+          "lastModified": "2026-03-08T01:44:36.100Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-KIDP7M8Y",
+          "upc": "893430481972",
+          "name": "Item_zgtbd",
+          "size": "XS",
+          "tags": [
+            "toys",
+            "home",
+            "toys",
+            "food"
+          ],
+          "brand": "BrandC",
+          "color": "small",
+          "price": 50.91,
+          "rating": "1.0",
+          "weight": 74.15,
+          "material": "Silk",
+          "inventory": 733,
+          "dimensions": {
+            "width": 491,
+            "height": 162,
+            "length": 5
+          },
+          "createdDate": "2025-05-16T06:33:09.935Z",
+          "description": "A deluxe home product",
+          "lastModified": "2026-03-08T01:44:36.100Z"
+        },
+        "metadata": {
+          "region": "LATAM",
+          "source": "User Submission",
+          "status": "Pending",
+          "verified": false,
+          "confidence": "95.32",
+          "department": "Operations",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-12T07:26:31.282Z"
+        }
+      }
+    },
+    "REC-000816": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000816",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Support",
+        "attributes": {
+          "sku": "SKU-ZLX4WH1O",
+          "upc": "322836877029",
+          "name": "פריט_o456du",
+          "size": "XXL",
+          "tags": [
+            "אמנות",
+            "ריהוט",
+            "ספורט"
+          ],
+          "brand": "גנרי",
+          "color": "קטן",
+          "price": 95.15,
+          "rating": "2.6",
+          "weight": 31.62,
+          "material": "כותנה",
+          "inventory": 397,
+          "dimensions": {
+            "width": 495,
+            "height": 204,
+            "length": 214
+          },
+          "createdDate": "2025-12-30T14:49:01.310Z",
+          "description": "מוצר ספרים פרמיום",
+          "lastModified": "2026-03-02T05:49:44.822Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-ZLX4WH1O",
+          "upc": "322836877029",
+          "name": "Item_o456du",
+          "size": "XXL",
+          "tags": [
+            "art",
+            "furniture",
+            "sports"
+          ],
+          "brand": "Generic",
+          "color": "small",
+          "price": 95.15,
+          "rating": "2.6",
+          "weight": 31.62,
+          "material": "Cotton",
+          "inventory": 397,
+          "dimensions": {
+            "width": 495,
+            "height": 204,
+            "length": 214
+          },
+          "createdDate": "2025-12-30T14:49:01.310Z",
+          "description": "A premium books product",
+          "lastModified": "2026-03-02T05:49:44.822Z"
+        },
+        "metadata": {
+          "region": "US",
+          "source": "Web Scrape",
+          "status": "Review",
+          "verified": true,
+          "confidence": "98.78",
+          "department": "Marketing",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-17T05:22:43.420Z"
+        }
+      }
+    },
+    "REC-000962": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000962",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Express",
+        "attributes": {
+          "sku": "SKU-HA7GLRAB",
+          "upc": "919910349874",
+          "name": "פריט_6j6qi5",
+          "size": "XXL",
+          "tags": [
+            "מוזיקה"
+          ],
+          "brand": "מותג ה",
+          "color": "קטן",
+          "price": 43.18,
+          "rating": "2.0",
+          "weight": 50.5,
+          "material": "כותנה",
+          "inventory": 699,
+          "dimensions": {
+            "width": 290,
+            "height": 389,
+            "length": 379
+          },
+          "createdDate": "2025-12-04T06:23:50.842Z",
+          "description": "מוצר אלקטרוניקה סטנדרטי",
+          "lastModified": "2026-03-01T15:52:46.217Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-HA7GLRAB",
+          "upc": "919910349874",
+          "name": "Item_6j6qi5",
+          "size": "XXL",
+          "tags": [
+            "music"
+          ],
+          "brand": "BrandE",
+          "color": "small",
+          "price": 43.18,
+          "rating": "2.0",
+          "weight": 50.5,
+          "material": "Cotton",
+          "inventory": 699,
+          "dimensions": {
+            "width": 290,
+            "height": 389,
+            "length": 379
+          },
+          "createdDate": "2025-12-04T06:23:50.842Z",
+          "description": "A standard electronics product",
+          "lastModified": "2026-03-01T15:52:46.217Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "API",
+          "status": "Inactive",
+          "verified": true,
+          "confidence": "0.78",
+          "department": "Marketing",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-23T23:24:55.792Z"
+        }
+      }
+    },
+    "REC-000974": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-000974",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Installation",
+        "attributes": {
+          "sku": "SKU-Q2IS1JFZ",
+          "upc": "384432718174",
+          "name": "פריט_dkkntj",
+          "size": "S",
+          "tags": [
+            "ביגוד",
+            "אמנות",
+            "ספורט",
+            "בית",
+            "מוזיקה"
+          ],
+          "brand": "מותג ג",
+          "color": "דלוקס",
+          "price": 96.63,
+          "rating": "1.4",
+          "weight": 88.72,
+          "material": "צמר",
+          "inventory": 990,
+          "dimensions": {
+            "width": 411,
+            "height": 498,
+            "length": 382
+          },
+          "createdDate": "2025-06-04T16:38:04.201Z",
+          "description": "מוצר בית סטנדרטי",
+          "lastModified": "2026-03-23T09:10:17.399Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-Q2IS1JFZ",
+          "upc": "384432718174",
+          "name": "Item_dkkntj",
+          "size": "S",
+          "tags": [
+            "Clothing",
+            "Art",
+            "Sport",
+            "Home",
+            "Music"
+          ],
+          "brand": "Brand G",
+          "color": "Deluxe",
+          "price": 96.63,
+          "rating": "1.4",
+          "weight": 88.72,
+          "material": "Wool",
+          "inventory": 990,
+          "dimensions": {
+            "width": 411,
+            "height": 498,
+            "length": 382
+          },
+          "createdDate": "2025-06-04T16:38:04.201Z",
+          "description": "Standard home product",
+          "lastModified": "2026-03-23T09:10:17.399Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "API",
+          "status": "Archived",
+          "verified": true,
+          "confidence": "24.22",
+          "department": "Finance",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-27T11:15:26.093Z"
+        }
+      }
+    },
+    "REC-001006": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001006",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Cash",
+        "attributes": {
+          "sku": "SKU-G4Z8V8M6",
+          "upc": "772096285651",
+          "name": "פריט_v3xoto",
+          "size": "XXL",
+          "tags": [
+            "מוזיקה",
+            "ריהוט",
+            "מזון",
+            "בית",
+            "ספורט"
+          ],
+          "brand": "גנרי",
+          "color": "סטנדרטי",
+          "price": 36.19,
+          "rating": "4.3",
+          "weight": 27.72,
+          "material": "ניילון",
+          "inventory": 625,
+          "dimensions": {
+            "width": 27,
+            "height": 120,
+            "length": 421
+          },
+          "createdDate": "2026-02-14T18:17:07.986Z",
+          "description": "מוצר ספרים סטנדרטי",
+          "lastModified": "2026-03-20T10:05:15.698Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-G4Z8V8M6",
+          "upc": "772096285651",
+          "name": "Item_v3xoto",
+          "size": "XXL",
+          "tags": [
+            "music",
+            "furniture",
+            "food",
+            "home",
+            "sports"
+          ],
+          "brand": "Generic",
+          "color": "standard",
+          "price": 36.19,
+          "rating": "4.3",
+          "weight": 27.72,
+          "material": "Nylon",
+          "inventory": 625,
+          "dimensions": {
+            "width": 27,
+            "height": 120,
+            "length": 421
+          },
+          "createdDate": "2026-02-14T18:17:07.986Z",
+          "description": "A standard books product",
+          "lastModified": "2026-03-20T10:05:15.698Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Manual Entry",
+          "status": "Archived",
+          "verified": false,
+          "confidence": "88.36",
+          "department": "Operations",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-02T11:32:26.486Z"
+        }
+      }
+    },
+    "REC-001050": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001050",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Cash",
+        "attributes": {
+          "sku": "SKU-Y6F3HNZ9",
+          "upc": "263988683638",
+          "name": "פריט_5dpawd",
+          "size": "XS",
+          "tags": [
+            "ביגוד"
+          ],
+          "brand": "גנרי",
+          "color": "דלוקס",
+          "price": 39.21,
+          "rating": "3.4",
+          "weight": 94.86,
+          "material": "מתכת",
+          "inventory": 614,
+          "dimensions": {
+            "width": 315,
+            "height": 317,
+            "length": 367
+          },
+          "createdDate": "2025-07-25T16:05:44.746Z",
+          "description": "מוצר בית כחול",
+          "lastModified": "2026-02-27T21:40:28.635Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-Y6F3HNZ9",
+          "upc": "263988683638",
+          "name": "Item_5dpawd",
+          "size": "XS",
+          "tags": [
+            "Clothing"
+          ],
+          "brand": "Generic",
+          "color": "Deluxe",
+          "price": 39.21,
+          "rating": "3.4",
+          "weight": 94.86,
+          "material": "Metal",
+          "inventory": 614,
+          "dimensions": {
+            "width": 315,
+            "height": 317,
+            "length": 367
+          },
+          "createdDate": "2025-07-25T16:05:44.746Z",
+          "description": "Blue home product",
+          "lastModified": "2026-02-27T21:40:28.635Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "User Submission",
+          "status": "Inactive",
+          "verified": true,
+          "confidence": "33.55",
+          "department": "Support",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-16T02:34:28.560Z"
+        }
+      }
+    },
+    "REC-001079": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001079",
+        "true_type": "Account",
+        "true_subtype": "Standard",
+        "pred_type": "Account",
+        "pred_subtype": "Premium",
+        "attributes": {
+          "sku": "SKU-QMSFXBF4",
+          "upc": "924573067905",
+          "name": "פריט_pm848g",
+          "size": "XS",
+          "tags": [
+            "צעצועים",
+            "ביגוד",
+            "מוזיקה",
+            "מזון"
+          ],
+          "brand": "תקציב",
+          "color": "בסיסי",
+          "price": 86.26,
+          "rating": "1.4",
+          "weight": 62.42,
+          "material": "פלסטיק",
+          "inventory": 216,
+          "dimensions": {
+            "width": 141,
+            "height": 362,
+            "length": 159
+          },
+          "createdDate": "2026-02-18T04:48:57.290Z",
+          "description": "מוצר ספורט בסיסי",
+          "lastModified": "2026-03-21T18:20:21.694Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-QMSFXBF4",
+          "upc": "924573067905",
+          "name": "Item_pm848g",
+          "size": "XS",
+          "tags": [
+            "toys",
+            "clothing",
+            "music",
+            "food"
+          ],
+          "brand": "Budget",
+          "color": "basic",
+          "price": 86.26,
+          "rating": "1.4",
+          "weight": 62.42,
+          "material": "Plastic",
+          "inventory": 216,
+          "dimensions": {
+            "width": 141,
+            "height": 362,
+            "length": 159
+          },
+          "createdDate": "2026-02-18T04:48:57.290Z",
+          "description": "A basic sports product",
+          "lastModified": "2026-03-21T18:20:21.694Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Import",
+          "status": "Active",
+          "verified": true,
+          "confidence": "9.90",
+          "department": "Support",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-26T11:35:45.413Z"
+        }
+      }
+    },
+    "REC-001110": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001110",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Premium",
+        "attributes": {
+          "sku": "SKU-T7GWWSGG",
+          "upc": "173309118374",
+          "name": "פריט_93y44j",
+          "size": "L",
+          "tags": [
+            "אמנות",
+            "אמנות",
+            "ספורט"
+          ],
+          "brand": "מותג ד",
+          "color": "אדום",
+          "price": 69.17,
+          "rating": "2.7",
+          "weight": 48.3,
+          "material": "פלסטיק",
+          "inventory": 504,
+          "dimensions": {
+            "width": 253,
+            "height": 118,
+            "length": 142
+          },
+          "createdDate": "2025-11-07T14:55:43.235Z",
+          "description": "מוצר ספורט צרכני",
+          "lastModified": "2026-03-06T12:24:05.049Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-T7GWWSGG",
+          "upc": "173309118374",
+          "name": "Item_93y44j",
+          "size": "L",
+          "tags": [
+            "art",
+            "art",
+            "sports"
+          ],
+          "brand": "BrandD",
+          "color": "red",
+          "price": 69.17,
+          "rating": "2.7",
+          "weight": 48.3,
+          "material": "Plastic",
+          "inventory": 504,
+          "dimensions": {
+            "width": 253,
+            "height": 118,
+            "length": 142
+          },
+          "createdDate": "2025-11-07T14:55:43.235Z",
+          "description": "A consumer sports product",
+          "lastModified": "2026-03-06T12:24:05.049Z"
+        },
+        "metadata": {
+          "region": "APAC",
+          "source": "User Submission",
+          "status": "Archived",
+          "verified": false,
+          "confidence": "95.11",
+          "department": "Finance",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-26T13:04:39.225Z"
+        }
+      }
+    },
+    "REC-001214": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001214",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Cash",
+        "attributes": {
+          "sku": "SKU-E5HYA4FF",
+          "upc": "25382735932",
+          "name": "פריט_7r5ndr",
+          "size": "XL",
+          "tags": [
+            "ספרים",
+            "ספורט"
+          ],
+          "brand": "פרמיום",
+          "color": "קטן",
+          "price": 78.34,
+          "rating": "4.4",
+          "weight": 51.71,
+          "material": "פוליאסטר",
+          "inventory": 682,
+          "dimensions": {
+            "width": 69,
+            "height": 114,
+            "length": 151
+          },
+          "createdDate": "2025-04-04T13:06:22.116Z",
+          "description": "מוצר ספורט פרמיום",
+          "lastModified": "2026-03-16T04:38:44.576Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-E5HYA4FF",
+          "upc": "25382735932",
+          "name": "Item_7r5ndr",
+          "size": "XL",
+          "tags": [
+            "Books",
+            "Sports"
+          ],
+          "brand": "Premium",
+          "color": "Small",
+          "price": 78.34,
+          "rating": "4.4",
+          "weight": 51.71,
+          "material": "Polyester",
+          "inventory": 682,
+          "dimensions": {
+            "width": 69,
+            "height": 114,
+            "length": 151
+          },
+          "createdDate": "2025-04-04T13:06:22.116Z",
+          "description": "Premium sports product",
+          "lastModified": "2026-03-16T04:38:44.576Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Web Scrape",
+          "status": "Pending",
+          "verified": false,
+          "confidence": "20.25",
+          "department": "Support",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-20T16:49:08.098Z"
+        }
+      }
+    },
+    "REC-001251": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001251",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Premium",
+        "attributes": {
+          "sku": "SKU-8SD7FAYR",
+          "upc": "619569308942",
+          "name": "פריט_fi2e0l",
+          "size": "XS",
+          "tags": [
+            "מזון",
+            "אמנות",
+            "ספרים",
+            "ספורט"
+          ],
+          "brand": "גנרי",
+          "color": "כחול",
+          "price": 2.09,
+          "rating": "2.0",
+          "weight": 0.37,
+          "material": "מתכת",
+          "inventory": 823,
+          "dimensions": {
+            "width": 344,
+            "height": 58,
+            "length": 422
+          },
+          "createdDate": "2025-05-09T00:46:36.073Z",
+          "description": "מוצר ספרים אדום",
+          "lastModified": "2026-03-03T02:53:14.723Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-8SD7FAYR",
+          "upc": "619569308942",
+          "name": "Item_fi2e0l",
+          "size": "XS",
+          "tags": [
+            "food",
+            "art",
+            "books",
+            "sports"
+          ],
+          "brand": "Generic",
+          "color": "blue",
+          "price": 2.09,
+          "rating": "2.0",
+          "weight": 0.37,
+          "material": "Metal",
+          "inventory": 823,
+          "dimensions": {
+            "width": 344,
+            "height": 58,
+            "length": 422
+          },
+          "createdDate": "2025-05-09T00:46:36.073Z",
+          "description": "A red books product",
+          "lastModified": "2026-03-03T02:53:14.723Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "Manual Entry",
+          "status": "Review",
+          "verified": true,
+          "confidence": "72.99",
+          "department": "Support",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-09T15:20:01.608Z"
+        }
+      }
+    },
+    "REC-001353": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001353",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Check",
+        "attributes": {
+          "sku": "SKU-OZAAP4UD",
+          "upc": "510672552764",
+          "name": "פריט_0c092",
+          "size": "S",
+          "tags": [
+            "ספורט",
+            "בית"
+          ],
+          "brand": "גנרי",
+          "color": "מקצועי",
+          "price": 31.17,
+          "rating": "3.1",
+          "weight": 93.64,
+          "material": "צמר",
+          "inventory": 311,
+          "dimensions": {
+            "width": 145,
+            "height": 135,
+            "length": 82
+          },
+          "createdDate": "2026-01-04T15:53:18.791Z",
+          "description": "מוצר ריהוט כחול",
+          "lastModified": "2026-03-11T21:24:10.552Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-OZAAP4UD",
+          "upc": "510672552764",
+          "name": "Item_0c092",
+          "size": "S",
+          "tags": [
+            "sports",
+            "home"
+          ],
+          "brand": "Generic",
+          "color": "professional",
+          "price": 31.17,
+          "rating": "3.1",
+          "weight": 93.64,
+          "material": "Wool",
+          "inventory": 311,
+          "dimensions": {
+            "width": 145,
+            "height": 135,
+            "length": 82
+          },
+          "createdDate": "2026-01-04T15:53:18.791Z",
+          "description": "A blue furniture product",
+          "lastModified": "2026-03-11T21:24:10.552Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "Web Scrape",
+          "status": "Archived",
+          "verified": false,
+          "confidence": "80.02",
+          "department": "Marketing",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-21T14:49:57.212Z"
+        }
+      }
+    },
+    "REC-001357": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001357",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "COD",
+        "attributes": {
+          "sku": "SKU-3IGIJUY2",
+          "upc": "375632995233",
+          "name": "פריט_oci4l",
+          "size": "M",
+          "tags": [
+            "ספרים",
+            "אלקטרוניקה",
+            "צעצועים"
+          ],
+          "brand": "מותג א",
+          "color": "צרכני",
+          "price": 18.12,
+          "rating": "1.2",
+          "weight": 46.44,
+          "material": "ניילון",
+          "inventory": 312,
+          "dimensions": {
+            "width": 459,
+            "height": 428,
+            "length": 406
+          },
+          "createdDate": "2025-10-07T22:30:08.419Z",
+          "description": "מוצר מזון כחול",
+          "lastModified": "2026-03-08T13:03:22.877Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-3IGIJUY2",
+          "upc": "375632995233",
+          "name": "Item_oci4l",
+          "size": "M",
+          "tags": [
+            "books",
+            "electronics",
+            "toys"
+          ],
+          "brand": "BrandA",
+          "color": "consumer",
+          "price": 18.12,
+          "rating": "1.2",
+          "weight": 46.44,
+          "material": "Nylon",
+          "inventory": 312,
+          "dimensions": {
+            "width": 459,
+            "height": 428,
+            "length": 406
+          },
+          "createdDate": "2025-10-07T22:30:08.419Z",
+          "description": "A blue food product",
+          "lastModified": "2026-03-08T13:03:22.877Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "Web Scrape",
+          "status": "Pending",
+          "verified": false,
+          "confidence": "59.42",
+          "department": "Operations",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-14T07:18:12.586Z"
+        }
+      }
+    },
+    "REC-001405": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001405",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "COD",
+        "attributes": {
+          "sku": "SKU-HS6B4DZA",
+          "upc": "104881996323",
+          "name": "פריט_rlud7",
+          "size": "M",
+          "tags": [
+            "צעצועים"
+          ],
+          "brand": "מותג ה",
+          "color": "קטן",
+          "price": 60.16,
+          "rating": "2.5",
+          "weight": 41.29,
+          "material": "עור",
+          "inventory": 175,
+          "dimensions": {
+            "width": 235,
+            "height": 296,
+            "length": 238
+          },
+          "createdDate": "2025-06-07T00:58:09.517Z",
+          "description": "מוצר אלקטרוניקה פרמיום",
+          "lastModified": "2026-03-08T01:35:05.764Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-HS6B4DZA",
+          "upc": "104881996323",
+          "name": "Item_rlud7",
+          "size": "M",
+          "tags": [
+            "toys"
+          ],
+          "brand": "BrandE",
+          "color": "small",
+          "price": 60.16,
+          "rating": "2.5",
+          "weight": 41.29,
+          "material": "Leather",
+          "inventory": 175,
+          "dimensions": {
+            "width": 235,
+            "height": 296,
+            "length": 238
+          },
+          "createdDate": "2025-06-07T00:58:09.517Z",
+          "description": "A premium electronics product",
+          "lastModified": "2026-03-08T01:35:05.764Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "Import",
+          "status": "Inactive",
+          "verified": false,
+          "confidence": "17.75",
+          "department": "Finance",
+          "dataQuality": "Medium",
+          "lastChecked": "2026-03-05T05:17:50.443Z"
+        }
+      }
+    },
+    "REC-001566": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001566",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Debit Card",
+        "attributes": {
+          "sku": "SKU-TYFAYSFJ",
+          "upc": "117232380002",
+          "name": "פריט_qb4g2j",
+          "size": "S",
+          "tags": [
+            "מזון",
+            "ספרים",
+            "ספורט"
+          ],
+          "brand": "מותג א",
+          "color": "מקצועי",
+          "price": 51.04,
+          "rating": "3.5",
+          "weight": 70.93,
+          "material": "עץ",
+          "inventory": 160,
+          "dimensions": {
+            "width": 414,
+            "height": 356,
+            "length": 250
+          },
+          "createdDate": "2025-05-25T04:06:29.791Z",
+          "description": "מוצר ספרים קטן",
+          "lastModified": "2026-03-04T22:31:42.984Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-TYFAYSFJ",
+          "upc": "117232380002",
+          "name": "Item_qb4g2j",
+          "size": "S",
+          "tags": [
+            "food",
+            "books",
+            "sports"
+          ],
+          "brand": "BrandA",
+          "color": "professional",
+          "price": 51.04,
+          "rating": "3.5",
+          "weight": 70.93,
+          "material": "Wood",
+          "inventory": 160,
+          "dimensions": {
+            "width": 414,
+            "height": 356,
+            "length": 250
+          },
+          "createdDate": "2025-05-25T04:06:29.791Z",
+          "description": "A small books product",
+          "lastModified": "2026-03-04T22:31:42.984Z"
+        },
+        "metadata": {
+          "region": "MENA",
+          "source": "User Submission",
+          "status": "Inactive",
+          "verified": false,
+          "confidence": "66.82",
+          "department": "Support",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-08T06:39:09.782Z"
+        }
+      }
+    },
+    "REC-001595": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001595",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Support",
+        "attributes": {
+          "sku": "SKU-1WM9TADM",
+          "upc": "331258967910",
+          "name": "פריט_w7t9ym",
+          "size": "XXL",
+          "tags": [
+            "אלקטרוניקה",
+            "ספורט",
+            "בית",
+            "ספרים",
+            "בית"
+          ],
+          "brand": "גנרי",
+          "color": "מקצועי",
+          "price": 43.66,
+          "rating": "2.2",
+          "weight": 97.53,
+          "material": "ניילון",
+          "inventory": 6,
+          "dimensions": {
+            "width": 239,
+            "height": 496,
+            "length": 399
+          },
+          "createdDate": "2025-12-23T10:04:55.814Z",
+          "description": "מוצר מוזיקה גדול",
+          "lastModified": "2026-03-26T09:44:46.288Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-1WM9TADM",
+          "upc": "331258967910",
+          "name": "Item_w7t9ym",
+          "size": "XXL",
+          "tags": [
+            "electronics",
+            "sports",
+            "home",
+            "books",
+            "home"
+          ],
+          "brand": "Generic",
+          "color": "professional",
+          "price": 43.66,
+          "rating": "2.2",
+          "weight": 97.53,
+          "material": "Nylon",
+          "inventory": 6,
+          "dimensions": {
+            "width": 239,
+            "height": 496,
+            "length": 399
+          },
+          "createdDate": "2025-12-23T10:04:55.814Z",
+          "description": "A large music product",
+          "lastModified": "2026-03-26T09:44:46.288Z"
+        },
+        "metadata": {
+          "region": "APAC",
+          "source": "API",
+          "status": "Review",
+          "verified": true,
+          "confidence": "7.99",
+          "department": "Finance",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-18T01:00:54.734Z"
+        }
+      }
+    },
+    "REC-001652": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001652",
+        "true_type": "Account",
+        "true_subtype": "Standard",
+        "pred_type": "Account",
+        "pred_subtype": "Enterprise",
+        "attributes": {
+          "sku": "SKU-HJLKL0VY",
+          "upc": "124327396210",
+          "name": "פריט_fa1aum",
+          "size": "XL",
+          "tags": [
+            "ספורט",
+            "ביגוד",
+            "ביגוד",
+            "ספורט"
+          ],
+          "brand": "מותג ב",
+          "color": "קטן",
+          "price": 42.62,
+          "rating": "3.7",
+          "weight": 77.86,
+          "material": "עץ",
+          "inventory": 514,
+          "dimensions": {
+            "width": 442,
+            "height": 438,
+            "length": 152
+          },
+          "createdDate": "2025-12-16T07:36:08.704Z",
+          "description": "מוצר אלקטרוניקה דלוקס",
+          "lastModified": "2026-02-26T05:07:33.621Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-HJLKL0VY",
+          "upc": "124327396210",
+          "name": "Item_fa1aum",
+          "size": "XL",
+          "tags": [
+            "sports",
+            "clothing",
+            "clothing",
+            "sports"
+          ],
+          "brand": "BrandB",
+          "color": "small",
+          "price": 42.62,
+          "rating": "3.7",
+          "weight": 77.86,
+          "material": "Wood",
+          "inventory": 514,
+          "dimensions": {
+            "width": 442,
+            "height": 438,
+            "length": 152
+          },
+          "createdDate": "2025-12-16T07:36:08.704Z",
+          "description": "A deluxe electronics product",
+          "lastModified": "2026-02-26T05:07:33.621Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "API",
+          "status": "Active",
+          "verified": true,
+          "confidence": "8.33",
+          "department": "Marketing",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-24T20:50:17.358Z"
+        }
+      }
+    },
+    "REC-001703": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001703",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Delivery",
+        "attributes": {
+          "sku": "SKU-GROQ4AWM",
+          "upc": "618558400696",
+          "name": "פריט_s8qrnb",
+          "size": "S",
+          "tags": [
+            "ביגוד",
+            "ביגוד",
+            "ביגוד"
+          ],
+          "brand": "מותג ה",
+          "color": "צרכני",
+          "price": 11.65,
+          "rating": "0.4",
+          "weight": 80.26,
+          "material": "ניילון",
+          "inventory": 89,
+          "dimensions": {
+            "width": 395,
+            "height": 411,
+            "length": 139
+          },
+          "createdDate": "2025-05-12T21:24:28.658Z",
+          "description": "מוצר אלקטרוניקה אדום",
+          "lastModified": "2026-03-03T07:25:28.304Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-GROQ4AWM",
+          "upc": "618558400696",
+          "name": "Item_s8qrnb",
+          "size": "S",
+          "tags": [
+            "Clothing",
+            "Clothing",
+            "Clothing"
+          ],
+          "brand": "The Brand",
+          "color": "Consumer",
+          "price": 11.65,
+          "rating": "0.4",
+          "weight": 80.26,
+          "material": "Nylon",
+          "inventory": 89,
+          "dimensions": {
+            "width": 395,
+            "height": 411,
+            "length": 139
+          },
+          "createdDate": "2025-05-12T21:24:28.658Z",
+          "description": "Red electronics product",
+          "lastModified": "2026-03-03T07:25:28.304Z"
+        },
+        "metadata": {
+          "region": "EU",
+          "source": "User Submission",
+          "status": "Archived",
+          "verified": true,
+          "confidence": "89.93",
+          "department": "Support",
+          "dataQuality": "Low",
+          "lastChecked": "2026-03-05T01:13:42.744Z"
+        }
+      }
+    },
+    "REC-001904": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001904",
+        "true_type": "Service",
+        "true_subtype": "Standard",
+        "pred_type": "Service",
+        "pred_subtype": "Express",
+        "attributes": {
+          "sku": "SKU-G0H3J7OC",
+          "upc": "620456604759",
+          "name": "פריט_cetnsd",
+          "size": "XXL",
+          "tags": [
+            "ספרים",
+            "מוזיקה",
+            "אמנות"
+          ],
+          "brand": "מותג ה",
+          "color": "דלוקס",
+          "price": 44.31,
+          "rating": "3.5",
+          "weight": 25,
+          "material": "פלסטיק",
+          "inventory": 460,
+          "dimensions": {
+            "width": 254,
+            "height": 300,
+            "length": 173
+          },
+          "createdDate": "2025-05-14T22:50:30.472Z",
+          "description": "מוצר ביגוד קטן",
+          "lastModified": "2026-03-12T01:43:17.864Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-G0H3J7OC",
+          "upc": "620456604759",
+          "name": "Item_cetnsd",
+          "size": "XXL",
+          "tags": [
+            "books",
+            "music",
+            "art"
+          ],
+          "brand": "BrandE",
+          "color": "deluxe",
+          "price": 44.31,
+          "rating": "3.5",
+          "weight": 25,
+          "material": "Plastic",
+          "inventory": 460,
+          "dimensions": {
+            "width": 254,
+            "height": 300,
+            "length": 173
+          },
+          "createdDate": "2025-05-14T22:50:30.472Z",
+          "description": "A small clothing product",
+          "lastModified": "2026-03-12T01:43:17.864Z"
+        },
+        "metadata": {
+          "region": "APAC",
+          "source": "API",
+          "status": "Inactive",
+          "verified": true,
+          "confidence": "84.42",
+          "department": "Marketing",
+          "dataQuality": "High",
+          "lastChecked": "2026-03-27T02:48:15.373Z"
+        }
+      }
+    },
+    "REC-001945": {
+      "retag_subtype": "",
+      "record": {
+        "request_id": "REC-001945",
+        "true_type": "Shipping",
+        "true_subtype": "Standard",
+        "pred_type": "Payment",
+        "pred_subtype": "Credit Card",
+        "attributes": {
+          "sku": "SKU-5ZLRT9WA",
+          "upc": "542123262571",
+          "name": "פריט_ayg9b2",
+          "size": "One Size",
+          "tags": [
+            "ריהוט",
+            "ביגוד"
+          ],
+          "brand": "יוקרה",
+          "color": "בסיסי",
+          "price": 95.97,
+          "rating": "1.7",
+          "weight": 15.75,
+          "material": "עור",
+          "inventory": 429,
+          "dimensions": {
+            "width": 314,
+            "height": 160,
+            "length": 62
+          },
+          "createdDate": "2025-12-23T10:21:10.334Z",
+          "description": "מוצר ביגוד אדום",
+          "lastModified": "2026-03-12T19:39:53.269Z"
+        },
+        "attributes_en": {
+          "sku": "SKU-5ZLRT9WA",
+          "upc": "542123262571",
+          "name": "Item_ayg9b2",
+          "size": "One Size",
+          "tags": [
+            "furniture",
+            "clothing"
+          ],
+          "brand": "Luxury",
+          "color": "basic",
+          "price": 95.97,
+          "rating": "1.7",
+          "weight": 15.75,
+          "material": "Leather",
+          "inventory": 429,
+          "dimensions": {
+            "width": 314,
+            "height": 160,
+            "length": 62
+          },
+          "createdDate": "2025-12-23T10:21:10.334Z",
+          "description": "A red clothing product",
+          "lastModified": "2026-03-12T19:39:53.269Z"
+        },
+        "metadata": {
+          "region": "APAC",
+          "source": "Web Scrape",
+          "status": "Review",
+          "verified": true,
+          "confidence": "96.48",
+          "department": "Operations",
+          "dataQuality": "High",
+          "lastChecked": "2026-02-27T11:01:26.708Z"
+        }
+      }
+    }
+  },
   "3": {
     "REC-000035": {
       "retag_subtype": "",

@@ -810,6 +810,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .table-wrapper {
   flex: 1;
   min-height: 0;
+  max-height: 65vh;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1005,6 +1006,11 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   gap: 1rem;
   flex-wrap: wrap;
   margin-bottom: 0.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding-bottom: 0.25rem;
 }
 .table-toolbar h3 {
   margin: 0;

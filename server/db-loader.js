@@ -406,6 +406,46 @@ async function getRecords(filters = {}) {
   };
 }
 
+/**
+ * Persist a translated attributes_en for a given request_id to all
+ * per-run tables (and run_results if it exists).
+ */
+async function updateTranslation(requestId, attrsEn) {
+  const json = JSON.stringify(attrsEn);
+
+  // Per-run tables
+  let runRows;
+  try {
+    const r = await query(`SELECT run_id FROM "leaderboard-table" ORDER BY run_id`);
+    runRows = r.rows;
+  } catch (err) {
+    if (err.code !== '42P01') throw err;
+    runRows = [];
+  }
+
+  await Promise.all(runRows.map(async ({ run_id: tbl }) => {
+    try {
+      const colRes = await query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = current_schema() AND table_name = $1
+           AND column_name IN ('request_id','record_id')
+         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+        [tbl]
+      );
+      if (colRes.rows.length === 0) return;
+      const idCol = colRes.rows[0].column_name;
+      await query(`UPDATE "${tbl}" SET attributes_en = $1 WHERE ${idCol} = $2`, [json, requestId]);
+    } catch (err) {
+      if (err.code !== '42P01') throw err;
+    }
+  }));
+
+  // Legacy run_results table (best-effort)
+  try {
+    await query(`UPDATE run_results SET attributes_en = $1 WHERE record_id = $2`, [json, requestId]);
+  } catch { /* table may not exist */ }
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -416,4 +456,5 @@ module.exports = {
   getSubtypeMatrixForTypePair,
   getTransitionMatrix,
   getRecords,
+  updateTranslation,
 };
