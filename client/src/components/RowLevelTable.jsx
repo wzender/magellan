@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'attributes_en', 'metadata'];
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, onTranslated }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
@@ -86,6 +86,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   }, [data]);
 
   const [attrLang, setAttrLang] = useState('original');
+  const [translating, setTranslating] = useState(null); // null | { done, total }
   const [columnFilters, setColumnFilters] = useState({});
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
@@ -281,10 +282,62 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
   };
 
+  const handleTranslate = async () => {
+    const allData = await getExportData('_translate');
+    if (!allData || allData.length === 0) return;
+
+    const records = allData.map(r => ({ request_id: r.request_id, attributes: r.attributes }));
+    setTranslating({ done: 0, total: records.length });
+
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records }),
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const event = JSON.parse(line.slice(6));
+          if (event.finished) {
+            setTranslating(null);
+            if (onTranslated) onTranslated();
+          } else {
+            setTranslating({ done: event.done, total: event.total });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Translation error:', err);
+      setToast('Translation failed: ' + err.message);
+      setTranslating(null);
+    }
+  };
+
   return (
     <div className="row-level-table-panel">
       <div className="table-toolbar">
         <h3>{tableTitle} ({data.pagination.total} total)</h3>
+        {onExport && (
+          <button
+            className="translate-btn"
+            disabled={!!translating}
+            title="Translate attributes to English using Claude (saves by request_id)"
+            onClick={handleTranslate}
+          >
+            {translating ? `Translating… ${translating.done}/${translating.total}` : 'Translate'}
+          </button>
+        )}
         {onAddToRetag && (
           <button
             className="add-all-to-retag-btn"
@@ -322,6 +375,17 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ))}
         </div>
       </div>
+      {translating && (
+        <div className="translate-progress-bar-wrap">
+          <div
+            className="translate-progress-bar-fill"
+            style={{ width: `${Math.round((translating.done / translating.total) * 100)}%` }}
+          />
+          <span className="translate-progress-label">
+            {translating.done} / {translating.total}
+          </span>
+        </div>
+      )}
       <div className="table-wrapper" ref={tableRef}>
         {toast && <div className="toast-message">{toast}</div>}
         <table className={`records-table row-height-${rowHeight.toLowerCase()}`}>

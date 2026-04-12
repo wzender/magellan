@@ -7,10 +7,20 @@ const fs   = require('fs');
 const path = require('path');
 const csv  = require('csv-parse/sync');
 
-const DATA_DIR = path.join(__dirname, '../data');
-const RUNS_DIR = path.join(DATA_DIR, 'runs');
+const DATA_DIR          = path.join(__dirname, '../data');
+const RUNS_DIR          = path.join(DATA_DIR, 'runs');
+const TRANSLATIONS_FILE = path.join(DATA_DIR, 'translations.json');
 
 let dataCache = null;
+
+function loadTranslationsFile() {
+  if (!fs.existsSync(TRANSLATIONS_FILE)) return {};
+  try { return JSON.parse(fs.readFileSync(TRANSLATIONS_FILE, 'utf-8')); } catch { return {}; }
+}
+
+function saveTranslationsFile(translations) {
+  fs.writeFileSync(TRANSLATIONS_FILE, JSON.stringify(translations, null, 2), 'utf-8');
+}
 
 function tryParseJson(value) {
   if (typeof value !== 'string') return value || {};
@@ -95,6 +105,14 @@ function loadData() {
       });
     });
   });
+
+  // Merge persisted translations (keyed by request_id) into the cache.
+  const translations = loadTranslationsFile();
+  if (Object.keys(translations).length > 0) {
+    run_results.forEach(r => {
+      if (translations[r.request_id]) r.attributes_en = translations[r.request_id];
+    });
+  }
 
   dataCache = { benchmarks, runs, leaderboard, run_results };
   console.log(`\u2713 CSV data loaded: ${runs.length} runs, ${run_results.length} records`);
@@ -270,6 +288,22 @@ function getRecords(filters = {}) {
   };
 }
 
+/**
+ * Persist a translated attributes_en for a given request_id.
+ * Updates the in-memory cache (all runs sharing the same request_id) and
+ * writes to data/translations.json so it survives server restarts.
+ */
+function updateTranslation(requestId, attrsEn) {
+  const data = loadData();
+  data.run_results
+    .filter(r => r.request_id === requestId)
+    .forEach(r => { r.attributes_en = attrsEn; });
+
+  const translations = loadTranslationsFile();
+  translations[requestId] = attrsEn;
+  saveTranslationsFile(translations);
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -281,4 +315,5 @@ module.exports = {
   getSubtypeMatrixForTypePair,
   getTransitionMatrix,
   getRecords,
+  updateTranslation,
 };

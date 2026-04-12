@@ -16,7 +16,8 @@ const runsRouter = require('./api/runs');
 const confusionMatrixRouter = require('./api/confusionMatrix');
 const transitionMatrixRouter = require('./api/transitionMatrix');
 const recordsRouter = require('./api/records');
-const retagRouter = require('./api/retag');
+const retagRouter     = require('./api/retag');
+const translateRouter = require('./api/translate');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -45,6 +46,7 @@ app.use('/api', confusionMatrixRouter);
 app.use('/api', transitionMatrixRouter);
 app.use('/api', recordsRouter);
 app.use('/api', retagRouter);
+app.use('/api', translateRouter);
 
 // Serve React app for all non-API routes
 app.get('*', (req, res) => {

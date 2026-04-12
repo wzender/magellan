@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
-function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [], onExportAll }) {
+function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [], onExportAll, onTranslated }) {
   const [indicatorFilter, setIndicatorFilter] = useState(null);
   const [persistentFilter, setPersistentFilter] = useState(null);
 
@@ -254,6 +254,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
               }
               return { ...result, data: rows };
             } : undefined}
+            onTranslated={onTranslated}
           />
         </div>
       )}

@@ -1681,6 +1681,56 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
 
+/* ─── Translate button + progress bar ───────────────────────────── */
+
+.translate-btn {
+  padding: 0.22rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  color: #16a34a;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.translate-btn:hover:not(:disabled) {
+  background: #16a34a;
+  color: white;
+  border-color: #16a34a;
+}
+
+.translate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.translate-progress-bar-wrap {
+  position: relative;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  margin: 0 0 6px 0;
+  overflow: hidden;
+}
+
+.translate-progress-bar-fill {
+  height: 100%;
+  background: #16a34a;
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+.translate-progress-label {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
 /* ─── Add-to-retag button (inside RowLevelTable) ────────────────── */
 
 .add-all-to-retag-btn {

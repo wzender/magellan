@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './styles.css';
 import LeaderboardWidget from './LeaderboardWidget';
 import ConfusionMatrixPanel from './ConfusionMatrixPanel';
@@ -174,33 +174,28 @@ function Dashboard() {
   }, [selectedRuns, isTransitionMode]);
 
   // Fetch filtered records from API when type/subtype selection changes
-  useEffect(() => {
+  const fetchFilteredRecords = useCallback(async () => {
     if (selectedRuns.length === 0 || !isConfusionMode) return;
-
-    const fetchFilteredRecords = async () => {
-      try {
-        let url = `/api/records?run_id=${selectedRuns[0]}&limit=1000`;
-
-        if (filter === 'incorrect') url += '&filter=incorrect';
-
-        if (selectedTypePair) {
-          url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
-        }
-
-        if (selectedSubtypePair) {
-          url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
-        }
-
-        const response = await fetch(url);
-        const data = await response.json();
-        setFilteredRecordsData(data);
-      } catch (err) {
-        console.error('Error fetching filtered records:', err);
+    try {
+      let url = `/api/records?run_id=${selectedRuns[0]}&limit=1000`;
+      if (filter === 'incorrect') url += '&filter=incorrect';
+      if (selectedTypePair) {
+        url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
       }
-    };
-
-    fetchFilteredRecords();
+      if (selectedSubtypePair) {
+        url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
+      }
+      const response = await fetch(url);
+      const data = await response.json();
+      setFilteredRecordsData(data);
+    } catch (err) {
+      console.error('Error fetching filtered records:', err);
+    }
   }, [selectedTypePair, selectedSubtypePair, selectedRuns, isConfusionMode, filter]);
+
+  useEffect(() => {
+    fetchFilteredRecords();
+  }, [fetchFilteredRecords]);
   useEffect(() => {
     if (selectedRuns.length !== 2 || minCount < 1) return;
 
@@ -456,6 +451,7 @@ function Dashboard() {
               allRecordsData={allRecordsData}
               onExportAll={fetchAllConfusionRecords}
               benchmarkId={selectedBenchmark}
+              onTranslated={fetchFilteredRecords}
             />
           ) : isTransitionMode ? (
             <TransitionMatrixPanel
@@ -466,6 +462,7 @@ function Dashboard() {
               recordsData={filteredRecordsData}
               selectedRunNames={selectedRunNames}
               onExportAll={fetchAllTransitionRecords}
+              onTranslated={fetchFilteredRecords}
             />
           ) : (
             <div className="no-selection">Please select 1 or 2 runs to view matrices</div>
