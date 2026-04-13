@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-const JSON_KEYS = ['attributes', 'attributes_en', 'metadata'];
+const JSON_KEYS = ['attributes', 'en_attributes', 'metadata', 'en_metadata'];
 
 function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, onTranslated }) {
   const [currentPage, setCurrentPage] = useState(0);
@@ -17,31 +17,31 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         headerRows: [
           [
             { label: '', colspan: 1, isGroup: false },
-            { label: 'True', colspan: 2, isGroup: true },
+            { label: 'Correct Label', colspan: 2, isGroup: true },
             { label: run1Label, colspan: 2, isGroup: true },
             { label: run2Label, colspan: 2, isGroup: true },
             { label: 'Details', colspan: 2, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
-            { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
-            { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
-            { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
-            { key: 'pred_subtype', label: 'Pred Subtype', width: 120, isGroup: false },
-            { key: 'run2_pred_type', label: 'Pred Type', width: 100, isGroup: false },
-            { key: 'run2_pred_subtype', label: 'Pred Subtype', width: 120, isGroup: false },
+            { key: 'true_type', label: 'Actual Category', width: 100, isGroup: false },
+            { key: 'true_subtype', label: 'Actual Subcategory', width: 120, isGroup: false },
+            { key: 'pred_type', label: 'Predicted Category', width: 100, isGroup: false },
+            { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
+            { key: 'run2_pred_type', label: 'Predicted Category', width: 100, isGroup: false },
+            { key: 'run2_pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
             { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
           ]
         ],
         columns: [
           { key: 'request_id', label: 'Request ID', width: 100 },
-          { key: 'true_type', label: 'True Type', width: 100 },
-          { key: 'true_subtype', label: 'True Subtype', width: 120 },
-          { key: 'pred_type', label: 'Pred Type', width: 100 },
-          { key: 'pred_subtype', label: 'Pred Subtype', width: 120 },
-          { key: 'run2_pred_type', label: 'Pred Type', width: 100 },
-          { key: 'run2_pred_subtype', label: 'Pred Subtype', width: 120 },
+          { key: 'true_type', label: 'Actual Category', width: 100 },
+          { key: 'true_subtype', label: 'Actual Subcategory', width: 120 },
+          { key: 'pred_type', label: 'Predicted Category', width: 100 },
+          { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120 },
+          { key: 'run2_pred_type', label: 'Predicted Category', width: 100 },
+          { key: 'run2_pred_subtype', label: 'Predicted Subcategory', width: 120 },
           { key: 'attributes', label: 'Attributes', width: 220 },
           { key: 'metadata', label: 'Metadata', width: 220 }
         ]
@@ -51,20 +51,20 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         headerRows: [
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
-            { key: 'true_type', label: 'True Type', width: 100, isGroup: false },
-            { key: 'pred_type', label: 'Pred Type', width: 100, isGroup: false },
-            { key: 'true_subtype', label: 'True Subtype', width: 120, isGroup: false },
-            { key: 'pred_subtype', label: 'Pred Subtype', width: 120, isGroup: false },
+            { key: 'true_type', label: 'Actual Category', width: 100, isGroup: false },
+            { key: 'pred_type', label: 'Predicted Category', width: 100, isGroup: false },
+            { key: 'true_subtype', label: 'Actual Subcategory', width: 120, isGroup: false },
+            { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
             { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
           ]
         ],
         columns: [
           { key: 'request_id', label: 'Request ID', width: 100 },
-          { key: 'true_type', label: 'True Type', width: 100 },
-          { key: 'pred_type', label: 'Pred Type', width: 100 },
-          { key: 'true_subtype', label: 'True Subtype', width: 120 },
-          { key: 'pred_subtype', label: 'Pred Subtype', width: 120 },
+          { key: 'true_type', label: 'Actual Category', width: 100 },
+          { key: 'pred_type', label: 'Predicted Category', width: 100 },
+          { key: 'true_subtype', label: 'Actual Subcategory', width: 120 },
+          { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120 },
           { key: 'attributes', label: 'Attributes', width: 220 },
           { key: 'metadata', label: 'Metadata', width: 220 }
         ]
@@ -86,7 +86,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   }, [data]);
 
   const [attrLang, setAttrLang] = useState('original');
-  const [translating, setTranslating] = useState(null); // null | { done, total }
+  const [metaLang, setMetaLang] = useState('original');
+  const [attrTranslating, setAttrTranslating] = useState(null); // null | { done, total }
+  const [metaTranslating, setMetaTranslating] = useState(null); // null | { done, total }
+  const attrAbortRef = useRef(null);
+  const metaAbortRef = useRef(null);
   const [columnFilters, setColumnFilters] = useState({});
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
@@ -188,10 +192,16 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const renderPrettyJson = (obj, cellKey, label) => {
-    if (!obj || Object.keys(obj).length === 0) {
+  const renderPrettyJson = (raw, cellKey, label) => {
+    let obj = raw;
+    if (typeof raw === 'string') {
+      try { obj = JSON.parse(raw); } catch { /* leave as string */ }
+    }
+    const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
+    if (isEmpty) {
       return <div className="json-empty">(empty)</div>;
     }
+    const display = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
     return (
       <div className="json-cell-wrapper">
         <button
@@ -200,7 +210,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         >
           {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
         </button>
-        <pre className="json-pretty">{JSON.stringify(obj, null, 2)}</pre>
+        <pre className="json-pretty">{display}</pre>
       </div>
     );
   };
@@ -244,8 +254,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const getExportColumns = () => {
     const cols = [...columns.columns];
     const attrIdx = cols.findIndex(c => c.key === 'attributes');
-    if (attrIdx !== -1 && !cols.find(c => c.key === 'attributes_en')) {
-      cols.splice(attrIdx + 1, 0, { key: 'attributes_en', label: 'Attributes (EN)', width: 220 });
+    if (attrIdx !== -1 && !cols.find(c => c.key === 'en_attributes')) {
+      cols.splice(attrIdx + 1, 0, { key: 'en_attributes', label: 'Attributes (EN)', width: 220 });
     }
     return cols;
   };
@@ -291,25 +301,33 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
   };
 
-  const handleTranslate = async () => {
+  const handleTranslateField = async (field) => {
+    const setTranslating = field === 'metadata' ? setMetaTranslating : setAttrTranslating;
+    const abortRef = field === 'metadata' ? metaAbortRef : attrAbortRef;
+    const enField = field === 'metadata' ? 'en_metadata' : 'en_attributes';
+
     const allData = await getExportData('_translate');
     if (!allData || allData.length === 0) return;
 
     const records = allData
-      .filter(r => !r.attributes_en || Object.keys(r.attributes_en).length === 0)
-      .map(r => ({ request_id: r.request_id, attributes: r.attributes }));
+      .filter(r => !r[enField] || Object.keys(r[enField]).length === 0)
+      .map(r => ({ request_id: r.request_id, [field]: r[field] }));
 
     if (records.length === 0) {
-      setToast('All records already have English attributes.');
+      setToast(`All records already have English ${field}.`);
       return;
     }
     setTranslating({ done: 0, total: records.length });
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const response = await fetch('/api/translate', {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records }),
+        body: JSON.stringify({ records, field }),
       });
 
       const reader = response.body.getReader();
@@ -334,8 +352,12 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         }
       }
     } catch (err) {
-      console.error('Translation error:', err);
-      setToast('Translation failed: ' + err.message);
+      if (err.name === 'AbortError') {
+        setToast(`${field} translation cancelled`);
+      } else {
+        console.error('Translation error:', err);
+        setToast('Translation failed: ' + err.message);
+      }
       setTranslating(null);
     }
   };
@@ -343,17 +365,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   return (
     <div className="row-level-table-panel">
       <div className="table-toolbar">
-        <h3>{tableTitle} ({data.pagination.total} total)</h3>
-        {onExport && (
-          <button
-            className="translate-btn"
-            disabled={!!translating}
-            title="Translate attributes to English using Claude (saves by request_id)"
-            onClick={handleTranslate}
-          >
-            {translating ? `Translating… ${translating.done}/${translating.total}` : 'Translate'}
-          </button>
-        )}
+        <h3>{tableTitle} ({Object.values(columnFilters).some(v => v) ? `${sortedData.length} of ${data.pagination.total}` : data.pagination.total} total)</h3>
         {onAddToRetag && (
           <button
             className="add-all-to-retag-btn"
@@ -391,15 +403,16 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ))}
         </div>
       </div>
-      {translating && (
+      {attrTranslating && (
         <div className="translate-progress-bar-wrap">
-          <div
-            className="translate-progress-bar-fill"
-            style={{ width: `${Math.round((translating.done / translating.total) * 100)}%` }}
-          />
-          <span className="translate-progress-label">
-            {translating.done} / {translating.total}
-          </span>
+          <div className="translate-progress-bar-fill" style={{ width: `${Math.round((attrTranslating.done / attrTranslating.total) * 100)}%` }} />
+          <span className="translate-progress-label">Attributes: {attrTranslating.done} / {attrTranslating.total}</span>
+        </div>
+      )}
+      {metaTranslating && (
+        <div className="translate-progress-bar-wrap">
+          <div className="translate-progress-bar-fill" style={{ width: `${Math.round((metaTranslating.done / metaTranslating.total) * 100)}%` }} />
+          <span className="translate-progress-label">Metadata: {metaTranslating.done} / {metaTranslating.total}</span>
         </div>
       )}
       <div className="table-wrapper" ref={tableRef}>
@@ -442,14 +455,22 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                         </div>
                         {col.key === 'attributes' && (
                           <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                            <button
-                              className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`}
-                              onClick={() => setAttrLang('original')}
-                            >orig</button>
-                            <button
-                              className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`}
-                              onClick={() => setAttrLang('en')}
-                            >EN</button>
+                            {onExport && (attrTranslating
+                              ? <button className="attr-lang-btn cancel-translate-btn" onClick={() => attrAbortRef.current && attrAbortRef.current.abort()}>✕</button>
+                              : <button className="attr-lang-btn" onClick={() => handleTranslateField('attributes')}>Translate</button>
+                            )}
+                            <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
+                            <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                          </div>
+                        )}
+                        {col.key === 'metadata' && (
+                          <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                            {onExport && (metaTranslating
+                              ? <button className="attr-lang-btn cancel-translate-btn" onClick={() => metaAbortRef.current && metaAbortRef.current.abort()}>✕</button>
+                              : <button className="attr-lang-btn" onClick={() => handleTranslateField('metadata')}>Translate</button>
+                            )}
+                            <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
+                            <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
                           </div>
                         )}
                       </div>
@@ -524,11 +545,13 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'run2_pred_type': return <td key={`${record.id}-run2_pred_type`}>{record.run2_pred_type || '-'}</td>;
                     case 'run2_pred_subtype': return <td key={`${record.id}-run2_pred_subtype`}>{record.run2_pred_subtype || '-'}</td>;
                     case 'attributes': {
-                      const attrsObj = attrLang === 'en' ? record.attributes_en : record.attributes;
+                      const attrsObj = attrLang === 'en' ? record.en_attributes : record.attributes;
                       return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(attrsObj, `${record.id}-attributes`, 'Attributes')}</td>;
                     }
-                    case 'metadata':
-                      return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(record.metadata, `${record.id}-metadata`, 'Metadata')}</td>;
+                    case 'metadata': {
+                      const metaObj = metaLang === 'en' ? record.en_metadata : record.metadata;
+                      return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(metaObj, `${record.id}-metadata`, 'Metadata')}</td>;
+                    }
                     default:
                       return <td key={`${record.id}-${col.key}`}>-</td>;
                   }

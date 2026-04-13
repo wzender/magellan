@@ -45,7 +45,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [recordsData]);
 
-  if (loading) return <div className="loading">Loading transition matrix...</div>;
+  if (loading) return <div className="loading">Loading comparison...</div>;
   if (!data || !data.data) return <div className="no-data">No data available</div>;
 
   const allRows = data.rows || [];
@@ -110,7 +110,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
       <div className="matrix-panel">
         <div className="matrix-panel-header">
           <div className="matrix-panel-title-row">
-            <span className="matrix-panel-title">Subtype Transition Matrix — {runNameLeft} → {runNameRight}</span>
+            <span className="matrix-panel-title">What Changed — {runNameLeft} → {runNameRight}</span>
             {indicatorTotals.total > 0 && (() => {
               const delta = indicatorTotals.run2Correct - indicatorTotals.run1Correct;
               const cls = delta > 0 ? 'net-positive' : delta < 0 ? 'net-negative' : 'net-neutral';
@@ -137,13 +137,13 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
         <div className="matrix-panel-body">
           {rows.length === 0 ? (
             <div className="no-selection-message compact">
-              No transitions found. Try reducing the minimum changed records threshold.
+              No changes found. Try reducing the "Min records changed" threshold.
             </div>
           ) : (
             <table className="transition-matrix">
               <thead>
                 <tr>
-                  <th>{runNameLeft} \ {runNameRight}</th>
+                  <th>{runNameLeft} (Actual) \ {runNameRight} (Predicted)</th>
                   {cols.map(col => (
                     <th key={col}>
                       <span className="matrix-th-label" data-tooltip={col}>

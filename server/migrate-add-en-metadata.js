@@ -1,8 +1,8 @@
 /**
- * Migration: add en_attributes JSONB column to all existing per-run tables
+ * Migration: add en_metadata JSONB column to all existing per-run tables
  * and to run_results (if it exists).
  *
- * Usage:  node server/migrate-add-attributes-en.js
+ * Usage:  node server/migrate-add-en-metadata.js
  */
 
 require('dotenv').config();
@@ -11,8 +11,8 @@ const { query, pool } = require('./db');
 async function migrate() {
   // 1. Add to run_results if it exists
   try {
-    await query(`ALTER TABLE run_results ADD COLUMN IF NOT EXISTS en_attributes JSONB`);
-    console.log('✓ run_results.en_attributes added (or already existed)');
+    await query(`ALTER TABLE run_results ADD COLUMN IF NOT EXISTS en_metadata JSONB`);
+    console.log('✓ run_results.en_metadata added (or already existed)');
   } catch (err) {
     if (err.code === '42P01') {
       console.log('  run_results table not found, skipping');
@@ -39,8 +39,8 @@ async function migrate() {
 
   for (const { run_id: tbl } of runRows) {
     try {
-      await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS en_attributes JSONB`);
-      console.log(`  ✓ "${tbl}".en_attributes added`);
+      await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS en_metadata JSONB`);
+      console.log(`  ✓ "${tbl}".en_metadata added`);
     } catch (err) {
       if (err.code === '42P01') {
         console.warn(`  ⚠ Table "${tbl}" not found, skipping`);

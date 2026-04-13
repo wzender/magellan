@@ -57,6 +57,46 @@ body {
   color: #f1f5f9;
 }
 
+/* ─── Summary callout ───────────────────────────────────────── */
+
+.summary-callout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1.25rem;
+  background: var(--primary-light);
+  border-bottom: 1px solid #c7d2fe;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.summary-callout-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.summary-callout-name {
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.summary-callout-metric {
+  color: var(--primary-dark);
+  font-weight: 600;
+  background: white;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+}
+
+.summary-callout-divider {
+  color: var(--text-faint);
+}
+
+.summary-callout-count {
+  color: var(--text-muted);
+}
+
 /* Toolbar */
 .toolbar-row {
   display: flex;
@@ -105,6 +145,25 @@ body {
   align-items: center;
   gap: 1rem;
   flex-shrink: 0;
+}
+
+.mode-indicator {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.mode-indicator--single {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border: 1px solid #c7d2fe;
+}
+
+.mode-indicator--compare {
+  background: #fef9c3;
+  color: #713f12;
+  border: 1px solid #fde68a;
 }
 
 .filter-controls,
@@ -922,7 +981,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .header-cell {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.4rem;
 }
 
@@ -956,6 +1015,11 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .attr-lang-btn:not(.active):hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.cancel-translate-btn {
+  color: var(--danger, #e53e3e) !important;
+  border-color: var(--danger, #e53e3e) !important;
 }
 
 .resize-handle {
@@ -1062,8 +1126,8 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 /* ── Row height — controls JSON panel size only ── */
 .row-height-1 .json-pretty { max-height: 72px; }
 .row-height-2 .json-pretty { max-height: 140px; }
-.row-height-3 .json-pretty { max-height: 280px; }
-.row-height-auto .json-pretty { max-height: none; overflow: visible; }
+.row-height-3 .json-pretty { max-height: min(25vh, 280px); }
+.row-height-auto .json-pretty { max-height: 25vh; overflow: auto; }
 
 /* Group header (transition two-run mode) */
 .group-header {
@@ -1675,6 +1739,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   line-height: 1.65;
   white-space: pre;
   overflow: auto;
+  max-height: 25vh;
 }
 
 .json-empty {

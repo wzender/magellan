@@ -7,9 +7,10 @@ const fs   = require('fs');
 const path = require('path');
 const csv  = require('csv-parse/sync');
 
-const DATA_DIR          = path.join(__dirname, '../data');
-const RUNS_DIR          = path.join(DATA_DIR, 'runs');
-const TRANSLATIONS_FILE = path.join(DATA_DIR, 'translations.json');
+const DATA_DIR                    = path.join(__dirname, '../data');
+const RUNS_DIR                    = path.join(DATA_DIR, 'runs');
+const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
+const METADATA_TRANSLATIONS_FILE  = path.join(DATA_DIR, 'metadata-translations.json');
 
 let dataCache = null;
 
@@ -20,6 +21,15 @@ function loadTranslationsFile() {
 
 function saveTranslationsFile(translations) {
   fs.writeFileSync(TRANSLATIONS_FILE, JSON.stringify(translations, null, 2), 'utf-8');
+}
+
+function loadMetadataTranslationsFile() {
+  if (!fs.existsSync(METADATA_TRANSLATIONS_FILE)) return {};
+  try { return JSON.parse(fs.readFileSync(METADATA_TRANSLATIONS_FILE, 'utf-8')); } catch { return {}; }
+}
+
+function saveMetadataTranslationsFile(translations) {
+  fs.writeFileSync(METADATA_TRANSLATIONS_FILE, JSON.stringify(translations, null, 2), 'utf-8');
 }
 
 function tryParseJson(value) {
@@ -100,17 +110,26 @@ function loadData() {
         pred_type:    r.pred_type,
         pred_subtype: r.pred_subtype,
         attributes:    tryParseJson(r.attributes),
-        attributes_en: tryParseJson(r.attributes_en),
+        en_attributes: tryParseJson(r.en_attributes),
         metadata:      tryParseJson(r.metadata),
+        en_metadata:   tryParseJson(r.en_metadata),
       });
     });
   });
 
-  // Merge persisted translations (keyed by request_id) into the cache.
+  // Merge persisted attribute translations into the cache.
   const translations = loadTranslationsFile();
   if (Object.keys(translations).length > 0) {
     run_results.forEach(r => {
-      if (translations[r.request_id]) r.attributes_en = translations[r.request_id];
+      if (translations[r.request_id]) r.en_attributes = translations[r.request_id];
+    });
+  }
+
+  // Merge persisted metadata translations into the cache.
+  const metaTranslations = loadMetadataTranslationsFile();
+  if (Object.keys(metaTranslations).length > 0) {
+    run_results.forEach(r => {
+      if (metaTranslations[r.request_id]) r.en_metadata = metaTranslations[r.request_id];
     });
   }
 
@@ -289,7 +308,7 @@ function getRecords(filters = {}) {
 }
 
 /**
- * Persist a translated attributes_en for a given request_id.
+ * Persist a translated en_attributes for a given request_id.
  * Updates the in-memory cache (all runs sharing the same request_id) and
  * writes to data/translations.json so it survives server restarts.
  */
@@ -297,11 +316,22 @@ function updateTranslation(requestId, attrsEn) {
   const data = loadData();
   data.run_results
     .filter(r => r.request_id === requestId)
-    .forEach(r => { r.attributes_en = attrsEn; });
+    .forEach(r => { r.en_attributes = attrsEn; });
 
   const translations = loadTranslationsFile();
   translations[requestId] = attrsEn;
   saveTranslationsFile(translations);
+}
+
+function updateMetadataTranslation(requestId, metaEn) {
+  const data = loadData();
+  data.run_results
+    .filter(r => r.request_id === requestId)
+    .forEach(r => { r.en_metadata = metaEn; });
+
+  const translations = loadMetadataTranslationsFile();
+  translations[requestId] = metaEn;
+  saveMetadataTranslationsFile(translations);
 }
 
 module.exports = {
@@ -316,4 +346,5 @@ module.exports = {
   getTransitionMatrix,
   getRecords,
   updateTranslation,
+  updateMetadataTranslation,
 };

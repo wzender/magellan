@@ -26,14 +26,14 @@ function timeAgo(date) {
 
 function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }) {
   const [columns, setColumns] = useState([
-    { key: 'select', label: 'Select', width: 70 },
+    { key: 'select', label: 'Compare', width: 70 },
     { key: 'rank', label: 'Rank', width: 70 },
     { key: 'run_name', label: 'Run', width: 220 },
     { key: 'model_version', label: 'Model Version', width: 180 },
     { key: 'run_date', label: 'Date', width: 160 },
-    { key: 'subtype_accuracy', label: 'Subtype Accuracy', width: 140 },
-    { key: 'subtype_f1_weighted', label: 'Subtype F1 (Weighted)', width: 160 },
-    { key: 'type_f1_weighted', label: 'Type F1 (Weighted)', width: 150 },
+    { key: 'subtype_accuracy', label: 'Detail Accuracy', width: 140 },
+    { key: 'subtype_f1_weighted', label: 'Detail Score', width: 160 },
+    { key: 'type_f1_weighted', label: 'Category Score', width: 150 },
     { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
   ]);
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
@@ -242,11 +242,11 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
                     );
                   }
                   case 'subtype_accuracy':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{parseFloat(row.subtype_accuracy).toFixed(4)}</td>;
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_accuracy) * 100).toFixed(1)}%</td>;
                   case 'subtype_f1_weighted':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{parseFloat(row.subtype_f1_weighted).toFixed(4)}</td>;
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_f1_weighted) * 100).toFixed(1)}%</td>;
                   case 'type_f1_weighted':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{parseFloat(row.type_f1_weighted).toFixed(4)}</td>;
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_f1_weighted) * 100).toFixed(1)}%</td>;
                   case 'benchmark_length':
                     return <td key={`${row.run_id}-${col.key}`} className="benchmark-size">{row.benchmark_length}</td>;
                   default:
@@ -258,7 +258,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
         </tbody>
       </table>
       <div className="leaderboard-hint">
-        Click a row to view its <strong>Confusion Matrix</strong>. Check up to 2 runs to compare them in the <strong>Transition Matrix</strong>.
+        Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
       </div>
     </div>
   );

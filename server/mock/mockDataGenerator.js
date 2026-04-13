@@ -185,7 +185,7 @@ function generateBenchmarkData(taxonomy, numRecords = 2000) {
     records.push({
       request_id: `REC-${String(i + 1).padStart(6, '0')}`,
       attributes: attrs.he,
-      attributes_en: attrs.en,
+      en_attributes: attrs.en,
       metadata: generateMetadata(),
       true_type: trueType,
       pred_type: predType,

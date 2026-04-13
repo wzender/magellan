@@ -17,7 +17,7 @@
  * Benchmarks are read directly from the "benchmark" column in leaderboard-table.
  */
 
-const { query } = require('./db');
+const { query, pool } = require('./db');
 const idColumnCache = new Map();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,8 +31,9 @@ function parseJsonFields(row) {
   return {
     ...row,
     attributes:    tryParseJson(row.attributes),
-    attributes_en: tryParseJson(row.attributes_en),
+    en_attributes: tryParseJson(row.en_attributes),
     metadata:      tryParseJson(row.metadata),
+    en_metadata:   tryParseJson(row.en_metadata),
   };
 }
 
@@ -350,14 +351,27 @@ async function getRecords(filters = {}) {
         query(`SELECT r1.${idCol1} AS request_id,
                       r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
                       r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
-                      r1.attributes, r1.attributes_en, r1.metadata
+                      r1.attributes, r1.en_attributes, r1.metadata, r1.en_metadata
                ${baseSQL} ORDER BY r1.${idCol1} LIMIT $${p} OFFSET $${p + 1}`,
           [...params, limit, offset]),
         query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
       ]);
     } catch (err) {
       if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl1} or ${tbl2}`); return { data: [], pagination: { total: 0, limit, offset, pages: 0 } }; }
-      throw err;
+      if (err.code === '42703') {
+        // en_metadata column not yet added — fall back without it
+        [dataResult, countResult] = await Promise.all([
+          query(`SELECT r1.${idCol1} AS request_id,
+                        r1.true_type, r1.true_subtype, r1.pred_type, r1.pred_subtype,
+                        r2.pred_type AS run2_pred_type, r2.pred_subtype AS run2_pred_subtype,
+                        r1.attributes, r1.en_attributes, r1.metadata
+                 ${baseSQL} ORDER BY r1.${idCol1} LIMIT $${p} OFFSET $${p + 1}`,
+            [...params, limit, offset]),
+          query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+        ]);
+      } else {
+        throw err;
+      }
     }
 
     const total = parseInt(countResult.rows[0].total);
@@ -389,14 +403,25 @@ async function getRecords(filters = {}) {
   try {
     [dataResult, countResult] = await Promise.all([
       query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
-                    attributes, attributes_en, metadata
+                    attributes, en_attributes, metadata, en_metadata
              ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
     ]);
   } catch (err) {
     if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl}`); return { data: [], pagination: { total: 0, limit, offset, pages: 0 } }; }
-    throw err;
+    if (err.code === '42703') {
+      // en_metadata column not yet added — fall back without it
+      [dataResult, countResult] = await Promise.all([
+        query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
+                      attributes, en_attributes, metadata
+               ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
+          [...params, limit, offset]),
+        query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+      ]);
+    } else {
+      throw err;
+    }
   }
 
   const total = parseInt(countResult.rows[0].total);
@@ -407,7 +432,7 @@ async function getRecords(filters = {}) {
 }
 
 /**
- * Persist a translated attributes_en for a given request_id to all
+ * Persist a translated en_attributes for a given request_id to all
  * per-run tables (and run_results if it exists).
  */
 async function updateTranslation(requestId, attrsEn) {
@@ -434,16 +459,50 @@ async function updateTranslation(requestId, attrsEn) {
       );
       if (colRes.rows.length === 0) return;
       const idCol = colRes.rows[0].column_name;
-      await query(`UPDATE "${tbl}" SET attributes_en = $1 WHERE ${idCol} = $2`, [json, requestId]);
+      await query(`UPDATE "${tbl}" SET en_attributes = $1 WHERE ${idCol} = $2`, [json, requestId]);
     } catch (err) {
       if (err.code !== '42P01') throw err;
     }
   }));
 
-  // Legacy run_results table (best-effort)
+  // Legacy run_results table (best-effort — silence missing-table noise)
   try {
-    await query(`UPDATE run_results SET attributes_en = $1 WHERE record_id = $2`, [json, requestId]);
-  } catch { /* table may not exist */ }
+    await pool.query(`UPDATE run_results SET en_attributes = $1 WHERE record_id = $2`, [json, requestId]);
+  } catch { /* table may not exist in this schema */ }
+}
+
+async function updateMetadataTranslation(requestId, metaEn) {
+  const json = JSON.stringify(metaEn);
+
+  let runRows;
+  try {
+    const r = await query(`SELECT run_id FROM "leaderboard-table" ORDER BY run_id`);
+    runRows = r.rows;
+  } catch (err) {
+    if (err.code !== '42P01') throw err;
+    runRows = [];
+  }
+
+  await Promise.all(runRows.map(async ({ run_id: tbl }) => {
+    try {
+      const colRes = await query(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = current_schema() AND table_name = $1
+           AND column_name IN ('request_id','record_id')
+         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+        [tbl]
+      );
+      if (colRes.rows.length === 0) return;
+      const idCol = colRes.rows[0].column_name;
+      await query(`UPDATE "${tbl}" SET en_metadata = $1 WHERE ${idCol} = $2`, [json, requestId]);
+    } catch (err) {
+      if (err.code !== '42P01') throw err;
+    }
+  }));
+
+  try {
+    await pool.query(`UPDATE run_results SET en_metadata = $1 WHERE record_id = $2`, [json, requestId]);
+  } catch { /* table may not exist in this schema */ }
 }
 
 module.exports = {
@@ -457,4 +516,5 @@ module.exports = {
   getTransitionMatrix,
   getRecords,
   updateTranslation,
+  updateMetadataTranslation,
 };

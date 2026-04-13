@@ -65,15 +65,15 @@ async function migrate() {
         pred_type     TEXT,
         pred_subtype  TEXT,
         attributes    JSONB,
-        attributes_en JSONB,
+        en_attributes JSONB,
         metadata      JSONB
       )
     `);
 
     // Bulk-insert from run_results
     await query(`
-      INSERT INTO "${tbl}" (request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, attributes_en, metadata)
-      SELECT request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, attributes_en, metadata
+      INSERT INTO "${tbl}" (request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, en_attributes, metadata)
+      SELECT request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, en_attributes, metadata
       FROM run_results
       WHERE run_id = $1
       ORDER BY request_id

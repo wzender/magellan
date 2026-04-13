@@ -374,7 +374,7 @@ function Dashboard() {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>Classification Evaluation & Analysis System</h1>
+        <h1>Model Performance Dashboard</h1>
       </header>
 
       <div className="toolbar-row">
@@ -398,6 +398,17 @@ function Dashboard() {
 
         <div className="toolbar-controls">
           {isConfusionMode && (
+            <div className="mode-indicator mode-indicator--single">
+              Viewing: <strong>{selectedRunNames[0] || '…'}</strong>
+            </div>
+          )}
+          {isTransitionMode && (
+            <div className="mode-indicator mode-indicator--compare">
+              Comparing: <strong>{selectedRunNames[0]}</strong> vs <strong>{selectedRunNames[1]}</strong>
+            </div>
+          )}
+
+          {isConfusionMode && (
             <div className="filter-controls">
               <label>Filter:</label>
               <select value={filter} onChange={e => setFilter(e.target.value)}>
@@ -409,7 +420,7 @@ function Dashboard() {
 
           {isTransitionMode && (
             <div className="transition-controls">
-              <label>Min Changed:</label>
+              <label>Min records changed:</label>
               <div className="stepper">
                 <button className="stepper-btn" onClick={() => setMinCount(v => Math.max(1, v - 1))} disabled={minCount <= 1}>−</button>
                 <input
@@ -428,6 +439,21 @@ function Dashboard() {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+
+      {leaderboardData.length > 0 && (() => {
+        const best = [...leaderboardData].sort((a, b) => parseFloat(b.subtype_accuracy) - parseFloat(a.subtype_accuracy))[0];
+        const acc = (parseFloat(best.subtype_accuracy) * 100).toFixed(1);
+        const total = leaderboardData.length;
+        return (
+          <div className="summary-callout">
+            <span className="summary-callout-label">Best model:</span>
+            <span className="summary-callout-name">{best.run_name}</span>
+            <span className="summary-callout-metric">{acc}% detail accuracy</span>
+            <span className="summary-callout-divider">·</span>
+            <span className="summary-callout-count">{total} run{total !== 1 ? 's' : ''} evaluated</span>
+          </div>
+        );
+      })()}
 
       <LeaderboardWidget 
         data={leaderboardData} 
@@ -465,7 +491,7 @@ function Dashboard() {
               onTranslated={fetchFilteredRecords}
             />
           ) : (
-            <div className="no-selection">Please select 1 or 2 runs to view matrices</div>
+            <div className="no-selection">Select a run from the leaderboard to view its accuracy breakdown</div>
           )}
         </div>
       </div>

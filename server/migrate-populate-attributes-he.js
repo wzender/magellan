@@ -1,5 +1,5 @@
 /**
- * Migration: populate attributes_en (copy from attributes) and translate
+ * Migration: populate en_attributes (copy from attributes) and translate
  * attributes to Hebrew for all existing per-run tables and run_results.
  *
  * Usage:  node server/migrate-populate-attributes-he.js
@@ -46,7 +46,7 @@ function translateToHe(enAttrs) {
 }
 
 async function migrateTable(tbl, idCol) {
-  const result = await query(`SELECT ${idCol}, attributes FROM "${tbl}" WHERE attributes_en IS NULL`);
+  const result = await query(`SELECT ${idCol}, attributes FROM "${tbl}" WHERE en_attributes IS NULL`);
   if (result.rows.length === 0) {
     console.log(`  "${tbl}": already populated, skipping`);
     return;
@@ -59,7 +59,7 @@ async function migrateTable(tbl, idCol) {
       const enAttrs = typeof row.attributes === 'string' ? JSON.parse(row.attributes) : row.attributes;
       const heAttrs = translateToHe(enAttrs);
       return query(
-        `UPDATE "${tbl}" SET attributes_en = $1, attributes = $2 WHERE ${idCol} = $3`,
+        `UPDATE "${tbl}" SET en_attributes = $1, attributes = $2 WHERE ${idCol} = $3`,
         [JSON.stringify(enAttrs), JSON.stringify(heAttrs), row[idCol]]
       );
     }));

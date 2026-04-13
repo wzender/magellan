@@ -10,7 +10,7 @@
  * Translates each record's attributes JSON (keys + string values) from the
  * original language to English using Claude.  Results are persisted to
  * data/translations.json and merged into the in-memory cache immediately,
- * so subsequent /api/records calls return the translated attributes_en.
+ * so subsequent /api/records calls return the translated en_attributes.
  */
 
 const router = require('express').Router();
@@ -19,7 +19,7 @@ const fetch  = require('node-fetch');
 const loader = process.env.DATA_SOURCE === 'postgres'
   ? require('../db-loader')
   : require('../csv-loader');
-const { updateTranslation } = loader;
+const { updateTranslation, updateMetadataTranslation } = loader;
 
 const OPENAI_API_KEY   = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL     = process.env.OPENAI_MODEL     || 'gpt-4o-mini';
@@ -93,9 +93,12 @@ async function withConcurrency(items, concurrency, task, onDone) {
 }
 
 router.post('/translate', async (req, res) => {
-  const { records } = req.body;
+  const { records, field = 'attributes' } = req.body;
   if (!Array.isArray(records) || records.length === 0) {
     return res.status(400).json({ error: 'records array is required' });
+  }
+  if (field !== 'attributes' && field !== 'metadata') {
+    return res.status(400).json({ error: 'field must be "attributes" or "metadata"' });
   }
 
   // Disable compression for this SSE response so chunks aren't buffered.
@@ -114,11 +117,17 @@ router.post('/translate', async (req, res) => {
   const total = records.length;
   let done = 0;
 
-  await withConcurrency(records, CONCURRENCY, async ({ request_id, attributes }) => {
+  await withConcurrency(records, CONCURRENCY, async (record) => {
+    const { request_id } = record;
     try {
-      const attrsEn = await translateAttributes(attributes);
-      updateTranslation(request_id, attrsEn);
-      return { request_id, attrsEn };
+      const input = field === 'metadata' ? record.metadata : record.attributes;
+      const translated = await translateAttributes(input);
+      if (field === 'metadata') {
+        updateMetadataTranslation(request_id, translated);
+      } else {
+        updateTranslation(request_id, translated);
+      }
+      return { request_id, attrsEn: translated };
     } catch (err) {
       console.error(`Translation failed for ${request_id}:`, err.message);
       return { request_id, error: err.message };

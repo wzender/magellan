@@ -166,7 +166,7 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
     return Object.values(groups).sort((a, b) => b.totalCount - a.totalCount);
   }, [errorPairs]);
 
-  if (loading) return <div className="loading">Loading confusion matrix...</div>;
+  if (loading) return <div className="loading">Loading accuracy breakdown...</div>;
   if (!data) return <div className="no-data">No data available</div>;
 
   const handleTypeClick = (trueType, predType) => {
@@ -469,13 +469,13 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
             className={`view-mode-btn${viewMode === 'matrix' ? ' active' : ''}`}
             onClick={() => setViewMode('matrix')}
           >
-            Matrix View
+            Accuracy Breakdown
           </button>
           <button
             className={`view-mode-btn${viewMode === 'errors' ? ' active' : ''}`}
             onClick={() => setViewMode('errors')}
           >
-            Error Explorer
+            Where It's Wrong
             {totalErrors > 0 && (
               <span className={`view-mode-pill${viewMode === 'errors' ? ' active' : ''}`}>
                 {totalErrors}
@@ -509,13 +509,13 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
           {/* ── Type Confusion Matrix Panel ── */}
           <div className="matrix-panel">
             <div className="matrix-panel-header">
-              <span className="matrix-panel-title">Type Confusion Matrix</span>
+              <span className="matrix-panel-title">Category Accuracy</span>
             </div>
             <div className="matrix-panel-body">
               <table className="confusion-matrix">
                 <thead>
                   <tr>
-                    <th>True \ Pred</th>
+                    <th>Actual \ Predicted</th>
                     {sortedTypeLabels.map(col => (
                       <th key={col}>
                         <span className="matrix-th-label" data-tooltip={col}>
@@ -581,7 +581,7 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
           {/* ── Subtype Confusion Matrix Panel ── */}
           <div className="matrix-panel">
             <div className="matrix-panel-header">
-              <span className="matrix-panel-title">Subtype Confusion Matrix</span>
+              <span className="matrix-panel-title">Subcategory Accuracy</span>
               {selectedTypePair && (
                 <span className="drawer-filter">
                   {selectedTypePair.true} → {selectedTypePair.pred}
@@ -592,13 +592,13 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
             <div className="matrix-panel-body">
               {!selectedTypePair ? (
                 <div className="no-selection-message compact">
-                  Click a cell in the Type Confusion Matrix above to view subtypes.
+                  Click a cell in the Category Accuracy table above to drill into subcategories.
                 </div>
               ) : subtypeMatrix?.rows.length > 0 ? (
                 <table className="confusion-matrix subtype-confusion-matrix">
                   <thead>
                     <tr>
-                      <th>True \ Pred</th>
+                      <th>Actual \ Predicted</th>
                       {sortedSubtypeColLabels.map(col => (
                         <th key={col}>
                           <span className="matrix-th-label" data-tooltip={col}>

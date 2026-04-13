@@ -35,7 +35,7 @@
           "description": "מוצר אלקטרוניקה בסיסי",
           "lastModified": "2026-03-15T09:50:02.871Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-XQMO7BN7",
           "upc": "705418996177",
           "name": "Item_k17ksn",
@@ -108,7 +108,7 @@
           "description": "מוצר ספרים פרמיום",
           "lastModified": "2026-03-12T09:01:03.029Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-VZDWILS5",
           "upc": "445827311748",
           "name": "Item_3ppmxg",
@@ -178,7 +178,7 @@
           "description": "מוצר בית צרכני",
           "lastModified": "2026-03-24T18:54:22.436Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-42DO3PKA",
           "upc": "59010808802",
           "name": "Item_bhqa28",
@@ -249,7 +249,7 @@
           "description": "מוצר אלקטרוניקה אדום",
           "lastModified": "2026-02-27T05:36:37.831Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-S62I1RC6",
           "upc": "682397637403",
           "name": "Item_8835l",
@@ -322,7 +322,7 @@
           "description": "מוצר ספורט פרמיום",
           "lastModified": "2026-03-17T11:03:32.181Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-HN2COU99",
           "upc": "196727271224",
           "name": "Item_v2gfcl",
@@ -396,7 +396,7 @@
           "description": "מוצר ריהוט בסיסי",
           "lastModified": "2026-03-21T20:48:29.720Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-NHRGWPIX",
           "upc": "325799327984",
           "name": "Item_3hgtw",
@@ -469,7 +469,7 @@
           "description": "מוצר ספורט סטנדרטי",
           "lastModified": "2026-03-02T11:23:25.911Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-10P6LK7D",
           "upc": "181945552727",
           "name": "Item_8kjyft",
@@ -542,7 +542,7 @@
           "description": "מוצר ביגוד מקצועי",
           "lastModified": "2026-03-02T06:59:14.821Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-K7764W8D",
           "upc": "220817368508",
           "name": "Item_3oos8",
@@ -617,7 +617,7 @@
           "description": "מוצר בית דלוקס",
           "lastModified": "2026-03-08T01:44:36.100Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-KIDP7M8Y",
           "upc": "893430481972",
           "name": "Item_zgtbd",
@@ -690,7 +690,7 @@
           "description": "מוצר ספרים פרמיום",
           "lastModified": "2026-03-02T05:49:44.822Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-ZLX4WH1O",
           "upc": "322836877029",
           "name": "Item_o456du",
@@ -760,7 +760,7 @@
           "description": "מוצר אלקטרוניקה סטנדרטי",
           "lastModified": "2026-03-01T15:52:46.217Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-HA7GLRAB",
           "upc": "919910349874",
           "name": "Item_6j6qi5",
@@ -832,7 +832,7 @@
           "description": "מוצר בית סטנדרטי",
           "lastModified": "2026-03-23T09:10:17.399Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-Q2IS1JFZ",
           "upc": "384432718174",
           "name": "Item_dkkntj",
@@ -908,7 +908,7 @@
           "description": "מוצר ספרים סטנדרטי",
           "lastModified": "2026-03-20T10:05:15.698Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-G4Z8V8M6",
           "upc": "772096285651",
           "name": "Item_v3xoto",
@@ -980,7 +980,7 @@
           "description": "מוצר בית כחול",
           "lastModified": "2026-02-27T21:40:28.635Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-Y6F3HNZ9",
           "upc": "263988683638",
           "name": "Item_5dpawd",
@@ -1051,7 +1051,7 @@
           "description": "מוצר ספורט בסיסי",
           "lastModified": "2026-03-21T18:20:21.694Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-QMSFXBF4",
           "upc": "924573067905",
           "name": "Item_pm848g",
@@ -1124,7 +1124,7 @@
           "description": "מוצר ספורט צרכני",
           "lastModified": "2026-03-06T12:24:05.049Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-T7GWWSGG",
           "upc": "173309118374",
           "name": "Item_93y44j",
@@ -1195,7 +1195,7 @@
           "description": "מוצר ספורט פרמיום",
           "lastModified": "2026-03-16T04:38:44.576Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-E5HYA4FF",
           "upc": "25382735932",
           "name": "Item_7r5ndr",
@@ -1267,7 +1267,7 @@
           "description": "מוצר ספרים אדום",
           "lastModified": "2026-03-03T02:53:14.723Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-8SD7FAYR",
           "upc": "619569308942",
           "name": "Item_fi2e0l",
@@ -1339,7 +1339,7 @@
           "description": "מוצר ריהוט כחול",
           "lastModified": "2026-03-11T21:24:10.552Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-OZAAP4UD",
           "upc": "510672552764",
           "name": "Item_0c092",
@@ -1410,7 +1410,7 @@
           "description": "מוצר מזון כחול",
           "lastModified": "2026-03-08T13:03:22.877Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-3IGIJUY2",
           "upc": "375632995233",
           "name": "Item_oci4l",
@@ -1480,7 +1480,7 @@
           "description": "מוצר אלקטרוניקה פרמיום",
           "lastModified": "2026-03-08T01:35:05.764Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-HS6B4DZA",
           "upc": "104881996323",
           "name": "Item_rlud7",
@@ -1550,7 +1550,7 @@
           "description": "מוצר ספרים קטן",
           "lastModified": "2026-03-04T22:31:42.984Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-TYFAYSFJ",
           "upc": "117232380002",
           "name": "Item_qb4g2j",
@@ -1624,7 +1624,7 @@
           "description": "מוצר מוזיקה גדול",
           "lastModified": "2026-03-26T09:44:46.288Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-1WM9TADM",
           "upc": "331258967910",
           "name": "Item_w7t9ym",
@@ -1699,7 +1699,7 @@
           "description": "מוצר אלקטרוניקה דלוקס",
           "lastModified": "2026-02-26T05:07:33.621Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-HJLKL0VY",
           "upc": "124327396210",
           "name": "Item_fa1aum",
@@ -1772,7 +1772,7 @@
           "description": "מוצר אלקטרוניקה אדום",
           "lastModified": "2026-03-03T07:25:28.304Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-GROQ4AWM",
           "upc": "618558400696",
           "name": "Item_s8qrnb",
@@ -1844,7 +1844,7 @@
           "description": "מוצר ביגוד קטן",
           "lastModified": "2026-03-12T01:43:17.864Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-G0H3J7OC",
           "upc": "620456604759",
           "name": "Item_cetnsd",
@@ -1915,7 +1915,7 @@
           "description": "מוצר ביגוד אדום",
           "lastModified": "2026-03-12T19:39:53.269Z"
         },
-        "attributes_en": {
+        "en_attributes": {
           "sku": "SKU-5ZLRT9WA",
           "upc": "542123262571",
           "name": "Item_ayg9b2",

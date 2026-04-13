@@ -1,7 +1,7 @@
 /**
- * Syncs the attributes_en sample-clear to Postgres.
- * Reads which request_ids have blank attributes_en in the CSVs and
- * NULLs attributes_en for those ids in all per-run tables + run_results.
+ * Syncs the en_attributes sample-clear to Postgres.
+ * Reads which request_ids have blank en_attributes in the CSVs and
+ * NULLs en_attributes for those ids in all per-run tables + run_results.
  *
  * Usage: node server/mock/clearAttributesEnSamplePostgres.js
  */
@@ -14,24 +14,24 @@ const { query, pool } = require('../db');
 
 const RUNS_DIR = path.join(__dirname, '../../data/runs');
 
-// Collect all request_ids that have no attributes_en across all run CSVs
+// Collect all request_ids that have no en_attributes across all run CSVs
 const cleared = new Set();
 fs.readdirSync(RUNS_DIR).filter(f => f.endsWith('.csv')).forEach(fname => {
   const rows = csv.parse(
     fs.readFileSync(path.join(RUNS_DIR, fname), 'utf-8'),
     { columns: true, skip_empty_lines: true }
   );
-  rows.forEach(r => { if (!r.attributes_en) cleared.add(r.request_id); });
+  rows.forEach(r => { if (!r.en_attributes) cleared.add(r.request_id); });
 });
 
 const ids = Array.from(cleared);
-console.log(`Found ${ids.length} request_ids with blank attributes_en in CSVs`);
+console.log(`Found ${ids.length} request_ids with blank en_attributes in CSVs`);
 
 async function run() {
   // 1. run_results (old-style schema)
   try {
     const res = await query(
-      `UPDATE run_results SET attributes_en = NULL WHERE record_id = ANY($1)`,
+      `UPDATE run_results SET en_attributes = NULL WHERE record_id = ANY($1)`,
       [ids]
     );
     console.log(`✓ run_results: ${res.rowCount} rows cleared`);
@@ -64,7 +64,7 @@ async function run() {
       if (colRes.rows.length === 0) { console.warn(`  ⚠ No id column for "${tbl}", skipping`); continue; }
       const idCol = colRes.rows[0].column_name;
       const res = await query(
-        `UPDATE "${tbl}" SET attributes_en = NULL WHERE ${idCol} = ANY($1)`,
+        `UPDATE "${tbl}" SET en_attributes = NULL WHERE ${idCol} = ANY($1)`,
         [ids]
       );
       console.log(`  ✓ "${tbl}": ${res.rowCount} rows cleared`);

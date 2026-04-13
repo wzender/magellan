@@ -87,7 +87,7 @@ async function seedDatabase() {
             runId,
             r.request_id,
             JSON.stringify(r.attributes),
-            JSON.stringify(r.attributes_en),
+            JSON.stringify(r.en_attributes),
             JSON.stringify(r.metadata),
             r.true_type,
             r.pred_type,
@@ -96,7 +96,7 @@ async function seedDatabase() {
           ]);
 
           await query(
-            `INSERT INTO run_results (run_id, request_id, attributes, attributes_en, metadata, true_type, pred_type, true_subtype, pred_subtype)
+            `INSERT INTO run_results (run_id, request_id, attributes, en_attributes, metadata, true_type, pred_type, true_subtype, pred_subtype)
              VALUES ${values}`,
             flatParams
           );

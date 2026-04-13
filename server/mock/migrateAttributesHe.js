@@ -1,6 +1,6 @@
 /**
  * One-time migration: add Hebrew `attributes` column and rename old English
- * `attributes` → `attributes_en` in all run CSV files under data/runs/.
+ * `attributes` → `en_attributes` in all run CSV files under data/runs/.
  */
 
 const fs   = require('fs');
@@ -66,7 +66,7 @@ function migrateFile(filePath) {
   if (rows.length === 0) return;
 
   const firstRow = rows[0];
-  if ('attributes_en' in firstRow) {
+  if ('en_attributes' in firstRow) {
     console.log(`  already migrated, skipping`);
     return;
   }
@@ -78,7 +78,7 @@ function migrateFile(filePath) {
     return {
       ...row,
       attributes:    JSON.stringify(heAttrs),
-      attributes_en: JSON.stringify(enAttrs),
+      en_attributes: JSON.stringify(enAttrs),
     };
   });
 

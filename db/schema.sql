@@ -29,7 +29,7 @@ CREATE TABLE run_results (
   run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
   request_id VARCHAR(255) NOT NULL,
   attributes JSONB,
-  attributes_en JSONB,
+  en_attributes JSONB,
   metadata JSONB,
   true_type VARCHAR(100) NOT NULL,
   pred_type VARCHAR(100) NOT NULL,
@@ -65,7 +65,7 @@ CREATE INDEX idx_leaderboard_benchmark_id ON leaderboard(benchmark_id);
 
 -- Index on attributes and metadata for potential filtering by content
 CREATE INDEX idx_run_results_attributes ON run_results USING GIN(attributes);
-CREATE INDEX idx_run_results_attributes_en ON run_results USING GIN(attributes_en);
+CREATE INDEX idx_run_results_en_attributes ON run_results USING GIN(en_attributes);
 CREATE INDEX idx_run_results_metadata ON run_results USING GIN(metadata);
 
 -- Index for transition matrix queries (comparing two runs)
