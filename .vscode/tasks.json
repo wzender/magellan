@@ -32,7 +32,7 @@
       "id": "docxExcludePatterns",
       "type": "promptString",
       "description": "Optional exclude patterns, comma-separated",
-      "default": ".git,node_modules,venv,*.log,*.docx"
+      "default": ".git,node_modules,venv,*.log,*.docx,*.json,*.yaml,*Docker*"
     }
   ]
 }

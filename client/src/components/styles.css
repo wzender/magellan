@@ -1030,6 +1030,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   background: transparent;
   user-select: none;
   z-index: 10;
+  border-right: 1px solid var(--border-strong);
 }
 
 .resize-handle:hover,

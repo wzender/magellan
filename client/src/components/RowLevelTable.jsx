@@ -17,31 +17,31 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
         headerRows: [
           [
             { label: '', colspan: 1, isGroup: false },
-            { label: 'Correct Label', colspan: 2, isGroup: true },
+            { label: 'Actual', colspan: 2, isGroup: true },
             { label: run1Label, colspan: 2, isGroup: true },
             { label: run2Label, colspan: 2, isGroup: true },
             { label: 'Details', colspan: 2, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
-            { key: 'true_type', label: 'Actual Category', width: 100, isGroup: false },
-            { key: 'true_subtype', label: 'Actual Subcategory', width: 120, isGroup: false },
-            { key: 'pred_type', label: 'Predicted Category', width: 100, isGroup: false },
-            { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
-            { key: 'run2_pred_type', label: 'Predicted Category', width: 100, isGroup: false },
-            { key: 'run2_pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
+            { key: 'true_type', label: 'Type', width: 100, isGroup: false },
+            { key: 'true_subtype', label: 'Subtype', width: 120, isGroup: false },
+            { key: 'pred_type', label: 'Type', width: 100, isGroup: false },
+            { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
+            { key: 'run2_pred_type', label: 'Type', width: 100, isGroup: false },
+            { key: 'run2_pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
             { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
           ]
         ],
         columns: [
           { key: 'request_id', label: 'Request ID', width: 100 },
-          { key: 'true_type', label: 'Actual Category', width: 100 },
-          { key: 'true_subtype', label: 'Actual Subcategory', width: 120 },
-          { key: 'pred_type', label: 'Predicted Category', width: 100 },
-          { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120 },
-          { key: 'run2_pred_type', label: 'Predicted Category', width: 100 },
-          { key: 'run2_pred_subtype', label: 'Predicted Subcategory', width: 120 },
+          { key: 'true_type', label: 'Actual Type', width: 100 },
+          { key: 'true_subtype', label: 'Actual Subtype', width: 120 },
+          { key: 'pred_type', label: 'Predicted Type', width: 100 },
+          { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
+          { key: 'run2_pred_type', label: 'Predicted Type', width: 100 },
+          { key: 'run2_pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'attributes', label: 'Attributes', width: 220 },
           { key: 'metadata', label: 'Metadata', width: 220 }
         ]
@@ -50,21 +50,27 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
       return {
         headerRows: [
           [
+            { label: '', colspan: 1, isGroup: false },
+            { label: 'Actual', colspan: 2, isGroup: true },
+            { label: 'Predicted', colspan: 2, isGroup: true },
+            { label: 'Details', colspan: 2, isGroup: true }
+          ],
+          [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
-            { key: 'true_type', label: 'Actual Category', width: 100, isGroup: false },
-            { key: 'pred_type', label: 'Predicted Category', width: 100, isGroup: false },
-            { key: 'true_subtype', label: 'Actual Subcategory', width: 120, isGroup: false },
-            { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120, isGroup: false },
+            { key: 'true_type', label: 'Type', width: 100, isGroup: false },
+            { key: 'true_subtype', label: 'Subtype', width: 120, isGroup: false },
+            { key: 'pred_type', label: 'Type', width: 100, isGroup: false },
+            { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
             { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
           ]
         ],
         columns: [
           { key: 'request_id', label: 'Request ID', width: 100 },
-          { key: 'true_type', label: 'Actual Category', width: 100 },
-          { key: 'pred_type', label: 'Predicted Category', width: 100 },
-          { key: 'true_subtype', label: 'Actual Subcategory', width: 120 },
-          { key: 'pred_subtype', label: 'Predicted Subcategory', width: 120 },
+          { key: 'true_type', label: 'Actual Type', width: 100 },
+          { key: 'true_subtype', label: 'Actual Subtype', width: 120 },
+          { key: 'pred_type', label: 'Predicted Type', width: 100 },
+          { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'attributes', label: 'Attributes', width: 220 },
           { key: 'metadata', label: 'Metadata', width: 220 }
         ]
@@ -309,8 +315,16 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     const allData = await getExportData('_translate');
     if (!allData || allData.length === 0) return;
 
+    const hasContent = (val) => {
+      if (!val) return false;
+      if (typeof val === 'object') return Object.keys(val).length > 0;
+      if (typeof val === 'string') { try { const p = JSON.parse(val); return typeof p === 'object' && Object.keys(p).length > 0; } catch { return val.trim().length > 0; } }
+      return false;
+    };
+
     const records = allData
-      .filter(r => !r[enField] || Object.keys(r[enField]).length === 0)
+      .filter(r => !hasContent(r[enField]))   // no translation yet
+      .filter(r => hasContent(r[field]))       // but source field has content to translate
       .map(r => ({ request_id: r.request_id, [field]: r[field] }));
 
     if (records.length === 0) {
@@ -422,9 +436,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             {columns.headerRows.map((headerRow, rowIndex) => (
               <tr key={rowIndex}>
                 {headerRow.map((col, index) => {
-                  const actualIndex = rowIndex === columns.headerRows.length - 1
-                    ? columns.headerRows.slice(0, -1).reduce((sum, row) => sum + row.length, 0) + index
-                    : index;
+                  const actualIndex = index;
                   return (
                     <th
                       key={`${rowIndex}-${index}`}

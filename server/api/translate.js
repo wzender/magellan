@@ -121,6 +121,9 @@ router.post('/translate', async (req, res) => {
     const { request_id } = record;
     try {
       const input = field === 'metadata' ? record.metadata : record.attributes;
+      if (!input || (typeof input === 'object' && Object.keys(input).length === 0)) {
+        return { request_id, skipped: true };
+      }
       const translated = await translateAttributes(input);
       if (field === 'metadata') {
         updateMetadataTranslation(request_id, translated);
