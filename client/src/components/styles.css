@@ -25,6 +25,7 @@
   --section-header-h:  38px;  /* .matrix-panel-header / .records-section-header */
   --table-toolbar-h:   34px;  /* .table-toolbar inside RowLevelTable */
   --thead-row-h:       28px;  /* single <tr> inside a sticky thead */
+  --comparison-bar-h:  54px;  /* .comparison-summary-bar (wraps to ~2 lines) */
 }
 
 * { box-sizing: border-box; }
@@ -2069,6 +2070,11 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   position: sticky;
   top: var(--topbar-h);
   z-index: 12;
+}
+
+/* Section headers inside comparison panel sit below the summary bar */
+.run-comparison-panel .error-section-header {
+  top: calc(var(--topbar-h) + var(--comparison-bar-h));
 }
 
 .comparison-title {
