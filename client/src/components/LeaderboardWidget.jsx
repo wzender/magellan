@@ -152,6 +152,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
   return (
     <div className="leaderboard-widget">
       <h2>Leaderboard</h2>
+      <div className="leaderboard-table-wrapper">
       <table className="leaderboard-table">
         <thead>
           <tr>
@@ -257,6 +258,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
           ))}
         </tbody>
       </table>
+      </div>
       <div className="leaderboard-hint">
         Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
       </div>

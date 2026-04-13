@@ -17,6 +17,14 @@
   --success:        #22c55e;
   --error:          #ef4444;
   --warning:        #f59e0b;
+
+  /* Sticky layout heights — keep in sync if you change padding/font-size */
+  --header-h:          44px;  /* .dashboard-header */
+  --toolbar-h:         38px;  /* .toolbar-row */
+  --topbar-h:          calc(var(--header-h) + var(--toolbar-h));   /* 82px */
+  --section-header-h:  38px;  /* .matrix-panel-header / .records-section-header */
+  --table-toolbar-h:   34px;  /* .table-toolbar inside RowLevelTable */
+  --thead-row-h:       28px;  /* single <tr> inside a sticky thead */
 }
 
 * { box-sizing: border-box; }
@@ -36,8 +44,9 @@ body {
 .dashboard {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  /* NO overflow here — any overflow value turns this into a scroll container
+     and breaks position:sticky on all descendants */
 }
 
 .dashboard-header {
@@ -47,6 +56,9 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .dashboard-header h1 {
@@ -107,6 +119,9 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: sticky;
+  top: var(--header-h);
+  z-index: 99;
 }
 
 .benchmark-buttons {
@@ -271,6 +286,7 @@ select:focus {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  min-height: 0;
 }
 
 .leaderboard-widget h2 {
@@ -301,6 +317,10 @@ select:focus {
   opacity: 0.35;
 }
 
+.leaderboard-table-wrapper {
+  /* No local scroll — unified page scroll */
+}
+
 .leaderboard-table {
   width: 100%;
   border-collapse: collapse;
@@ -309,6 +329,9 @@ select:focus {
 
 .leaderboard-table thead {
   background: var(--bg);
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 5;
 }
 
 .leaderboard-table th {
@@ -403,9 +426,6 @@ select:focus {
 
 .main-content {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   background: var(--bg);
 }
 
@@ -432,6 +452,9 @@ select:focus {
   padding: 0.42rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 12;
 }
 
 .matrix-panel-title {
@@ -444,13 +467,12 @@ select:focus {
 }
 
 .matrix-panel-body {
-  overflow: auto;
-  max-height: 40vh;
+  /* no overflow — keep this as a non-scroll container so thead sticky
+     is resolved against the page scroll, not a local context */
 }
 
 .matrix-panel-body thead th {
-  position: sticky;
-  top: 0;
+  /* sticky is set on <thead> itself — no per-cell override needed */
   background: var(--bg);
   z-index: 1;
 }
@@ -472,7 +494,7 @@ select:focus {
 .subtype-matrix thead {
   background: var(--bg);
   position: sticky;
-  top: 0;
+  top: calc(var(--topbar-h) + var(--section-header-h));
   z-index: 3;
 }
 
@@ -769,7 +791,6 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   background: var(--surface);
   display: flex;
   flex-direction: column;
-  min-height: 88vh;
   border-top: 1px solid var(--border);
 }
 
@@ -838,6 +859,9 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 12;
 }
 
 .records-section-title {
@@ -868,9 +892,8 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 
 .table-wrapper {
   flex: 1;
-  min-height: 0;
-  max-height: 65vh;
-  overflow: auto;
+  /* no overflow — keep as a non-scroll container so thead sticky
+     resolves against the page scroll, not a local context */
   border: 1px solid var(--border);
   border-radius: 6px;
 }
@@ -884,7 +907,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .records-table thead {
   background: var(--bg);
   position: sticky;
-  top: 0;
+  top: calc(var(--topbar-h) + var(--section-header-h) + var(--table-toolbar-h));
   z-index: 2;
 }
 
@@ -1044,7 +1067,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   background: var(--bg);
   padding: 3px 4px;
   position: sticky;
-  top: 2.2rem;
+  top: calc(var(--topbar-h) + var(--section-header-h) + var(--table-toolbar-h) + var(--thead-row-h));
   z-index: 1;
 }
 .column-filter-input {
@@ -1072,7 +1095,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   flex-wrap: wrap;
   margin-bottom: 0.25rem;
   position: sticky;
-  top: 0;
+  top: calc(var(--topbar-h) + var(--section-header-h));
   z-index: 10;
   background: var(--bg);
   padding-bottom: 0.25rem;
@@ -1416,8 +1439,7 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .error-groups-list {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  flex: 1;
+  /* no overflow — unified page scroll; sticky headers resolve to viewport */
 }
 
 /* ── Section headers (cross-type / within-type) ── */
@@ -1433,8 +1455,8 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   font-size: 0.78rem;
   font-weight: 700;
   position: sticky;
-  top: 0;
-  z-index: 2;
+  top: calc(var(--topbar-h) + var(--section-header-h));
+  z-index: 11;
   border-bottom: 1px solid transparent;
 }
 
@@ -2032,8 +2054,6 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
 .run-comparison-panel {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 /* ── Summary bar ── */
@@ -2047,8 +2067,8 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   border-bottom: 1px solid var(--border);
   font-size: 0.8rem;
   position: sticky;
-  top: 0;
-  z-index: 2;
+  top: var(--topbar-h);
+  z-index: 12;
 }
 
 .comparison-title {
