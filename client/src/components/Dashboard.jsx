@@ -1,396 +1,334 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './styles.css';
+import BenchmarkGallery from './BenchmarkGallery';
 import LeaderboardWidget from './LeaderboardWidget';
-import ConfusionMatrixPanel from './ConfusionMatrixPanel';
-import RunComparisonPanel from './RunComparisonPanel';
+import TypeHealthGrid from './TypeHealthGrid';
+import RowLevelTable from './RowLevelTable';
 
-/**
- * Main Dashboard Component
- * Single-page application for classification evaluation and analysis
- */
-function Dashboard() {
-  const [benchmarks, setBenchmarks] = useState([]);
-  const [selectedBenchmark, setSelectedBenchmark] = useState(null);
-  const [runs, setRuns] = useState([]);
-  const [selectedRuns, setSelectedRuns] = useState([]);
-  const [filter, setFilter] = useState('all');
-  const [selectedCell, setSelectedCell] = useState(null);
-  const [selectedTypePair, setSelectedTypePair] = useState(null);
-  const [selectedSubtypePair, setSelectedSubtypePair] = useState(null);
-  const [leaderboardData, setLeaderboardData] = useState([]);
-  const [selectedRunNames, setSelectedRunNames] = useState([]);
-  const [confusionMatrixData, setConfusionMatrixData] = useState(null);
-  const [subtypeMatrixData, setSubtypeMatrixData] = useState(null);
-  const [allRecordsData, setAllRecordsData] = useState(null);
-  const [filteredRecordsData, setFilteredRecordsData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const isConfusionMode = selectedRuns.length === 1;
-  const isTransitionMode = selectedRuns.length === 2;
+/* ── helpers ─────────────────────────────────────────────── */
+function pctNum(n) { return (n * 100).toFixed(1); }
 
-  // Load benchmarks on mount
-  useEffect(() => {
-    const fetchBenchmarks = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/benchmarks');
-        const data = await response.json();
-        setBenchmarks(data);
-        if (data.length > 0) {
-          setSelectedBenchmark(data[0].id);
-        }
-      } catch (err) {
-        setError('Failed to load benchmarks');
-        console.error('Error loading benchmarks:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBenchmarks();
-  }, []);
+/* ── SummaryBar ──────────────────────────────────────────── */
+function SummaryBar({ typeHealth, typeHealth2, run1Name, run2Name }) {
+  if (!typeHealth || typeHealth.length === 0) return null;
 
-  // Load runs when benchmark changes
-  useEffect(() => {
-    if (!selectedBenchmark) return;
+  const total    = typeHealth.reduce((s, t) => s + t.total, 0);
+  const correct  = typeHealth.reduce((s, t) => s + t.correct, 0);
+  const crossType = typeHealth.reduce((s, t) => s + t.cross_type_wrong, 0);
+  const sameType  = typeHealth.reduce((s, t) => s + t.same_type_wrong, 0);
+  const acc       = correct / total;
+  const crossRate = crossType / total;
 
-    const fetchRuns = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/runs?benchmark_id=${selectedBenchmark}`);
-        const data = await response.json();
-        setRuns(data);
-        // Auto-select first run if available
-        if (data.length > 0 && selectedRuns.length === 0) {
-          setSelectedRuns([data[0].id]);
-        }
-      } catch (err) {
-        setError('Failed to load runs');
-        console.error('Error loading runs:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRuns();
-  }, [selectedBenchmark]);
+  if (typeHealth2) {
+    const total2   = typeHealth2.reduce((s, t) => s + t.total, 0);
+    const correct2 = typeHealth2.reduce((s, t) => s + t.correct, 0);
+    const acc2     = correct2 / total2;
+    const delta    = acc2 - acc;
+    const deltaStr = (delta >= 0 ? '+' : '') + pctNum(delta) + '%';
+    const deltaClass = delta > 0 ? 'stat-delta-up' : delta < 0 ? 'stat-delta-down' : 'stat-delta-flat';
 
-  // Load leaderboard when benchmark changes
-  useEffect(() => {
-    if (!selectedBenchmark) return;
-
-    const fetchLeaderboard = async () => {
-      try {
-        const response = await fetch(`/api/leaderboard?benchmark_id=${selectedBenchmark}`);
-        const data = await response.json();
-        setLeaderboardData(data);
-      } catch (err) {
-        console.error('Error loading leaderboard:', err);
-      }
-    };
-    fetchLeaderboard();
-  }, [selectedBenchmark]);
-
-  // Load confusion matrix when run changes (single run mode)
-  useEffect(() => {
-    if (selectedRuns.length !== 1) {
-      setConfusionMatrixData(null);
-      return;
-    }
-
-    const fetchConfusionMatrix = async () => {
-      try {
-        setLoading(true);
-        let url = `/api/confusion-matrix?run_id=${selectedRuns[0]}`;
-        if (filter === 'incorrect') url += '&filter=incorrect';
-        const response = await fetch(url);
-        const data = await response.json();
-        setConfusionMatrixData(data);
-        // Reset drill-down state so stale subtype/record data doesn't linger
-        setSelectedCell(null);
-        setSelectedTypePair(null);
-        setSelectedSubtypePair(null);
-        setFilteredRecordsData(null);
-      } catch (err) {
-        setError('Failed to load confusion matrix');
-        console.error('Error loading confusion matrix:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchConfusionMatrix();
-  }, [selectedRuns, filter]);
-
-  // Load subtype confusion matrix when type pair changes
-  useEffect(() => {
-    if (selectedRuns.length !== 1 || !selectedTypePair) {
-      setSubtypeMatrixData(null);
-      return;
-    }
-
-    const fetchSubtypeMatrix = async () => {
-      try {
-        setLoading(true);
-        let url = `/api/confusion-matrix/subtype?run_id=${selectedRuns[0]}&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
-        if (filter === 'incorrect') url += '&filter=incorrect';
-        const response = await fetch(url);
-        const data = await response.json();
-        setSubtypeMatrixData(data.matrix);
-      } catch (err) {
-        console.error('Error loading subtype matrix:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchSubtypeMatrix();
-  }, [selectedRuns, selectedTypePair, filter]);
-
-  // Load all records when selected runs change (single run or transition mode)
-  useEffect(() => {
-    if (selectedRuns.length === 0) return;
-
-    const fetchAllRecords = async () => {
-      try {
-        setLoading(true);
-        let url;
-        if (isTransitionMode && selectedRuns.length === 2) {
-          url = `/api/records?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&limit=1000`;
-        } else {
-          url = `/api/records?run_id=${selectedRuns[0]}&limit=1000`;
-        }
-
-        const response = await fetch(url);
-        const data = await response.json();
-        setAllRecordsData(data);
-        setFilteredRecordsData(data);
-        setSelectedTypePair(null);
-        setSelectedSubtypePair(null);
-      } catch (err) {
-        console.error('Error loading all records:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAllRecords();
-  }, [selectedRuns, isTransitionMode]);
-
-  // Fetch filtered records from API when type/subtype selection changes
-  const fetchFilteredRecords = useCallback(async () => {
-    if (selectedRuns.length === 0 || !isConfusionMode) return;
-    try {
-      let url = `/api/records?run_id=${selectedRuns[0]}&limit=1000`;
-      if (filter === 'incorrect') url += '&filter=incorrect';
-      if (selectedTypePair) {
-        url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
-      }
-      if (selectedSubtypePair) {
-        url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
-      }
-      const response = await fetch(url);
-      const data = await response.json();
-      setFilteredRecordsData(data);
-    } catch (err) {
-      console.error('Error fetching filtered records:', err);
-    }
-  }, [selectedTypePair, selectedSubtypePair, selectedRuns, isConfusionMode, filter]);
-
-  useEffect(() => {
-    fetchFilteredRecords();
-  }, [fetchFilteredRecords]);
-
-  // Handle run selection by clicking a leaderboard row (single-run confusion mode)
-  const handleLeaderboardRunSelect = (runId) => {
-    if (selectedRuns.length === 1 && selectedRuns[0] === runId) {
-      // keep selected 1 run; no toggle off (maintain at least one active run)
-      return;
-    }
-
-    setSelectedRuns([runId]);
-    setSelectedCell(null);
-    setSelectedTypePair(null);
-    setSelectedSubtypePair(null);
-  };
-
-  // Handle run toggle from checkboxes (selection column, 1-2 runs)
-  const handleRunToggle = (runId) => {
-    if (selectedRuns.includes(runId)) {
-      setSelectedRuns(selectedRuns.filter(id => id !== runId));
-    } else if (selectedRuns.length < 2) {
-      setSelectedRuns([...selectedRuns, runId]);
-    }
-    setSelectedCell(null);
-    setSelectedTypePair(null);
-    setSelectedSubtypePair(null);
-  };
-
-  // Track run names for selected run IDs.
-  useEffect(() => {
-    const selectedNames = selectedRuns
-      .map(runId => {
-        const match = runs.find(r => String(r.id) === String(runId));
-        return match ? match.run_name : null;
-      })
-      .filter(name => !!name);
-    setSelectedRunNames(selectedNames);
-  }, [selectedRuns, runs]);
-
-  // Handle confusion matrix type cell click (toggle)
-  const handleCellClick = (trueVal, predVal) => {
-    if (!trueVal && !predVal) {
-      setSelectedCell(null);
-      setSelectedTypePair(null);
-      setSelectedSubtypePair(null);
-      return;
-    }
-
-    const isCurrentlySelected =
-      selectedTypePair &&
-      selectedTypePair.true === trueVal &&
-      selectedTypePair.pred === predVal;
-
-    if (isCurrentlySelected) {
-      setSelectedCell(null);
-      setSelectedTypePair(null);
-      setSelectedSubtypePair(null);
-    } else {
-      setSelectedCell({ true: trueVal, pred: predVal });
-      setSelectedTypePair({ true: trueVal, pred: predVal });
-      setSelectedSubtypePair(null); // Reset subtype filter when selecting a type
-    }
-  };
-
-  // Handle subtype confusion matrix cell click (toggle within selected type)
-  const handleSubtypeCellClick = (trueSubtype, predSubtype) => {
-    if (
-      selectedSubtypePair &&
-      selectedSubtypePair.true_subtype === trueSubtype &&
-      selectedSubtypePair.pred_subtype === predSubtype
-    ) {
-      setSelectedSubtypePair(null);
-      if (selectedTypePair) {
-        setSelectedCell({ true: selectedTypePair.true, pred: selectedTypePair.pred });
-      } else {
-        setSelectedCell(null);
-      }
-      return;
-    }
-
-    setSelectedCell({ trueSubtype, predSubtype });
-    setSelectedSubtypePair({ true_subtype: trueSubtype, pred_subtype: predSubtype });
-  };
-
-
-  const fetchAllConfusionRecords = async () => {
-    let url = `/api/records?run_id=${selectedRuns[0]}&limit=999999`;
-    if (filter === 'incorrect') url += '&filter=incorrect';
-    if (selectedTypePair) url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
-    if (selectedSubtypePair) url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
-    const resp = await fetch(url);
-    return resp.json();
-  };
+    return (
+      <div className="summary-bar summary-bar-compare">
+        <div className="summary-stat">
+          <span className="summary-run-name">{run1Name}</span>
+          <span className="summary-big-num">{pctNum(acc)}%</span>
+          <span className="summary-label">accuracy</span>
+        </div>
+        <div className={`summary-delta ${deltaClass}`}>
+          <span className="summary-delta-num">{deltaStr}</span>
+          <span className="summary-label">vs {run2Name}</span>
+        </div>
+        <div className="summary-stat">
+          <span className="summary-run-name">{run2Name}</span>
+          <span className="summary-big-num">{pctNum(acc2)}%</span>
+          <span className="summary-label">accuracy</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Model Performance Dashboard</h1>
+    <div className="summary-bar">
+      <div className="summary-stat summary-stat-main">
+        <span className="summary-big-num">{pctNum(acc)}%</span>
+        <span className="summary-label">Overall accuracy</span>
+      </div>
+      <div className="summary-divider" />
+      <div className="summary-stat summary-stat-warn">
+        <span className="summary-big-num">{pctNum(1 - acc - crossRate)}%</span>
+        <span className="summary-label">Same-type wrong</span>
+        <span className="summary-sublabel">minor error</span>
+      </div>
+      <div className="summary-divider" />
+      <div className="summary-stat summary-stat-danger">
+        <span className="summary-big-num">{pctNum(crossRate)}%</span>
+        <span className="summary-label">Cross-type wrong</span>
+        <span className="summary-sublabel">severe error</span>
+      </div>
+      <div className="summary-divider" />
+      <div className="summary-stat summary-stat-neutral">
+        <span className="summary-big-num">{total.toLocaleString()}</span>
+        <span className="summary-label">Total records</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Dashboard ───────────────────────────────────────────── */
+function Dashboard() {
+  const [screen, setScreen]             = useState('gallery');
+  const [benchmarks, setBenchmarks]     = useState([]);
+  const [allLeaderboards, setAllLeaderboards] = useState({});
+  const [selectedBenchmark, setSelectedBenchmark] = useState(null);
+  const [leaderboard, setLeaderboard]   = useState([]);
+  const [selectedRunIds, setSelectedRunIds] = useState([]);
+  const [typeHealth, setTypeHealth]     = useState([]);
+  const [typeHealth2, setTypeHealth2]   = useState(null);
+  const [recordQuery, setRecordQuery]     = useState(null);
+  const [recordsData, setRecordsData]     = useState(null); // { data, pagination }
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [correctnessFilter, setCorrectnessFilter] = useState(null); // null | 'correct' | 'same_type' | 'cross_type'
+
+  /* ── initial load: benchmarks + all leaderboards ── */
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      try {
+        const bRes  = await fetch('/api/benchmarks');
+        const bData = await bRes.json();
+        setBenchmarks(bData);
+
+        const lbMap = {};
+        await Promise.all(bData.map(async b => {
+          const lRes  = await fetch(`/api/leaderboard?benchmark_id=${b.id}`);
+          const lData = await lRes.json();
+          lbMap[b.id] = lData;
+        }));
+        setAllLeaderboards(lbMap);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  /* ── when benchmark selected: set leaderboard + auto-select champion ── */
+  const handleBenchmarkSelect = useCallback(async (benchmark) => {
+    setSelectedBenchmark(benchmark);
+    const lb = allLeaderboards[benchmark.id] || [];
+    setLeaderboard(lb);
+    const champion = lb[0];
+    setTypeHealth([]);
+    setTypeHealth2(null);
+    setRecordQuery(null);
+    setRecordsData(null);
+    setScreen('benchmark');
+    if (champion) {
+      setSelectedRunIds([champion.run_id]);
+      // Always re-fetch — useEffect won't fire if the same run_id was already selected
+      const res  = await fetch(`/api/type-health?run_id=${champion.run_id}`);
+      const data = await res.json();
+      setTypeHealth(data);
+    } else {
+      setSelectedRunIds([]);
+    }
+  }, [allLeaderboards]);
+
+  /* ── load type health when run 1 changes ── */
+  useEffect(() => {
+    if (selectedRunIds.length === 0) return;
+    const load = async () => {
+      const res  = await fetch(`/api/type-health?run_id=${selectedRunIds[0]}`);
+      const data = await res.json();
+      setTypeHealth(data);
+    };
+    load();
+  }, [selectedRunIds[0]]);
+
+  /* ── load type health for run 2 when comparing ── */
+  useEffect(() => {
+    if (selectedRunIds.length < 2) { setTypeHealth2(null); return; }
+    const load = async () => {
+      const res  = await fetch(`/api/type-health?run_id=${selectedRunIds[1]}`);
+      const data = await res.json();
+      setTypeHealth2(data);
+    };
+    load();
+  }, [selectedRunIds[1]]);
+
+  /* ── row click: switch to this run as the only selected run ── */
+  const handleRunSelect = (runId) => {
+    setSelectedRunIds(prev => prev[0] === runId ? prev : [runId]);
+    setTypeHealth2(null);
+    setRecordQuery(null);
+    setRecordsData(null);
+  };
+
+  /* ── compare checkbox toggle (up to 2 runs) ── */
+  const handleRunToggle = (runId) => {
+    setSelectedRunIds(prev => {
+      if (prev.includes(runId)) {
+        const next = prev.filter(id => id !== runId);
+        return next.length > 0 ? next : prev; // always keep at least 1
+      }
+      if (prev.length < 2) return [...prev, runId];
+      return prev;
+    });
+    setRecordQuery(null);
+    setRecordsData(null);
+  };
+
+  /* ── record fetch ── */
+  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null) => {
+    let url = runId2
+      ? `/api/records?run_id1=${runId1}&run_id2=${runId2}&limit=${limit}`
+      : `/api/records?run_id=${runId1}&limit=${limit}`;
+    if (trueType)    url += `&true_type=${encodeURIComponent(trueType)}`;
+    if (trueSubtype) url += `&true_subtype=${encodeURIComponent(trueSubtype)}`;
+    if (filter)      url += `&filter=${filter}`;
+    const res = await fetch(url);
+    return res.json();
+  }, []);
+
+  const handleViewRecords = useCallback(async (trueType, trueSubtype) => {
+    const runId1 = selectedRunIds[0];
+    const runId2 = selectedRunIds[1] ?? null;
+    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype });
+    setRecordsLoading(true);
+    setRecordsData(null);
+    try {
+      const data = await fetchRecords(runId1, trueType, trueSubtype, 50, correctnessFilter, runId2);
+      setRecordsData(data);
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, [selectedRunIds, fetchRecords, correctnessFilter]);
+
+  /* for RowLevelTable export: fetch all records without limit */
+  const handleExportRecords = useCallback(async () => {
+    if (!recordQuery) return { data: [], pagination: { total: 0 } };
+    return fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999, correctnessFilter, recordQuery.runId2 ?? null);
+  }, [recordQuery, fetchRecords, correctnessFilter]);
+
+  /* re-fetch when correctness filter changes while a query is active */
+  useEffect(() => {
+    if (!recordQuery) return;
+    const refetch = async () => {
+      setRecordsLoading(true);
+      setRecordsData(null);
+      try {
+        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null);
+        setRecordsData(data);
+      } finally {
+        setRecordsLoading(false);
+      }
+    };
+    refetch();
+  }, [correctnessFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* re-fetch after translation */
+  const handleTranslated = useCallback(async () => {
+    if (!recordQuery) return;
+    const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null);
+    setRecordsData(data);
+  }, [recordQuery, fetchRecords, correctnessFilter]);
+
+  /* ── run names for summary bar ── */
+  const run1Entry = leaderboard.find(e => e.run_id === selectedRunIds[0]);
+  const run2Entry = leaderboard.find(e => e.run_id === selectedRunIds[1]);
+  const run1Name  = run1Entry?.run_name ?? '';
+  const run2Name  = run2Entry?.run_name ?? '';
+
+  const recordsRef = useRef(null);
+  useEffect(() => {
+    if (!recordsLoading && recordsData) {
+      recordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [recordsLoading, recordsData]);
+
+  const recordsTitle = recordQuery
+    ? recordQuery.trueSubtype
+      ? `${recordQuery.trueType} › ${recordQuery.trueSubtype}`
+      : `All ${recordQuery.trueType} records`
+    : '';
+
+  /* ── render ── */
+  if (loading && benchmarks.length === 0) {
+    return <div className="app-loading">Loading…</div>;
+  }
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <div className="app-header-left">
+          <span className="app-logo">Magellan</span>
+          {screen === 'benchmark' && selectedBenchmark && (
+            <>
+              <span className="app-header-sep">/</span>
+              <button className="app-header-back" onClick={() => setScreen('gallery')}>
+                Benchmarks
+              </button>
+              <span className="app-header-sep">/</span>
+              <span className="app-header-current">{selectedBenchmark.name}</span>
+            </>
+          )}
+        </div>
       </header>
 
-      <div className="toolbar-row">
-        <div className="benchmark-buttons">
-          {benchmarks.map(b => (
-            <button
-              key={b.id}
-              className={`benchmark-btn ${selectedBenchmark === b.id ? 'active' : ''}`}
-              onClick={() => {
-                setSelectedBenchmark(b.id);
-                setSelectedRuns([]);
-                setSelectedCell(null);
-                setSelectedTypePair(null);
-                setSelectedSubtypePair(null);
-              }}
-            >
-              {b.name || b.id}
-            </button>
-          ))}
-        </div>
+      {screen === 'gallery' && (
+        <BenchmarkGallery
+          benchmarks={benchmarks}
+          allLeaderboards={allLeaderboards}
+          onSelect={handleBenchmarkSelect}
+        />
+      )}
 
-        <div className="toolbar-controls">
-          {isConfusionMode && (
-            <div className="mode-indicator mode-indicator--single">
-              Viewing: <strong>{selectedRunNames[0] || '…'}</strong>
-            </div>
-          )}
-          {isTransitionMode && (
-            <div className="mode-indicator mode-indicator--compare">
-              Comparing: <strong>{selectedRunNames[0]}</strong> vs <strong>{selectedRunNames[1]}</strong>
-            </div>
-          )}
+      {screen === 'benchmark' && (
+        <div className="benchmark-screen">
+          <LeaderboardWidget
+            data={leaderboard}
+            selectedRuns={selectedRunIds}
+            onRunSelect={handleRunSelect}
+            onRunToggle={handleRunToggle}
+          />
 
-          {isConfusionMode && (
-            <div className="filter-controls">
-              <label>Filter:</label>
-              <select value={filter} onChange={e => setFilter(e.target.value)}>
-                <option value="all">All Predictions</option>
-                <option value="incorrect">Incorrect Only</option>
-              </select>
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      {error && <div className="error-message">{error}</div>}
-
-      {leaderboardData.length > 0 && (() => {
-        const best = [...leaderboardData].sort((a, b) => parseFloat(b.subtype_accuracy) - parseFloat(a.subtype_accuracy))[0];
-        const acc = (parseFloat(best.subtype_accuracy) * 100).toFixed(1);
-        const total = leaderboardData.length;
-        return (
-          <div className="summary-callout">
-            <span className="summary-callout-label">Best model:</span>
-            <span className="summary-callout-name">{best.run_name}</span>
-            <span className="summary-callout-metric">{acc}% detail accuracy</span>
-            <span className="summary-callout-divider">·</span>
-            <span className="summary-callout-count">{total} run{total !== 1 ? 's' : ''} evaluated</span>
-          </div>
-        );
-      })()}
-
-      <LeaderboardWidget 
-        data={leaderboardData} 
-        onRunSelect={handleLeaderboardRunSelect}
-        onRunToggle={handleRunToggle}
-        selectedRuns={selectedRuns}
-      />
-
-      <div className="main-content">
-        <div className="visualization-panel">
-          {isConfusionMode ? (
-            <ConfusionMatrixPanel
-              data={confusionMatrixData}
-              subtypeMatrixData={subtypeMatrixData}
-              selectedCell={selectedCell}
-              selectedTypePair={selectedTypePair}
-              onCellClick={handleCellClick}
-              onSubtypeCellClick={handleSubtypeCellClick}
-              loading={loading}
-              recordsData={filteredRecordsData}
-              allRecordsData={allRecordsData}
-              onExportAll={fetchAllConfusionRecords}
-              benchmarkId={selectedBenchmark}
-              onTranslated={fetchFilteredRecords}
+          {typeHealth.length > 0 && (
+            <TypeHealthGrid
+              typeHealth={typeHealth}
+              typeHealth2={typeHealth2}
+              onViewRecords={handleViewRecords}
+              activeSubtype={recordQuery?.trueSubtype ?? null}
+              correctnessFilter={correctnessFilter}
+              onCorrectnessFilter={v => setCorrectnessFilter(prev => prev === v ? null : v)}
             />
-          ) : isTransitionMode ? (
-            <RunComparisonPanel
-              allRecordsData={allRecordsData}
-              selectedRunNames={selectedRunNames}
-              loading={loading}
-              onTranslated={fetchFilteredRecords}
-            />
-          ) : (
-            <div className="no-selection">Select a run from the leaderboard to view its accuracy breakdown</div>
+          )}
+
+          {(recordQuery || recordsLoading) && (
+            <div className="records-section" ref={recordsRef}>
+              <div className="records-section-header">
+                <div className="records-section-title">
+                  <span>{recordsTitle}</span>
+                </div>
+                <button className="btn-close-viewer" onClick={() => { setRecordQuery(null); setRecordsData(null); }}>
+                  ✕ Clear
+                </button>
+              </div>
+              {recordsLoading && <div className="viewer-loading">Loading records…</div>}
+              {!recordsLoading && recordsData && (
+                <RowLevelTable
+                  data={recordsData}
+                  run1Name={run1Name}
+                  run2Name={run2Name}
+                  showRun2Columns={!!recordQuery?.runId2}
+                  onExport={handleExportRecords}
+                  onTranslated={handleTranslated}
+                />
+              )}
+            </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

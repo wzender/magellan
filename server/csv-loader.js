@@ -334,6 +334,79 @@ function updateMetadataTranslation(requestId, metaEn) {
   saveMetadataTranslationsFile(translations);
 }
 
+function getTypeHealthSummary(runId) {
+  const data = loadData();
+  const results = data.run_results.filter(r => r.run_id === runId);
+
+  const typeMap = {};
+  results.forEach(r => {
+    if (!typeMap[r.true_type]) {
+      typeMap[r.true_type] = { type: r.true_type, total: 0, correct: 0, cross_type_wrong: 0, same_type_wrong: 0, subtypeMap: {}, confusionMap: {} };
+    }
+    const t = typeMap[r.true_type];
+    t.total++;
+
+    const isCorrect   = r.pred_subtype === r.true_subtype;
+    const isCrossType = r.pred_type    !== r.true_type;
+
+    if      (isCorrect)   t.correct++;
+    else if (isCrossType) t.cross_type_wrong++;
+    else                  t.same_type_wrong++;
+
+    if (!t.subtypeMap[r.true_subtype]) {
+      t.subtypeMap[r.true_subtype] = { subtype: r.true_subtype, total: 0, correct: 0, cross_type: 0, confusionMap: {} };
+    }
+    const st = t.subtypeMap[r.true_subtype];
+    st.total++;
+    if (isCorrect) {
+      st.correct++;
+    } else {
+      if (isCrossType) st.cross_type++;
+      const key = `${r.pred_subtype}|||${r.pred_type}`;
+      st.confusionMap[key] = (st.confusionMap[key] || 0) + 1;
+    }
+
+    if (!isCorrect) {
+      const key = `${r.pred_subtype}|||${r.pred_type}`;
+      t.confusionMap[key] = (t.confusionMap[key] || 0) + 1;
+    }
+  });
+
+  return Object.values(typeMap).map(t => {
+    const topConfused = Object.entries(t.confusionMap)
+      .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const subtypes = Object.values(t.subtypeMap).map(st => {
+      const topConfused = Object.entries(st.confusionMap)
+        .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+      return {
+        subtype:       st.subtype,
+        total:         st.total,
+        correct:       st.correct,
+        cross_type:    st.cross_type,
+        accuracy:      st.correct / st.total,
+        top_confused_to: topConfused,
+      };
+    }).sort((a, b) => a.accuracy - b.accuracy);
+
+    return {
+      type:             t.type,
+      total:            t.total,
+      correct:          t.correct,
+      cross_type_wrong: t.cross_type_wrong,
+      same_type_wrong:  t.same_type_wrong,
+      accuracy:         t.correct / t.total,
+      cross_type_rate:  t.cross_type_wrong / t.total,
+      top_confused_to:  topConfused,
+      subtypes,
+    };
+  }).sort((a, b) => a.accuracy - b.accuracy);
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -347,4 +420,5 @@ module.exports = {
   getRecords,
   updateTranslation,
   updateMetadataTranslation,
+  getTypeHealthSummary,
 };

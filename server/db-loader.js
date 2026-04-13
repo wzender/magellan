@@ -395,7 +395,10 @@ async function getRecords(filters = {}) {
   if (filters.pred_type)     { where += ` AND pred_type    = $${p++}`; params.push(filters.pred_type); }
   if (filters.true_subtype)  { where += ` AND true_subtype = $${p++}`; params.push(filters.true_subtype); }
   if (filters.pred_subtype)  { where += ` AND pred_subtype = $${p++}`; params.push(filters.pred_subtype); }
-  if (filters.incorrectOnly) { where += ` AND pred_subtype != true_subtype`; }
+  if (filters.incorrectOnly)  { where += ` AND pred_subtype != true_subtype`; }
+  if (filters.correctOnly)    { where += ` AND pred_subtype = true_subtype`; }
+  if (filters.sameTypeOnly)   { where += ` AND pred_subtype != true_subtype AND pred_type = true_type`; }
+  if (filters.crossTypeOnly)  { where += ` AND pred_type != true_type`; }
 
   const baseSQL = `FROM "${tbl}" WHERE ${where}`;
 
@@ -505,6 +508,80 @@ async function updateMetadataTranslation(requestId, metaEn) {
   } catch { /* table may not exist in this schema */ }
 }
 
+async function getTypeHealthSummary(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return [];
+
+  const tbl = run.run_name;
+  let rows;
+  try {
+    const result = await query(
+      `SELECT true_type, true_subtype, pred_type, pred_subtype, COUNT(*) AS cnt
+       FROM "${tbl}"
+       GROUP BY true_type, true_subtype, pred_type, pred_subtype`,
+      []
+    );
+    rows = result.rows;
+  } catch (err) {
+    if (isTableMissing(err)) return [];
+    throw err;
+  }
+
+  // Aggregate in JS (same logic as csv-loader)
+  const typeMap = {};
+  rows.forEach(r => {
+    const count = parseInt(r.cnt);
+    if (!typeMap[r.true_type]) {
+      typeMap[r.true_type] = { type: r.true_type, total: 0, correct: 0, cross_type_wrong: 0, same_type_wrong: 0, subtypeMap: {}, confusionMap: {} };
+    }
+    const t = typeMap[r.true_type];
+    t.total += count;
+    const isCorrect   = r.pred_subtype === r.true_subtype;
+    const isCrossType = r.pred_type    !== r.true_type;
+    if      (isCorrect)   t.correct          += count;
+    else if (isCrossType) t.cross_type_wrong  += count;
+    else                  t.same_type_wrong   += count;
+
+    if (!t.subtypeMap[r.true_subtype]) {
+      t.subtypeMap[r.true_subtype] = { subtype: r.true_subtype, total: 0, correct: 0, cross_type: 0, confusionMap: {} };
+    }
+    const st = t.subtypeMap[r.true_subtype];
+    st.total += count;
+    if (isCorrect) {
+      st.correct += count;
+    } else {
+      if (isCrossType) st.cross_type += count;
+      const key = `${r.pred_subtype}|||${r.pred_type}`;
+      st.confusionMap[key] = (st.confusionMap[key] || 0) + count;
+    }
+    if (!isCorrect) {
+      const key = `${r.pred_subtype}|||${r.pred_type}`;
+      t.confusionMap[key] = (t.confusionMap[key] || 0) + count;
+    }
+  });
+
+  return Object.values(typeMap).map(t => {
+    const topConfused = Object.entries(t.confusionMap)
+      .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
+      .sort((a, b) => b.count - a.count).slice(0, 5);
+
+    const subtypes = Object.values(t.subtypeMap).map(st => {
+      const topConfused = Object.entries(st.confusionMap)
+        .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
+        .sort((a, b) => b.count - a.count).slice(0, 3);
+      return { subtype: st.subtype, total: st.total, correct: st.correct, cross_type: st.cross_type, accuracy: st.correct / st.total, top_confused_to: topConfused };
+    }).sort((a, b) => a.accuracy - b.accuracy);
+
+    return {
+      type: t.type, total: t.total, correct: t.correct,
+      cross_type_wrong: t.cross_type_wrong, same_type_wrong: t.same_type_wrong,
+      accuracy: t.correct / t.total, cross_type_rate: t.cross_type_wrong / t.total,
+      top_confused_to: topConfused, subtypes,
+    };
+  }).sort((a, b) => a.accuracy - b.accuracy);
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -517,4 +594,5 @@ module.exports = {
   getRecords,
   updateTranslation,
   updateMetadataTranslation,
+  getTypeHealthSummary,
 };

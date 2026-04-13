@@ -33,7 +33,6 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
     { key: 'run_date', label: 'Date', width: 160 },
     { key: 'subtype_accuracy', label: 'Detail Accuracy', width: 140 },
     { key: 'subtype_f1_weighted', label: 'Detail Score', width: 160 },
-    { key: 'type_f1_weighted', label: 'Category Score', width: 150 },
     { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
   ]);
   const [dragColumnIndex, setDragColumnIndex] = useState(null);

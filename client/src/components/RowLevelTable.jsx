@@ -522,6 +522,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                 {columns.columns.map(col => {
                   switch (col.key) {
                     case 'request_id': {
+                      const run1CorrectnessCls = record.true_subtype === record.pred_subtype ? 'badge-correct' : record.true_type !== record.pred_type ? 'badge-incorrect' : 'badge-same-type';
+                      const run2CorrectnessCls = record.true_subtype === record.run2_pred_subtype ? 'badge-correct' : record.true_type !== record.run2_pred_type ? 'badge-incorrect' : 'badge-same-type';
                       const run1Correct = record.true_type === record.pred_type && record.true_subtype === record.pred_subtype;
                       const run2Correct = record.true_type === record.run2_pred_type && record.true_subtype === record.run2_pred_subtype;
                       const alreadyRetagged = retagIds && retagIds.has(record.request_id);
@@ -530,11 +532,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                           <div className="record-id-cell">
                             {showRun2Columns ? (
                               <>
-                                <span className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`} title={`${run1Name}: ${run1Correct ? 'Correct' : 'Incorrect'}`} />
-                                <span className={`correctness-badge ${run2Correct ? 'badge-correct' : 'badge-incorrect'}`} title={`${run2Name}: ${run2Correct ? 'Correct' : 'Incorrect'}`} />
+                                <span className={`correctness-badge ${run1CorrectnessCls}`} title={`${run1Name}: ${run1CorrectnessCls === 'badge-correct' ? 'Correct' : run1CorrectnessCls === 'badge-same-type' ? 'Same-type wrong' : 'Cross-type wrong'}`} />
+                                <span className={`correctness-badge ${run2CorrectnessCls}`} title={`${run2Name}: ${run2CorrectnessCls === 'badge-correct' ? 'Correct' : run2CorrectnessCls === 'badge-same-type' ? 'Same-type wrong' : 'Cross-type wrong'}`} />
                               </>
                             ) : (
-                              <span className={`correctness-badge ${run1Correct ? 'badge-correct' : 'badge-incorrect'}`} title={run1Correct ? 'Correct' : 'Incorrect'} />
+                              <span className={`correctness-badge ${run1CorrectnessCls}`} title={run1CorrectnessCls === 'badge-correct' ? 'Correct' : run1CorrectnessCls === 'badge-same-type' ? 'Same-type wrong' : 'Cross-type wrong'} />
                             )}
                             <span>{record.request_id}</span>
                             {onAddToRetag && (
