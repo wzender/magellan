@@ -582,6 +582,67 @@ async function getTypeHealthSummary(runId) {
   }).sort((a, b) => a.accuracy - b.accuracy);
 }
 
+async function getSubtypeConfusionMatrix(runId, trueType) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+  const tbl = run.run_name;
+
+  const result = await query(
+    `SELECT true_subtype, pred_subtype, pred_type, COUNT(*)::int AS count
+     FROM "${tbl}"
+     WHERE true_type = $1
+     GROUP BY true_subtype, pred_subtype, pred_type
+     ORDER BY true_subtype, count DESC`,
+    [trueType]
+  );
+
+  // Build rowMap: true_subtype -> { preds: { predSubtype -> count }, total }
+  // Track all pred columns with their type so we can mark cross-type ones
+  const rowMap = {};
+  const colMeta = {}; // predSubtype -> { total, isCrossType, pred_type }
+
+  result.rows.forEach(r => {
+    if (!rowMap[r.true_subtype]) rowMap[r.true_subtype] = { preds: {}, total: 0 };
+    const row = rowMap[r.true_subtype];
+    row.total += r.count;
+    row.preds[r.pred_subtype] = (row.preds[r.pred_subtype] || 0) + r.count;
+
+    if (!colMeta[r.pred_subtype]) {
+      colMeta[r.pred_subtype] = { total: 0, isCrossType: r.pred_type !== trueType, pred_type: r.pred_type };
+    }
+    colMeta[r.pred_subtype].total += r.count;
+  });
+
+  // Rows sorted by total descending
+  const rows = Object.entries(rowMap)
+    .map(([subtype, data]) => ({ true_subtype: subtype, total: data.total, preds: data.preds }))
+    .sort((a, b) => b.total - a.total);
+
+  // Same-type columns ordered to match row order → produces a diagonal
+  // Rows subtypes that also appear as predicted columns go first (in row order),
+  // then any predicted-only same-type subtypes appended by volume.
+  const rowOrder = rows.map(r => r.true_subtype);
+  const sameTypePredSet = new Set(
+    Object.keys(colMeta).filter(k => !colMeta[k].isCrossType)
+  );
+  const sameTypeCols = [
+    ...rowOrder.filter(s => sameTypePredSet.has(s)),
+    ...Object.keys(colMeta)
+      .filter(k => !colMeta[k].isCrossType && !rowOrder.includes(k))
+      .sort((a, b) => colMeta[b].total - colMeta[a].total),
+  ].map(subtype => ({ subtype, isCrossType: false, pred_type: colMeta[subtype].pred_type }));
+
+  const crossTypeCols = Object.entries(colMeta)
+    .filter(([, m]) => m.isCrossType)
+    .sort(([, a], [, b]) => b.total - a.total)
+    .map(([subtype, m]) => ({ subtype, isCrossType: true, pred_type: m.pred_type }));
+
+  const columns = [...sameTypeCols, ...crossTypeCols];
+
+  return { trueType, columns, rows };
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -595,4 +656,5 @@ module.exports = {
   updateTranslation,
   updateMetadataTranslation,
   getTypeHealthSummary,
+  getSubtypeConfusionMatrix,
 };

@@ -18,4 +18,20 @@ router.get('/type-health', async (req, res) => {
   }
 });
 
+/**
+ * GET /subtype-confusion?run_id=...&true_type=...
+ * Returns full subtype confusion matrix scoped to one type.
+ */
+router.get('/subtype-confusion', async (req, res) => {
+  try {
+    const { run_id, true_type } = req.query;
+    if (!run_id || !true_type) return res.status(400).json({ error: 'run_id and true_type are required' });
+    const data = await dbLoader.getSubtypeConfusionMatrix(parseInt(run_id), true_type);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching subtype confusion matrix:', error);
+    res.status(500).json({ error: 'Failed to fetch subtype confusion matrix' });
+  }
+});
+
 module.exports = router;

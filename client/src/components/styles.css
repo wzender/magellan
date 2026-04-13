@@ -1423,3 +1423,165 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   overflow: hidden;
   background: var(--border);
 }
+
+/* ─── View toggle (Subtypes / Confusion matrix) ─────────────── */
+
+.view-toggle {
+  display: inline-flex;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.view-toggle-btn {
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.view-toggle-btn + .view-toggle-btn {
+  border-left: 1.5px solid var(--border);
+}
+.view-toggle-btn.active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ─── Subtype confusion matrix ──────────────────────────────── */
+
+.subtype-confusion-wrap {
+  padding: 0.5rem 1.25rem 1rem;
+}
+.subtype-confusion-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.scm-toggle {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  border: 1.5px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.scm-toggle.active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.subtype-confusion-scroll {
+  overflow-x: auto;
+}
+.subtype-confusion-table {
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.scm-corner {
+  padding: 0.25rem 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  background: var(--bg);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  border-bottom: 2px solid var(--border-strong);
+  border-right: 2px solid var(--border-strong);
+}
+.scm-col-head {
+  padding: 0.25rem 0.4rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  border-bottom: 2px solid var(--border-strong);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scm-col-cross {
+  color: var(--danger-text);
+  background: #fff5f5;
+}
+.scm-col-first-cross {
+  border-left: 2px solid var(--danger);
+}
+.scm-cell-cross {
+  background-clip: padding-box;
+}
+.scm-cell.scm-col-first-cross {
+  border-left: 2px solid var(--danger);
+}
+
+.scm-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
+}
+.scm-legend-swatch {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.scm-swatch-same  { background: rgba(245,158,11,0.6); }
+.scm-swatch-cross { background: rgba(239,68,68,0.6); }
+
+.scm-row-head {
+  padding: 0.2rem 0.5rem 0.2rem 0;
+  background: var(--bg);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border-right: 2px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
+  max-width: 160px;
+}
+.scm-row-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 155px;
+}
+.scm-row-label:hover { color: var(--primary); text-decoration: underline; }
+.scm-cell {
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  min-width: 36px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.scm-cross-cell {
+  border-left: 2px solid var(--border-strong);
+}
+.scm-cell-clickable {
+  cursor: pointer;
+}
+.scm-cell-clickable:hover {
+  filter: brightness(0.88);
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.matrix-loading, .matrix-empty {
+  padding: 1.5rem 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}

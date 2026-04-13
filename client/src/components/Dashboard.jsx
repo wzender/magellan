@@ -180,25 +180,28 @@ function Dashboard() {
   };
 
   /* ── record fetch ── */
-  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null) => {
+  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null) => {
     let url = runId2
       ? `/api/records?run_id1=${runId1}&run_id2=${runId2}&limit=${limit}`
       : `/api/records?run_id=${runId1}&limit=${limit}`;
     if (trueType)    url += `&true_type=${encodeURIComponent(trueType)}`;
     if (trueSubtype) url += `&true_subtype=${encodeURIComponent(trueSubtype)}`;
-    if (filter)      url += `&filter=${filter}`;
+    if (predSubtype) url += `&pred_subtype=${encodeURIComponent(predSubtype)}`;
+    // '__cross_type__' is a sentinel meaning filter=cross_type
+    const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filter;
+    if (resolvedFilter) url += `&filter=${resolvedFilter}`;
     const res = await fetch(url);
     return res.json();
   }, []);
 
-  const handleViewRecords = useCallback(async (trueType, trueSubtype) => {
+  const handleViewRecords = useCallback(async (trueType, trueSubtype, predSubtype = null) => {
     const runId1 = selectedRunIds[0];
     const runId2 = selectedRunIds[1] ?? null;
-    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype });
+    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype });
     setRecordsLoading(true);
     setRecordsData(null);
     try {
-      const data = await fetchRecords(runId1, trueType, trueSubtype, 50, correctnessFilter, runId2);
+      const data = await fetchRecords(runId1, trueType, trueSubtype, 50, correctnessFilter, runId2, predSubtype);
       setRecordsData(data);
     } finally {
       setRecordsLoading(false);
@@ -208,7 +211,7 @@ function Dashboard() {
   /* for RowLevelTable export: fetch all records without limit */
   const handleExportRecords = useCallback(async () => {
     if (!recordQuery) return { data: [], pagination: { total: 0 } };
-    return fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999, correctnessFilter, recordQuery.runId2 ?? null);
+    return fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
   }, [recordQuery, fetchRecords, correctnessFilter]);
 
   /* re-fetch when correctness filter changes while a query is active */
@@ -218,7 +221,7 @@ function Dashboard() {
       setRecordsLoading(true);
       setRecordsData(null);
       try {
-        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null);
+        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
         setRecordsData(data);
       } finally {
         setRecordsLoading(false);
@@ -230,7 +233,7 @@ function Dashboard() {
   /* re-fetch after translation */
   const handleTranslated = useCallback(async () => {
     if (!recordQuery) return;
-    const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null);
+    const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
     setRecordsData(data);
   }, [recordQuery, fetchRecords, correctnessFilter]);
 
@@ -248,9 +251,14 @@ function Dashboard() {
   }, [recordsLoading, recordsData]);
 
   const recordsTitle = recordQuery
-    ? recordQuery.trueSubtype
-      ? `${recordQuery.trueType} › ${recordQuery.trueSubtype}`
-      : `All ${recordQuery.trueType} records`
+    ? (() => {
+        const base = recordQuery.trueSubtype
+          ? `${recordQuery.trueType} › ${recordQuery.trueSubtype}`
+          : `All ${recordQuery.trueType} records`;
+        if (!recordQuery.predSubtype) return base;
+        if (recordQuery.predSubtype === '__cross_type__') return `${base} → cross-type`;
+        return `${base} → ${recordQuery.predSubtype}`;
+      })()
     : '';
 
   /* ── render ── */
@@ -297,6 +305,7 @@ function Dashboard() {
             <TypeHealthGrid
               typeHealth={typeHealth}
               typeHealth2={typeHealth2}
+              runId={selectedRunIds[0]}
               onViewRecords={handleViewRecords}
               activeSubtype={recordQuery?.trueSubtype ?? null}
               correctnessFilter={correctnessFilter}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function pct(n) { return (n * 100).toFixed(0) + '%'; }
@@ -45,8 +45,108 @@ function SubtypeBadge({ st, delta, isActive, isDimmed, onViewRecords }) {
   );
 }
 
+/* ── SubtypeConfusionMatrix ──────────────────────────────── */
+function cellIntensity(count, rowTotal) {
+  if (!count || rowTotal === 0) return 0;
+  return count / rowTotal;
+}
+
+function SubtypeConfusionMatrix({ runId, trueType, onViewRecords }) {
+  const [matrix, setMatrix] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showPct, setShowPct] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/subtype-confusion?run_id=${runId}&true_type=${encodeURIComponent(trueType)}`)
+      .then(r => r.json())
+      .then(d => { setMatrix(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [runId, trueType]);
+
+  if (loading) return <div className="matrix-loading">Loading matrix…</div>;
+  if (!matrix || matrix.rows.length === 0) return <div className="matrix-empty">No data</div>;
+
+  const { columns, rows } = matrix;
+  const firstCrossIdx = columns.findIndex(c => c.isCrossType);
+
+  return (
+    <div className="subtype-confusion-wrap">
+      <div className="subtype-confusion-toolbar">
+        <button
+          className={`scm-toggle ${showPct ? 'active' : ''}`}
+          onClick={() => setShowPct(p => !p)}
+        >
+          {showPct ? '% of row' : '# count'}
+        </button>
+        {firstCrossIdx > -1 && (
+          <span className="scm-legend">
+            <span className="scm-legend-swatch scm-swatch-same" /> same-type
+            <span className="scm-legend-swatch scm-swatch-cross" /> cross-type
+          </span>
+        )}
+      </div>
+      <div className="subtype-confusion-scroll">
+        <table className="subtype-confusion-table">
+          <thead>
+            <tr>
+              <th className="scm-corner">True ↓ / Pred →</th>
+              {columns.map((c, i) => (
+                <th
+                  key={c.subtype}
+                  className={`scm-col-head ${c.isCrossType ? 'scm-col-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
+                  title={c.isCrossType ? `${c.subtype} (${c.pred_type})` : c.subtype}
+                >
+                  {c.subtype}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.true_subtype}>
+                <td className="scm-row-head" title={row.true_subtype}>
+                  <button className="scm-row-label" onClick={() => onViewRecords(row.true_subtype, null)}>
+                    {row.true_subtype}
+                  </button>
+                </td>
+                {columns.map((col, i) => {
+                  const count = row.preds[col.subtype] || 0;
+                  const isDiag = col.subtype === row.true_subtype;
+                  const intensity = cellIntensity(count, row.total);
+                  const display = showPct
+                    ? (count ? (intensity * 100).toFixed(0) + '%' : '')
+                    : (count || '');
+                  const bgColor = isDiag
+                    ? `rgba(34,197,94,${0.15 + intensity * 0.7})`
+                    : col.isCrossType
+                      ? `rgba(239,68,68,${0.15 + intensity * 0.75})`
+                      : `rgba(245,158,11,${0.15 + intensity * 0.75})`;
+                  return (
+                    <td
+                      key={col.subtype}
+                      className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
+                      style={count > 0 ? { background: bgColor } : {}}
+                      title={count > 0 ? `${row.true_subtype} → ${col.subtype}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count} — click to view` : ''}
+                      onClick={count > 0 ? () => onViewRecords(row.true_subtype, isDiag ? null : col.subtype) : undefined}
+                    >
+                      {display}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ── TypeDetailPanel ─────────────────────────────────────── */
-function TypeDetailPanel({ typeData, typeData2, onViewRecords, onClose, activeSubtype, badgeMatchesFilter }) {
+function TypeDetailPanel({ typeData, typeData2, runId, onViewRecords, onClose, activeSubtype, badgeMatchesFilter }) {
+  const [view, setView] = useState('badges'); // 'badges' | 'matrix'
+
   const subtypeMap2 = {};
   if (typeData2) {
     typeData2.subtypes.forEach(st => { subtypeMap2[st.subtype] = st; });
@@ -66,6 +166,10 @@ function TypeDetailPanel({ typeData, typeData2, onViewRecords, onClose, activeSu
           </span>
         </div>
         <div className="type-detail-actions">
+          <div className="view-toggle">
+            <button className={`view-toggle-btn ${view === 'badges' ? 'active' : ''}`} onClick={() => setView('badges')}>Subtypes</button>
+            <button className={`view-toggle-btn ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>Confusion matrix</button>
+          </div>
           <button className="btn-view-records" onClick={() => onViewRecords(null)}>
             All {typeData.type} records
           </button>
@@ -73,22 +177,32 @@ function TypeDetailPanel({ typeData, typeData2, onViewRecords, onClose, activeSu
         </div>
       </div>
 
-      <div className="subtype-badge-list">
-        {typeData.subtypes.map(st => {
-          const st2   = subtypeMap2[st.subtype];
-          const delta = st2 ? st2.accuracy - st.accuracy : undefined;
-          return (
-            <SubtypeBadge
-              key={st.subtype}
-              st={st}
-              delta={typeData2 ? delta : undefined}
-              isActive={activeSubtype === st.subtype}
-              isDimmed={badgeMatchesFilter ? !badgeMatchesFilter(st) : false}
-              onViewRecords={(subtype) => onViewRecords(subtype)}
-            />
-          );
-        })}
-      </div>
+      {view === 'badges' && (
+        <div className="subtype-badge-list">
+          {typeData.subtypes.map(st => {
+            const st2   = subtypeMap2[st.subtype];
+            const delta = st2 ? st2.accuracy - st.accuracy : undefined;
+            return (
+              <SubtypeBadge
+                key={st.subtype}
+                st={st}
+                delta={typeData2 ? delta : undefined}
+                isActive={activeSubtype === st.subtype}
+                isDimmed={badgeMatchesFilter ? !badgeMatchesFilter(st) : false}
+                onViewRecords={(subtype) => onViewRecords(subtype)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {view === 'matrix' && (
+        <SubtypeConfusionMatrix
+          runId={runId}
+          trueType={typeData.type}
+          onViewRecords={(subtype, predSubtype) => onViewRecords(subtype, predSubtype)}
+        />
+      )}
     </div>
   );
 }
@@ -131,7 +245,7 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, onClick }) {
 }
 
 /* ── TypeHealthGrid ──────────────────────────────────────── */
-function TypeHealthGrid({ typeHealth, typeHealth2, onViewRecords, activeSubtype, correctnessFilter, onCorrectnessFilter }) {
+function TypeHealthGrid({ typeHealth, typeHealth2, runId, onViewRecords, activeSubtype, correctnessFilter, onCorrectnessFilter }) {
   const [expandedType, setExpandedType] = useState(null);
 
   const typeMap2 = {};
@@ -202,7 +316,8 @@ function TypeHealthGrid({ typeHealth, typeHealth2, onViewRecords, activeSubtype,
         <TypeDetailPanel
           typeData={expandedData}
           typeData2={expandedData2}
-          onViewRecords={(subtype) => onViewRecords(expandedType, subtype)}
+          runId={runId}
+          onViewRecords={(subtype, predSubtype) => onViewRecords(expandedType, subtype, predSubtype)}
           onClose={() => setExpandedType(null)}
           activeSubtype={activeSubtype}
           badgeMatchesFilter={badgeMatchesFilter}
