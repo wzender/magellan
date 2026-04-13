@@ -2024,3 +2024,161 @@ tr.row-selected > td { background-color: rgba(99,102,241,0.05); }
   color: #b91c1c;
   border-color: #fca5a5;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   Run Comparison Panel  (replaces TransitionMatrixPanel)
+   ══════════════════════════════════════════════════════════════════ */
+
+.run-comparison-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Summary bar ── */
+.comparison-summary-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.comparison-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.comparison-stat {
+  color: var(--text-muted);
+}
+
+.comparison-stat-divider {
+  color: var(--border);
+  user-select: none;
+}
+
+/* ── Direction count indicators (↑ ↓ ↔) ── */
+.direction-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.15rem;
+}
+
+.dir-improved {
+  color: #15803d;
+  background: #dcfce7;
+  padding: 0.05rem 0.28rem;
+  border-radius: 10px;
+}
+
+.dir-regressed {
+  color: #b91c1c;
+  background: #fee2e2;
+  padding: 0.05rem 0.28rem;
+  border-radius: 10px;
+}
+
+.dir-lateral {
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.05rem 0.28rem;
+  border-radius: 10px;
+}
+
+/* ── Transition pair badge (SubA → SubB inside a group) ── */
+.comparison-transition-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  text-align: left;
+}
+
+/* Net-positive: mostly improvements → green tint */
+.comparison-transition-badge.badge-net-positive {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #14532d;
+}
+.comparison-transition-badge.badge-net-positive:hover,
+.comparison-transition-badge.badge-net-positive.active {
+  background: #22c55e;
+  border-color: #16a34a;
+  color: white;
+}
+.comparison-transition-badge.badge-net-positive.active .dir-improved,
+.comparison-transition-badge.badge-net-positive.active .dir-regressed,
+.comparison-transition-badge.badge-net-positive.active .dir-lateral {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* Net-negative: mostly regressions → red tint */
+.comparison-transition-badge.badge-net-negative {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #881337;
+}
+.comparison-transition-badge.badge-net-negative:hover,
+.comparison-transition-badge.badge-net-negative.active {
+  background: #f43f5e;
+  border-color: #e11d48;
+  color: white;
+}
+.comparison-transition-badge.badge-net-negative.active .dir-improved,
+.comparison-transition-badge.badge-net-negative.active .dir-regressed,
+.comparison-transition-badge.badge-net-negative.active .dir-lateral {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* Net-neutral: balanced or all lateral → gray */
+.comparison-transition-badge.badge-net-neutral {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+.comparison-transition-badge.badge-net-neutral:hover,
+.comparison-transition-badge.badge-net-neutral.active {
+  background: #94a3b8;
+  border-color: #64748b;
+  color: white;
+}
+.comparison-transition-badge.badge-net-neutral.active .dir-improved,
+.comparison-transition-badge.badge-net-neutral.active .dir-regressed,
+.comparison-transition-badge.badge-net-neutral.active .dir-lateral {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* Colored arrows inside transition badges */
+.badge-arrow.arrow-positive { color: #16a34a; font-weight: 700; }
+.badge-arrow.arrow-negative { color: #dc2626; font-weight: 700; }
+
+/* Clickable direction filter buttons in summary bar */
+.dir-filter-btn {
+  cursor: pointer;
+  transition: filter 0.12s, outline 0.12s;
+}
+.dir-filter-btn:hover { filter: brightness(0.88); }
+.dir-filter-btn.dir-filter-active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}

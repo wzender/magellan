@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './styles.css';
 import LeaderboardWidget from './LeaderboardWidget';
 import ConfusionMatrixPanel from './ConfusionMatrixPanel';
-import TransitionMatrixPanel from './TransitionMatrixPanel';
-import RowLevelTable from './RowLevelTable';
+import RunComparisonPanel from './RunComparisonPanel';
 
 /**
  * Main Dashboard Component
@@ -21,11 +20,9 @@ function Dashboard() {
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [selectedRunNames, setSelectedRunNames] = useState([]);
   const [confusionMatrixData, setConfusionMatrixData] = useState(null);
-  const [transitionMatrixData, setTransitionMatrixData] = useState(null);
   const [subtypeMatrixData, setSubtypeMatrixData] = useState(null);
   const [allRecordsData, setAllRecordsData] = useState(null);
   const [filteredRecordsData, setFilteredRecordsData] = useState(null);
-  const [minCount, setMinCount] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isConfusionMode = selectedRuns.length === 1;
@@ -152,6 +149,7 @@ function Dashboard() {
 
     const fetchAllRecords = async () => {
       try {
+        setLoading(true);
         let url;
         if (isTransitionMode && selectedRuns.length === 2) {
           url = `/api/records?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&limit=1000`;
@@ -162,11 +160,13 @@ function Dashboard() {
         const response = await fetch(url);
         const data = await response.json();
         setAllRecordsData(data);
-        setFilteredRecordsData(data); // Initially show all
+        setFilteredRecordsData(data);
         setSelectedTypePair(null);
         setSelectedSubtypePair(null);
       } catch (err) {
         console.error('Error loading all records:', err);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -196,27 +196,6 @@ function Dashboard() {
   useEffect(() => {
     fetchFilteredRecords();
   }, [fetchFilteredRecords]);
-  useEffect(() => {
-    if (selectedRuns.length !== 2 || minCount < 1) return;
-
-    const fetchTransitionMatrix = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(
-          `/api/transition-matrix?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&min_count=${minCount}`
-        );
-        const data = await response.json();
-        setTransitionMatrixData(data);
-        setSelectedCell(null);
-      } catch (err) {
-        setError('Failed to load transition matrix');
-        console.error('Error loading transition matrix:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTransitionMatrix();
-  }, [selectedRuns, minCount]);
 
   // Handle run selection by clicking a leaderboard row (single-run confusion mode)
   const handleLeaderboardRunSelect = (runId) => {
@@ -299,74 +278,12 @@ function Dashboard() {
     setSelectedSubtypePair({ true_subtype: trueSubtype, pred_subtype: predSubtype });
   };
 
-  // Handle transition matrix cell click
-  const handleTransitionCellClick = (run1Val, run2Val) => {
-    setSelectedCell({ run1: run1Val, run2: run2Val });
-    // For transition matrix, show records for the first run value
-    setSelectedTypePair(null);
-    setSelectedSubtypePair(null);
-  };
-
-  // Fetch filtered records for transition mode
-  useEffect(() => {
-    if (selectedRuns.length !== 2 || !isTransitionMode || !selectedCell) return;
-
-    const fetchTransitionRecords = async () => {
-      try {
-        let url = `/api/records?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&limit=1000`;
-
-        if (selectedCell?.run1) {
-          url += `&run1_pred_subtype=${encodeURIComponent(selectedCell.run1)}`;
-        }
-        if (selectedCell?.run2) {
-          url += `&run2_pred_subtype=${encodeURIComponent(selectedCell.run2)}`;
-        }
-
-        const response = await fetch(url);
-        let data = await response.json();
-
-        // Enforce transition cell filter as a fallback guard
-        if (selectedCell?.run1 || selectedCell?.run2) {
-          const filteredRows = (data.data || []).filter(row => {
-            const run1Match = selectedCell?.run1 ? row.pred_subtype === selectedCell.run1 : true;
-            const run2Match = selectedCell?.run2 ? row.run2_pred_subtype === selectedCell.run2 : true;
-            return run1Match && run2Match;
-          });
-
-          const total = filteredRows.length;
-          data = {
-            ...data,
-            data: filteredRows,
-            pagination: {
-              ...data.pagination,
-              total,
-              pages: Math.ceil(total / (data.pagination.limit || 100)),
-            },
-          };
-        }
-
-        setFilteredRecordsData(data);
-      } catch (err) {
-        console.error('Error fetching transition records:', err);
-      }
-    };
-
-    fetchTransitionRecords();
-  }, [selectedCell, selectedRuns, isTransitionMode]);
 
   const fetchAllConfusionRecords = async () => {
     let url = `/api/records?run_id=${selectedRuns[0]}&limit=999999`;
     if (filter === 'incorrect') url += '&filter=incorrect';
     if (selectedTypePair) url += `&true_type=${encodeURIComponent(selectedTypePair.true)}&pred_type=${encodeURIComponent(selectedTypePair.pred)}`;
     if (selectedSubtypePair) url += `&true_subtype=${encodeURIComponent(selectedSubtypePair.true_subtype)}&pred_subtype=${encodeURIComponent(selectedSubtypePair.pred_subtype)}`;
-    const resp = await fetch(url);
-    return resp.json();
-  };
-
-  const fetchAllTransitionRecords = async () => {
-    let url = `/api/records?run_id1=${selectedRuns[0]}&run_id2=${selectedRuns[1]}&limit=999999`;
-    if (selectedCell?.run1) url += `&run1_pred_subtype=${encodeURIComponent(selectedCell.run1)}`;
-    if (selectedCell?.run2) url += `&run2_pred_subtype=${encodeURIComponent(selectedCell.run2)}`;
     const resp = await fetch(url);
     return resp.json();
   };
@@ -418,23 +335,6 @@ function Dashboard() {
             </div>
           )}
 
-          {isTransitionMode && (
-            <div className="transition-controls">
-              <label>Min records changed:</label>
-              <div className="stepper">
-                <button className="stepper-btn" onClick={() => setMinCount(v => Math.max(1, v - 1))} disabled={minCount <= 1}>−</button>
-                <input
-                  className="stepper-input"
-                  type="number"
-                  min="1"
-                  max="999"
-                  value={minCount}
-                  onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) setMinCount(v); }}
-                />
-                <button className="stepper-btn" onClick={() => setMinCount(v => v + 1)}>+</button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -480,14 +380,10 @@ function Dashboard() {
               onTranslated={fetchFilteredRecords}
             />
           ) : isTransitionMode ? (
-            <TransitionMatrixPanel
-              data={transitionMatrixData}
-              selectedCell={selectedCell}
-              onCellClick={handleTransitionCellClick}
-              loading={loading}
-              recordsData={filteredRecordsData}
+            <RunComparisonPanel
+              allRecordsData={allRecordsData}
               selectedRunNames={selectedRunNames}
-              onExportAll={fetchAllTransitionRecords}
+              loading={loading}
               onTranslated={fetchFilteredRecords}
             />
           ) : (
