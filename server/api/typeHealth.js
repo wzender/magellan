@@ -19,6 +19,38 @@ router.get('/type-health', async (req, res) => {
 });
 
 /**
+ * GET /compare-type-health?run_id1=...&run_id2=...
+ * Returns per-type 4-outcome breakdown for a run pair.
+ */
+router.get('/compare-type-health', async (req, res) => {
+  try {
+    const { run_id1, run_id2 } = req.query;
+    if (!run_id1 || !run_id2) return res.status(400).json({ error: 'run_id1 and run_id2 are required' });
+    const data = await dbLoader.getCompareTypeHealth(parseInt(run_id1), parseInt(run_id2));
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching compare type health:', error);
+    res.status(500).json({ error: 'Failed to fetch compare type health' });
+  }
+});
+
+/**
+ * GET /subtype-transition?run_id1=...&run_id2=...&true_type=...&compare_filter=...
+ * Returns subtype transition matrix for a run pair scoped to one type.
+ */
+router.get('/subtype-transition', async (req, res) => {
+  try {
+    const { run_id1, run_id2, true_type, compare_filter } = req.query;
+    if (!run_id1 || !run_id2 || !true_type) return res.status(400).json({ error: 'run_id1, run_id2 and true_type are required' });
+    const data = await dbLoader.getSubtypeTransitionMatrix(parseInt(run_id1), parseInt(run_id2), true_type, compare_filter || null);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching subtype transition matrix:', error);
+    res.status(500).json({ error: 'Failed to fetch subtype transition matrix' });
+  }
+});
+
+/**
  * GET /subtype-confusion?run_id=...&true_type=...
  * Returns full subtype confusion matrix scoped to one type.
  */

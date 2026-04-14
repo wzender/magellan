@@ -386,6 +386,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .bar-correct   { background: var(--success);  height: 100%; }
 .bar-same-type { background: var(--warning);  height: 100%; }
 .bar-cross-type{ background: var(--danger);   height: 100%; }
+/* compare mode 4-outcome bars */
+.bar-cmp-both-correct { background: #22c55e; height: 100%; }
+.bar-cmp-run1-only    { background: #f97316; height: 100%; }
+.bar-cmp-run2-only    { background: #06b6d4; height: 100%; }
+.bar-cmp-both-wrong   { background: #94a3b8; height: 100%; }
 
 .type-card-meta {
   display: flex; align-items: center; justify-content: space-between;
@@ -532,6 +537,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .swatch-correct    { background: var(--success); }
 .swatch-same-type  { background: var(--warning); }
 .swatch-cross-type { background: var(--danger); }
+/* compare mode swatches */
+.swatch-cmp-both-correct { background: #22c55e; }
+.swatch-cmp-run1-only    { background: #f97316; }
+.swatch-cmp-run2-only    { background: #06b6d4; }
+.swatch-cmp-both-wrong   { background: #94a3b8; }
 
 .type-card-dimmed  { opacity: 0.3; }
 .subtype-badge-dimmed { opacity: 0.25; pointer-events: none; }
@@ -1594,3 +1604,50 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: var(--text-muted);
   font-size: 0.85rem;
 }
+
+/* ── Transition Matrix (compare mode) ───────────────────── */
+.stm-slider-label {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.78rem; color: var(--text-muted);
+  white-space: nowrap;
+}
+.stm-slider {
+  width: 100px;
+  accent-color: var(--primary);
+}
+.stm-slider-val {
+  font-weight: 600; color: var(--text);
+  min-width: 20px;
+}
+.stm-corner {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.3rem;
+}
+.stm-run1-label {
+  display: block; font-weight: 600;
+}
+.stm-run2-label {
+  display: block; color: var(--primary);
+}
+.stm-col-head {
+  max-width: 80px;
+}
+.stm-cell {}
+.stm-diag {
+  font-weight: 600;
+}
+.stm-diff.scm-cell-clickable {}
+.stm-cell-empty {
+  background: transparent !important;
+}
+/* transition matrix swatches for legend */
+.stm-swatch-agree    { background: #22c55e; }
+.stm-swatch-r1win    { background: #f97316; }
+.stm-swatch-r2win    { background: #06b6d4; }
+.stm-swatch-disagree { background: #94a3b8; }
+
+/* compare-mode filter percentage labels */
+.cmp-pct-both_correct { color: var(--success-text); }
+.cmp-pct-run1_only    { color: #c2410c; }
+.cmp-pct-run2_only    { color: #0e7490; }
+.cmp-pct-both_wrong   { color: var(--text-muted); }

@@ -336,12 +336,17 @@ async function getRecords(filters = {}) {
 
     const params = [];
     let p = 1;
-    let where = 'r1.pred_subtype <> r2.pred_subtype';
+    let where = '1=1';
 
     if (filters.run1_pred_subtype) { where += ` AND r1.pred_subtype = $${p++}`; params.push(filters.run1_pred_subtype); }
     if (filters.run2_pred_subtype) { where += ` AND r2.pred_subtype = $${p++}`; params.push(filters.run2_pred_subtype); }
     if (filters.true_type)         { where += ` AND r1.true_type    = $${p++}`; params.push(filters.true_type); }
+    if (filters.true_subtype)      { where += ` AND r1.true_subtype = $${p++}`; params.push(filters.true_subtype); }
     if (filters.pred_type)         { where += ` AND r1.pred_type    = $${p++}`; params.push(filters.pred_type); }
+    if (filters.compareFilter === 'both_correct') { where += ` AND r1.pred_subtype = r1.true_subtype AND r2.pred_subtype = r1.true_subtype`; }
+    if (filters.compareFilter === 'run1_only')    { where += ` AND r1.pred_subtype = r1.true_subtype AND r2.pred_subtype != r1.true_subtype`; }
+    if (filters.compareFilter === 'run2_only')    { where += ` AND r1.pred_subtype != r1.true_subtype AND r2.pred_subtype = r1.true_subtype`; }
+    if (filters.compareFilter === 'both_wrong')   { where += ` AND r1.pred_subtype != r1.true_subtype AND r2.pred_subtype != r1.true_subtype`; }
 
     const baseSQL = `FROM "${tbl1}" r1 JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2} WHERE ${where}`;
 
@@ -528,12 +533,12 @@ async function getTypeHealthSummary(runId) {
     throw err;
   }
 
-  // Aggregate in JS (same logic as csv-loader)
+  // Aggregate in JS
   const typeMap = {};
   rows.forEach(r => {
     const count = parseInt(r.cnt);
     if (!typeMap[r.true_type]) {
-      typeMap[r.true_type] = { type: r.true_type, total: 0, correct: 0, cross_type_wrong: 0, same_type_wrong: 0, subtypeMap: {}, confusionMap: {} };
+      typeMap[r.true_type] = { type: r.true_type, total: 0, correct: 0, cross_type_wrong: 0, same_type_wrong: 0, subtypeMap: {}, fpMap: {}, confusionMap: {} };
     }
     const t = typeMap[r.true_type];
     t.total += count;
@@ -554,6 +559,8 @@ async function getTypeHealthSummary(runId) {
       if (isCrossType) st.cross_type += count;
       const key = `${r.pred_subtype}|||${r.pred_type}`;
       st.confusionMap[key] = (st.confusionMap[key] || 0) + count;
+      // This row is a false positive for pred_subtype within this type
+      t.fpMap[r.pred_subtype] = (t.fpMap[r.pred_subtype] || 0) + count;
     }
     if (!isCorrect) {
       const key = `${r.pred_subtype}|||${r.pred_type}`;
@@ -561,25 +568,130 @@ async function getTypeHealthSummary(runId) {
     }
   });
 
+  // Weighted F1: for each subtype s, F1_s = 2*TP / (2*TP + FP + FN)
+  // weighted_f1 = sum(support_s * F1_s) / total_support
+  function subtypeF1(tp, fp, fn) {
+    const denom = 2 * tp + fp + fn;
+    return denom === 0 ? 0 : (2 * tp) / denom;
+  }
+
   return Object.values(typeMap).map(t => {
     const topConfused = Object.entries(t.confusionMap)
       .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
       .sort((a, b) => b.count - a.count).slice(0, 5);
 
     const subtypes = Object.values(t.subtypeMap).map(st => {
+      const tp = st.correct;
+      const fn = st.total - st.correct;
+      const fp = t.fpMap[st.subtype] || 0;
+      const f1 = subtypeF1(tp, fp, fn);
       const topConfused = Object.entries(st.confusionMap)
         .map(([key, count]) => { const [pred_subtype, pred_type] = key.split('|||'); return { pred_subtype, pred_type, count }; })
         .sort((a, b) => b.count - a.count).slice(0, 3);
-      return { subtype: st.subtype, total: st.total, correct: st.correct, cross_type: st.cross_type, accuracy: st.correct / st.total, top_confused_to: topConfused };
-    }).sort((a, b) => a.accuracy - b.accuracy);
+      return { subtype: st.subtype, total: st.total, correct: st.correct, cross_type: st.cross_type, f1, accuracy: st.correct / st.total, top_confused_to: topConfused };
+    }).sort((a, b) => a.f1 - b.f1);
+
+    // Weighted F1 across subtypes
+    const weightedF1 = t.total > 0
+      ? subtypes.reduce((sum, st) => sum + st.f1 * st.total, 0) / t.total
+      : 0;
 
     return {
       type: t.type, total: t.total, correct: t.correct,
       cross_type_wrong: t.cross_type_wrong, same_type_wrong: t.same_type_wrong,
-      accuracy: t.correct / t.total, cross_type_rate: t.cross_type_wrong / t.total,
+      f1: weightedF1, accuracy: t.correct / t.total, cross_type_rate: t.cross_type_wrong / t.total,
       top_confused_to: topConfused, subtypes,
     };
-  }).sort((a, b) => a.accuracy - b.accuracy);
+  }).sort((a, b) => a.f1 - b.f1);
+}
+
+async function getCompareTypeHealth(runId1, runId2) {
+  const { runs } = await getRunIndex();
+  const run1 = runById(runs, runId1);
+  const run2 = runById(runs, runId2);
+  if (!run1 || !run2) return [];
+  const tbl1 = run1.run_name;
+  const tbl2 = run2.run_name;
+  const [idCol1, idCol2] = await Promise.all([getIdColumn(tbl1), getIdColumn(tbl2)]);
+
+  const result = await query(
+    `SELECT r1.true_type,
+            COUNT(*)::int AS total,
+            SUM(CASE WHEN r1.pred_subtype = r1.true_subtype AND r2.pred_subtype = r1.true_subtype THEN 1 ELSE 0 END)::int AS both_correct,
+            SUM(CASE WHEN r1.pred_subtype = r1.true_subtype AND r2.pred_subtype != r1.true_subtype THEN 1 ELSE 0 END)::int AS run1_only,
+            SUM(CASE WHEN r1.pred_subtype != r1.true_subtype AND r2.pred_subtype = r1.true_subtype THEN 1 ELSE 0 END)::int AS run2_only,
+            SUM(CASE WHEN r1.pred_subtype != r1.true_subtype AND r2.pred_subtype != r1.true_subtype THEN 1 ELSE 0 END)::int AS both_wrong
+     FROM "${tbl1}" r1
+     JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2}
+     GROUP BY r1.true_type
+     ORDER BY r1.true_type`
+  );
+
+  return result.rows.map(r => ({
+    type:         r.true_type,
+    total:        r.total,
+    both_correct: r.both_correct,
+    run1_only:    r.run1_only,
+    run2_only:    r.run2_only,
+    both_wrong:   r.both_wrong,
+  }));
+}
+
+async function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilter = null) {
+  const { runs } = await getRunIndex();
+  const run1 = runById(runs, runId1);
+  const run2 = runById(runs, runId2);
+  if (!run1 || !run2) return { trueType, columns: [], rows: [] };
+  const tbl1 = run1.run_name;
+  const tbl2 = run2.run_name;
+  const [idCol1, idCol2] = await Promise.all([getIdColumn(tbl1), getIdColumn(tbl2)]);
+
+  let filterClause = '';
+  if (compareFilter === 'both_correct') filterClause = ` AND r1.pred_subtype = r1.true_subtype AND r2.pred_subtype = r1.true_subtype`;
+  if (compareFilter === 'run1_only')    filterClause = ` AND r1.pred_subtype = r1.true_subtype AND r2.pred_subtype != r1.true_subtype`;
+  if (compareFilter === 'run2_only')    filterClause = ` AND r1.pred_subtype != r1.true_subtype AND r2.pred_subtype = r1.true_subtype`;
+  if (compareFilter === 'both_wrong')   filterClause = ` AND r1.pred_subtype != r1.true_subtype AND r2.pred_subtype != r1.true_subtype`;
+
+  const result = await query(
+    `SELECT r1.pred_subtype AS run1_pred, r1.pred_type AS run1_pred_type,
+            r2.pred_subtype AS run2_pred, r2.pred_type AS run2_pred_type,
+            COUNT(*)::int AS count
+     FROM "${tbl1}" r1
+     JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2}
+     WHERE r1.true_type = $1${filterClause}
+     GROUP BY r1.pred_subtype, r1.pred_type, r2.pred_subtype, r2.pred_type
+     ORDER BY count DESC`,
+    [trueType]
+  );
+
+  const rowMap = {};   // run1_pred -> { pred_type, preds: {run2_pred->count}, total }
+  const colMeta = {};  // run2_pred -> { pred_type, total }
+
+  result.rows.forEach(r => {
+    if (!rowMap[r.run1_pred]) rowMap[r.run1_pred] = { pred_type: r.run1_pred_type, preds: {}, total: 0 };
+    rowMap[r.run1_pred].preds[r.run2_pred] = (rowMap[r.run1_pred].preds[r.run2_pred] || 0) + r.count;
+    rowMap[r.run1_pred].total += r.count;
+    if (!colMeta[r.run2_pred]) colMeta[r.run2_pred] = { pred_type: r.run2_pred_type, total: 0 };
+    colMeta[r.run2_pred].total += r.count;
+  });
+
+  // Align rows and columns so shared subtypes produce a diagonal
+  const allSubtypes = Array.from(new Set([...Object.keys(rowMap), ...Object.keys(colMeta)]))
+    .sort((a, b) => {
+      const at = (rowMap[a]?.total || 0) + (colMeta[a]?.total || 0);
+      const bt = (rowMap[b]?.total || 0) + (colMeta[b]?.total || 0);
+      return bt - at;
+    });
+
+  const rows = allSubtypes
+    .filter(s => rowMap[s])
+    .map(s => ({ run1_pred: s, pred_type: rowMap[s].pred_type, total: rowMap[s].total, preds: rowMap[s].preds }));
+
+  const columns = allSubtypes
+    .filter(s => colMeta[s])
+    .map(s => ({ subtype: s, pred_type: colMeta[s].pred_type }));
+
+  return { trueType, columns, rows };
 }
 
 async function getSubtypeConfusionMatrix(runId, trueType) {
@@ -657,4 +769,6 @@ module.exports = {
   updateMetadataTranslation,
   getTypeHealthSummary,
   getSubtypeConfusionMatrix,
+  getCompareTypeHealth,
+  getSubtypeTransitionMatrix,
 };

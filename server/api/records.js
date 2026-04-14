@@ -18,6 +18,7 @@ router.get('/records', async (req, res) => {
       run_id1,
       run_id2,
       filter,
+      compare_filter,
       true_type,
       pred_type,
       true_subtype,
@@ -50,6 +51,7 @@ router.get('/records', async (req, res) => {
     if (run2_pred_subtype) filters.run2_pred_subtype = run2_pred_subtype;
     if (run1_true_subtype) filters.run1_true_subtype = run1_true_subtype;
     if (run2_true_subtype) filters.run2_true_subtype = run2_true_subtype;
+    if (compare_filter) filters.compareFilter = compare_filter;
     if (filter === 'incorrect')  filters.incorrectOnly  = true;
     if (filter === 'correct')    filters.correctOnly    = true;
     if (filter === 'same_type')  filters.sameTypeOnly   = true;

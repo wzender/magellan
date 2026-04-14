@@ -84,6 +84,8 @@ function Dashboard() {
   const [selectedRunIds, setSelectedRunIds] = useState([]);
   const [typeHealth, setTypeHealth]     = useState([]);
   const [typeHealth2, setTypeHealth2]   = useState(null);
+  const [compareTypeHealth, setCompareTypeHealth] = useState(null); // compare mode: per-type 4-outcome counts
+  const [compareFilter, setCompareFilter] = useState(null); // null|'both_correct'|'run1_only'|'run2_only'|'both_wrong'
   const [recordQuery, setRecordQuery]     = useState(null);
   const [recordsData, setRecordsData]     = useState(null); // { data, pagination }
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -146,16 +148,25 @@ function Dashboard() {
     load();
   }, [selectedRunIds[0]]);
 
-  /* ── load type health for run 2 when comparing ── */
+  /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
-    if (selectedRunIds.length < 2) { setTypeHealth2(null); return; }
+    if (selectedRunIds.length < 2) {
+      setTypeHealth2(null);
+      setCompareTypeHealth(null);
+      setCompareFilter(null);
+      return;
+    }
+    const [id1, id2] = selectedRunIds;
     const load = async () => {
-      const res  = await fetch(`/api/type-health?run_id=${selectedRunIds[1]}`);
-      const data = await res.json();
-      setTypeHealth2(data);
+      const [th2, cth] = await Promise.all([
+        fetch(`/api/type-health?run_id=${id2}`).then(r => r.json()),
+        fetch(`/api/compare-type-health?run_id1=${id1}&run_id2=${id2}`).then(r => r.json()),
+      ]);
+      setTypeHealth2(th2);
+      setCompareTypeHealth(cth);
     };
     load();
-  }, [selectedRunIds[1]]);
+  }, [selectedRunIds[0], selectedRunIds[1]]);
 
   /* ── row click: switch to this run as the only selected run ── */
   const handleRunSelect = (runId) => {
@@ -184,7 +195,7 @@ function Dashboard() {
     if (selectedRunIds.length !== 1 || !selectedRunIds[0]) return;
     const runId = selectedRunIds[0];
     const load = async () => {
-      setRecordQuery({ runId, runId2: null, trueType: null, trueSubtype: null, predSubtype: null });
+      setRecordQuery({ runId, runId2: null, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
       setRecordsLoading(true);
       setRecordsData(null);
       try {
@@ -198,48 +209,73 @@ function Dashboard() {
   }, [selectedRunIds[0]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── record fetch ── */
-  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null) => {
+  // run1PredSubtype / run2PredSubtype are for compare-mode transition matrix cell filtering
+  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null, cmpFilter = null, run1PredSubtype = null, run2PredSubtype = null) => {
     let url = runId2
       ? `/api/records?run_id1=${runId1}&run_id2=${runId2}&limit=${limit}`
       : `/api/records?run_id=${runId1}&limit=${limit}`;
-    if (trueType)    url += `&true_type=${encodeURIComponent(trueType)}`;
-    if (trueSubtype) url += `&true_subtype=${encodeURIComponent(trueSubtype)}`;
-    if (predSubtype) url += `&pred_subtype=${encodeURIComponent(predSubtype)}`;
-    // '__cross_type__' is a sentinel meaning filter=cross_type
-    const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filter;
-    if (resolvedFilter) url += `&filter=${resolvedFilter}`;
+    if (trueType)         url += `&true_type=${encodeURIComponent(trueType)}`;
+    if (trueSubtype)      url += `&true_subtype=${encodeURIComponent(trueSubtype)}`;
+    if (run1PredSubtype)  url += `&run1_pred_subtype=${encodeURIComponent(run1PredSubtype)}`;
+    if (run2PredSubtype)  url += `&run2_pred_subtype=${encodeURIComponent(run2PredSubtype)}`;
+    if (!runId2 && predSubtype) {
+      // '__cross_type__' is a sentinel meaning filter=cross_type
+      const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filter;
+      url += `&pred_subtype=${encodeURIComponent(predSubtype)}`;
+      if (resolvedFilter) url += `&filter=${resolvedFilter}`;
+    } else if (!runId2 && filter) {
+      url += `&filter=${filter}`;
+    }
+    if (cmpFilter) url += `&compare_filter=${cmpFilter}`;
     const res = await fetch(url);
     return res.json();
   }, []);
 
-  const handleViewRecords = useCallback(async (trueType, trueSubtype, predSubtype = null) => {
+  const handleViewRecords = useCallback(async (trueType, trueSubtype, predSubtype = null, run1PredSubtype = null, run2PredSubtype = null) => {
     const runId1 = selectedRunIds[0];
     const runId2 = selectedRunIds[1] ?? null;
-    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype });
+    const isCompare = !!runId2;
+    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype, run1PredSubtype, run2PredSubtype });
     setRecordsLoading(true);
     setRecordsData(null);
     try {
-      const data = await fetchRecords(runId1, trueType, trueSubtype, 50, correctnessFilter, runId2, predSubtype);
+      const data = await fetchRecords(
+        runId1, trueType, trueSubtype, 50,
+        isCompare ? null : correctnessFilter,
+        runId2, isCompare ? null : predSubtype,
+        isCompare ? compareFilter : null,
+        isCompare ? run1PredSubtype : null,
+        isCompare ? run2PredSubtype : null,
+      );
       setRecordsData(data);
     } finally {
       setRecordsLoading(false);
     }
-  }, [selectedRunIds, fetchRecords, correctnessFilter]);
+  }, [selectedRunIds, fetchRecords, correctnessFilter, compareFilter]);
 
   /* for RowLevelTable export: fetch all records without limit */
   const handleExportRecords = useCallback(async () => {
     if (!recordQuery) return { data: [], pagination: { total: 0 } };
-    return fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
-  }, [recordQuery, fetchRecords, correctnessFilter]);
+    const isCompare = !!recordQuery.runId2;
+    return fetchRecords(
+      recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999,
+      isCompare ? null : correctnessFilter,
+      recordQuery.runId2 ?? null,
+      isCompare ? null : (recordQuery.predSubtype ?? null),
+      isCompare ? compareFilter : null,
+      isCompare ? (recordQuery.run1PredSubtype ?? null) : null,
+      isCompare ? (recordQuery.run2PredSubtype ?? null) : null,
+    );
+  }, [recordQuery, fetchRecords, correctnessFilter, compareFilter]);
 
-  /* re-fetch when correctness filter changes while a query is active */
+  /* re-fetch when correctness filter changes while in single-run mode */
   useEffect(() => {
-    if (!recordQuery) return;
+    if (!recordQuery || recordQuery.runId2) return;
     const refetch = async () => {
       setRecordsLoading(true);
       setRecordsData(null);
       try {
-        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
+        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, null, recordQuery.predSubtype ?? null, null);
         setRecordsData(data);
       } finally {
         setRecordsLoading(false);
@@ -248,12 +284,43 @@ function Dashboard() {
     refetch();
   }, [correctnessFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* re-fetch when compare filter changes while in compare mode */
+  useEffect(() => {
+    if (!recordQuery || !recordQuery.runId2) return;
+    const refetch = async () => {
+      setRecordsLoading(true);
+      setRecordsData(null);
+      try {
+        const data = await fetchRecords(
+          recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, null,
+          recordQuery.runId2,
+          null, compareFilter,
+          recordQuery.run1PredSubtype ?? null,
+          recordQuery.run2PredSubtype ?? null,
+        );
+        setRecordsData(data);
+      } finally {
+        setRecordsLoading(false);
+      }
+    };
+    refetch();
+  }, [compareFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* re-fetch after translation */
   const handleTranslated = useCallback(async () => {
     if (!recordQuery) return;
-    const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, recordQuery.runId2 ?? null, recordQuery.predSubtype ?? null);
+    const isCompare = !!recordQuery.runId2;
+    const data = await fetchRecords(
+      recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50,
+      isCompare ? null : correctnessFilter,
+      recordQuery.runId2 ?? null,
+      isCompare ? null : (recordQuery.predSubtype ?? null),
+      isCompare ? compareFilter : null,
+      isCompare ? (recordQuery.run1PredSubtype ?? null) : null,
+      isCompare ? (recordQuery.run2PredSubtype ?? null) : null,
+    );
     setRecordsData(data);
-  }, [recordQuery, fetchRecords, correctnessFilter]);
+  }, [recordQuery, fetchRecords, correctnessFilter, compareFilter]);
 
   /* ── run names for summary bar ── */
   const run1Entry = leaderboard.find(e => e.run_id === selectedRunIds[0]);
@@ -270,6 +337,13 @@ function Dashboard() {
 
   const recordsTitle = recordQuery
     ? (() => {
+        // Compare mode with transition matrix preds
+        if (recordQuery.run1PredSubtype || recordQuery.run2PredSubtype) {
+          const typeLabel = recordQuery.trueType ? `${recordQuery.trueType} › ` : '';
+          const r1 = recordQuery.run1PredSubtype || '…';
+          const r2 = recordQuery.run2PredSubtype || '…';
+          return `${typeLabel}${run1Name || 'Run 1'}: ${r1} / ${run2Name || 'Run 2'}: ${r2}`;
+        }
         const base = recordQuery.trueSubtype
           ? `${recordQuery.trueType} › ${recordQuery.trueSubtype}`
           : recordQuery.trueType
@@ -325,11 +399,17 @@ function Dashboard() {
             <TypeHealthGrid
               typeHealth={typeHealth}
               typeHealth2={typeHealth2}
+              compareTypeHealth={compareTypeHealth}
               runId={selectedRunIds[0]}
+              runId2={selectedRunIds[1] ?? null}
+              run1Name={run1Name}
+              run2Name={run2Name}
               onViewRecords={handleViewRecords}
               activeSubtype={recordQuery?.trueSubtype ?? null}
               correctnessFilter={correctnessFilter}
               onCorrectnessFilter={v => setCorrectnessFilter(prev => prev === v ? null : v)}
+              compareFilter={compareFilter}
+              onCompareFilter={v => setCompareFilter(prev => prev === v ? null : v)}
             />
           )}
 
