@@ -208,7 +208,7 @@ function TypeDetailPanel({ typeData, typeData2, runId, onViewRecords, onClose, a
 }
 
 /* ── TypeCard ────────────────────────────────────────────── */
-function TypeCard({ typeData, typeData2, isExpanded, isDimmed, onClick }) {
+function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter, onClick }) {
   const { accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
   const sev = severityClass(accuracy, cross_type_rate);
 
@@ -218,6 +218,13 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, onClick }) {
 
   const delta = typeData2 ? typeData2.accuracy - accuracy : null;
 
+  // Filtered view: what the active legend filter highlights
+  const filteredCount = correctnessFilter === 'correct'    ? correct
+                      : correctnessFilter === 'same_type'  ? same_type_wrong
+                      : correctnessFilter === 'cross_type' ? cross_type_wrong
+                      : null;
+  const filteredPct   = filteredCount !== null ? (filteredCount / total) * 100 : null;
+
   return (
     <button
       className={`type-card ${sev} ${isExpanded ? 'expanded' : ''} ${isDimmed ? 'type-card-dimmed' : ''}`}
@@ -226,19 +233,21 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, onClick }) {
       <div className="type-card-name">{typeData.type}</div>
 
       <div className="type-card-accuracy">
-        {pctNum(accuracy)}%
-        {typeData2 && <DeltaBadge delta={delta} />}
+        {filteredPct !== null
+          ? <><span className={`type-card-filtered-pct pct-${correctnessFilter}`}>{filteredPct.toFixed(1)}%</span><span className="type-card-filtered-of"> of {total}</span></>
+          : <>{pctNum(accuracy)}%{typeData2 && <DeltaBadge delta={delta} />}</>
+        }
       </div>
 
       <div className="type-card-bar" title={`Correct: ${pct(accuracy)} · Same-type wrong: ${pct(same_type_wrong/total)} · Cross-type: ${pct(cross_type_rate)}`}>
-        <div className="bar-correct"   style={{ width: `${correctPct}%` }} />
-        <div className="bar-same-type" style={{ width: `${samePct}%` }} />
-        <div className="bar-cross-type" style={{ width: `${crossPct}%` }} />
+        <div className="bar-correct"   style={{ width: `${correctPct}%`,  opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
+        <div className="bar-same-type" style={{ width: `${samePct}%`,     opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
+        <div className="bar-cross-type" style={{ width: `${crossPct}%`,   opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
       </div>
 
       <div className="type-card-meta">
-        <span>{total} records</span>
-        {cross_type_wrong > 0 && <span className="type-card-cross-flag">⚠ cross-type</span>}
+        <span>{filteredCount !== null ? `${filteredCount.toLocaleString()} / ${total.toLocaleString()}` : total.toLocaleString()} records</span>
+        {cross_type_wrong > 0 && !correctnessFilter && <span className="type-card-cross-flag">⚠ cross-type</span>}
       </div>
     </button>
   );
@@ -307,6 +316,7 @@ function TypeHealthGrid({ typeHealth, typeHealth2, runId, onViewRecords, activeS
             typeData2={typeMap2[t.type] || null}
             isExpanded={expandedType === t.type}
             isDimmed={!cardMatchesFilter(t)}
+            correctnessFilter={correctnessFilter}
             onClick={() => handleCardClick(t.type)}
           />
         ))}

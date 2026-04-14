@@ -366,6 +366,15 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   letter-spacing: -0.03em; color: var(--text);
   display: flex; align-items: baseline; gap: 0.4rem;
 }
+.type-card-filtered-pct {
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em;
+}
+.pct-correct    { color: var(--success-text); }
+.pct-same_type  { color: var(--warning-text); }
+.pct-cross_type { color: var(--danger-text);  }
+.type-card-filtered-of {
+  font-size: 0.78rem; font-weight: 500; color: var(--text-muted);
+}
 
 /* severity bar */
 .type-card-bar {
