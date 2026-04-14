@@ -36,6 +36,7 @@ function SubtypeBadge({ st, delta, isActive, isDimmed, onViewRecords }) {
         <span className="sbadge-acc">{pctNum(st.f1)}%</span>
         {delta !== undefined && <DeltaBadge delta={delta} />}
       </div>
+      <div className="sbadge-count">{st.total.toLocaleString()} records</div>
       <div className="sbadge-bar">
         <div className="bar-correct"    style={{ width: `${correctPct}%` }} />
         <div className="bar-same-type"  style={{ width: `${samePct}%` }} />
@@ -352,7 +353,7 @@ function TypeDetailPanel({ typeData, typeData2, runId, runId2, run1Name, run2Nam
 }
 
 /* ── TypeCard (single mode) ──────────────────────────────── */
-function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter, onClick }) {
+function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter, onClick, widthPx }) {
   const { f1, accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
   const sev = severityClass(f1, cross_type_rate);
 
@@ -371,6 +372,7 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter
   return (
     <button
       className={`type-card ${sev} ${isExpanded ? 'expanded' : ''} ${isDimmed ? 'type-card-dimmed' : ''}`}
+      style={{ width: `${widthPx}px` }}
       onClick={onClick}
     >
       <div className="type-card-name">{typeData.type}</div>
@@ -397,11 +399,10 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter
 }
 
 /* ── TypeCardCompare ─────────────────────────────────────── */
-function TypeCardCompare({ typeData, compareData, isExpanded, isDimmed, compareFilter, onClick }) {
+function TypeCardCompare({ typeData, compareData, isExpanded, isDimmed, compareFilter, onClick, widthPx }) {
   const { type, f1, total } = typeData;
   const sev = severityClass(f1, typeData.cross_type_rate);
 
-  // 4-outcome bar
   const bc  = compareData ? compareData.both_correct  : 0;
   const r1  = compareData ? compareData.run1_only      : 0;
   const r2  = compareData ? compareData.run2_only      : 0;
@@ -425,6 +426,7 @@ function TypeCardCompare({ typeData, compareData, isExpanded, isDimmed, compareF
   return (
     <button
       className={`type-card ${sev} ${isExpanded ? 'expanded' : ''} ${isDimmed ? 'type-card-dimmed' : ''}`}
+      style={{ width: `${widthPx}px` }}
       onClick={onClick}
     >
       <div className="type-card-name">{type}</div>
@@ -507,6 +509,14 @@ function TypeHealthGrid({
     return true;
   }
 
+  const maxTotal = Math.max(...typeHealth.map(t => {
+    if (isCompare) {
+      const cd = compareMap[t.type];
+      return cd ? (cd.both_correct + cd.run1_only + cd.run2_only + cd.both_wrong) : t.total;
+    }
+    return t.total;
+  }), 1);
+
   const LEGEND_SINGLE = [
     { key: 'correct',    label: 'Correct',             cls: 'swatch-correct' },
     { key: 'same_type',  label: 'Same-type wrong',     cls: 'swatch-same-type' },
@@ -519,6 +529,7 @@ function TypeHealthGrid({
     { key: 'run2_only',    label: `${run2Name || 'Run 2'} only`,  cls: 'swatch-cmp-run2-only' },
     { key: 'both_wrong',   label: 'Both wrong',                cls: 'swatch-cmp-both-wrong' },
   ];
+
 
   return (
     <div className="type-health-section">
@@ -548,8 +559,12 @@ function TypeHealthGrid({
       </div>
 
       <div className="type-grid">
-        {typeHealth.map(t => (
-          isCompare
+        {typeHealth.map(t => {
+          const tot = isCompare
+            ? (() => { const cd = compareMap[t.type]; return cd ? (cd.both_correct + cd.run1_only + cd.run2_only + cd.both_wrong) : t.total; })()
+            : t.total;
+          const widthPx = Math.round(100 + (tot / maxTotal) * 140);
+          return isCompare
             ? <TypeCardCompare
                 key={t.type}
                 typeData={t}
@@ -558,6 +573,7 @@ function TypeHealthGrid({
                 isDimmed={!cardMatchesCompareFilter(t)}
                 compareFilter={compareFilter}
                 onClick={() => handleCardClick(t.type)}
+                widthPx={widthPx}
               />
             : <TypeCard
                 key={t.type}
@@ -567,8 +583,9 @@ function TypeHealthGrid({
                 isDimmed={!cardMatchesFilter(t)}
                 correctnessFilter={correctnessFilter}
                 onClick={() => handleCardClick(t.type)}
-              />
-        ))}
+                widthPx={widthPx}
+              />;
+        })}
       </div>
 
       {expandedData && (

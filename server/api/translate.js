@@ -29,6 +29,31 @@ if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
 }
 
 /**
+ * After translation, walk both the original and translated objects and restore
+ * any leaf value from the original if it is not a string (booleans, numbers,
+ * null, arrays of non-strings, etc.).  This prevents the LLM from flipping
+ * values like `true → false` or changing numbers.
+ */
+function restoreNonStrings(original, translated) {
+  // Scalar: if original isn't a string, always keep the original value
+  if (typeof original !== 'object' || original === null) {
+    return typeof original === 'string' ? translated : original;
+  }
+  // Array: recurse element-by-element; fall back to original element if translated is shorter
+  if (Array.isArray(original)) {
+    const tArr = Array.isArray(translated) ? translated : [];
+    return original.map((item, i) => restoreNonStrings(item, i < tArr.length ? tArr[i] : item));
+  }
+  // Object: recurse over keys; carry over any key the LLM dropped
+  const tObj = (translated && typeof translated === 'object' && !Array.isArray(translated)) ? translated : {};
+  const result = {};
+  for (const key of Object.keys(original)) {
+    result[key] = restoreNonStrings(original[key], key in tObj ? tObj[key] : original[key]);
+  }
+  return result;
+}
+
+/**
  * Translate all non-English string keys and values in an attributes object
  * to English using OpenAI chat completions, preserving the JSON structure.
  */
@@ -76,7 +101,8 @@ ${JSON.stringify(attrs, null, 2)}`;
 
   const text = choices[0].message.content.trim();
   const jsonText = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-  return JSON.parse(jsonText);
+  const translated = JSON.parse(jsonText);
+  return restoreNonStrings(attrs, translated);
 }
 
 /** Run tasks with a bounded concurrency pool, calling onDone after each. */
