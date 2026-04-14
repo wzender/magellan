@@ -399,8 +399,9 @@ function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter
 }
 
 /* ── TypeCardCompare ─────────────────────────────────────── */
-function TypeCardCompare({ typeData, compareData, isExpanded, isDimmed, compareFilter, onClick, widthPx }) {
+function TypeCardCompare({ typeData, typeData2, compareData, isExpanded, isDimmed, compareFilter, onClick, widthPx }) {
   const { type, f1, total } = typeData;
+  const delta = typeData2 ? typeData2.f1 - f1 : null;
   const sev = severityClass(f1, typeData.cross_type_rate);
 
   const bc  = compareData ? compareData.both_correct  : 0;
@@ -434,7 +435,7 @@ function TypeCardCompare({ typeData, compareData, isExpanded, isDimmed, compareF
       <div className="type-card-accuracy">
         {filteredPct !== null
           ? <><span className={`type-card-filtered-pct cmp-pct-${compareFilter}`}>{filteredPct.toFixed(1)}%</span><span className="type-card-filtered-of"> of {tot}</span></>
-          : <>{pctNum(f1)}%</>
+          : <>{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</>
         }
       </div>
 
@@ -568,6 +569,7 @@ function TypeHealthGrid({
             ? <TypeCardCompare
                 key={t.type}
                 typeData={t}
+                typeData2={typeMap2[t.type] || null}
                 compareData={compareMap[t.type] || null}
                 isExpanded={expandedType === t.type}
                 isDimmed={!cardMatchesCompareFilter(t)}
