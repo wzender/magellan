@@ -8,6 +8,10 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
+  const [localOverrides, setLocalOverrides] = useState(new Map()); // request_id -> { en_attributes?, en_metadata? }
+
+  // Clear overrides when fresh data arrives from re-fetch
+  useEffect(() => { setLocalOverrides(new Map()); }, [data]);
   const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 
@@ -109,9 +113,14 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
 
   if (!data || !data.data) return <div>No records</div>;
 
+  // Merge local translation overrides into the prop data
+  const mergedData = localOverrides.size > 0
+    ? data.data.map(r => { const ov = localOverrides.get(r.request_id); return ov ? { ...r, ...ov } : r; })
+    : data.data;
+
   const getSortedData = () => {
-    if (!sortConfig.key) return [...data.data];
-    return [...data.data].sort((a, b) => {
+    if (!sortConfig.key) return [...mergedData];
+    return [...mergedData].sort((a, b) => {
       const aValue = a[sortConfig.key] ?? '';
       const bValue = b[sortConfig.key] ?? '';
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -362,6 +371,15 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             if (onTranslated) onTranslated();
           } else {
             setTranslating({ done: event.done, total: event.total });
+            // Apply translation immediately to visible rows
+            if (event.request_id && event.attrsEn !== undefined) {
+              const enKey = field === 'metadata' ? 'en_metadata' : 'en_attributes';
+              setLocalOverrides(prev => {
+                const next = new Map(prev);
+                next.set(event.request_id, { ...prev.get(event.request_id), [enKey]: event.attrsEn });
+                return next;
+              });
+            }
           }
         }
       }

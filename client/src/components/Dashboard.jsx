@@ -179,6 +179,24 @@ function Dashboard() {
     setRecordsData(null);
   };
 
+  /* ── auto-show all records when a single run is selected ── */
+  useEffect(() => {
+    if (selectedRunIds.length !== 1 || !selectedRunIds[0]) return;
+    const runId = selectedRunIds[0];
+    const load = async () => {
+      setRecordQuery({ runId, runId2: null, trueType: null, trueSubtype: null, predSubtype: null });
+      setRecordsLoading(true);
+      setRecordsData(null);
+      try {
+        const data = await fetchRecords(runId, null, null, 50, correctnessFilter);
+        setRecordsData(data);
+      } finally {
+        setRecordsLoading(false);
+      }
+    };
+    load();
+  }, [selectedRunIds[0]]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── record fetch ── */
   const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null) => {
     let url = runId2
@@ -254,7 +272,9 @@ function Dashboard() {
     ? (() => {
         const base = recordQuery.trueSubtype
           ? `${recordQuery.trueType} › ${recordQuery.trueSubtype}`
-          : `All ${recordQuery.trueType} records`;
+          : recordQuery.trueType
+            ? `All ${recordQuery.trueType} records`
+            : 'All records';
         if (!recordQuery.predSubtype) return base;
         if (recordQuery.predSubtype === '__cross_type__') return `${base} → cross-type`;
         return `${base} → ${recordQuery.predSubtype}`;
