@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function labelClass(record) {
@@ -156,16 +156,8 @@ function BreakdownBar({ records }) {
 
 /* ── RecordViewer (inline) ───────────────────────────────── */
 function RecordViewer({ title, records, total, loading, onClose }) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!loading && records && records.length > 0) {
-      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [loading, records]);
-
   return (
-    <div className="records-section" ref={ref}>
+    <div className="records-section">
       <div className="records-section-header">
         <div className="records-section-title">
           <span>{title}</span>

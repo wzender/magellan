@@ -329,11 +329,6 @@ function Dashboard() {
   const run2Name  = run2Entry?.run_name ?? '';
 
   const recordsRef = useRef(null);
-  useEffect(() => {
-    if (!recordsLoading && recordsData) {
-      recordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [recordsLoading, recordsData]);
 
   const recordsTitle = recordQuery
     ? (() => {
