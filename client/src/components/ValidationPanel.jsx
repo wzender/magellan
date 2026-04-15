@@ -318,9 +318,6 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
               <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
                 Request ID{sortIndicator('request_id')}
               </th>
-              <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('pred_type')}>
-                Suggested Type{sortIndicator('pred_type')}
-              </th>
               <th style={{ width: 150, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype')}>
                 Suggested Subtype{sortIndicator('pred_subtype')}
               </th>
@@ -363,7 +360,6 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
                     />
                   </td>
                   <td className="cell-request-id">{r.request_id}</td>
-                  <td>{r.pred_type}</td>
                   <td><strong>{r.pred_subtype}</strong></td>
                   <td className="cell-json">
                     {renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}

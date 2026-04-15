@@ -15,9 +15,13 @@ function labelSeverityText(record) {
 
 function renderVal(v) {
   if (v === null || v === undefined) return '—';
-  if (Array.isArray(v)) return v.join(', ');
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
+  let val = v;
+  if (typeof val === 'string') {
+    try { val = JSON.parse(val); } catch { /* keep as string */ }
+  }
+  if (Array.isArray(val)) return val.join(', ');
+  if (typeof val === 'object') return <pre className="json-pretty">{JSON.stringify(val, null, 2)}</pre>;
+  return String(val);
 }
 
 /* ── FieldTable ── 3-column: Field | Original | English ──── */

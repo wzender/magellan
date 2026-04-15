@@ -1273,6 +1273,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .json-td {
   vertical-align: top;
   padding: 0.3rem 0.4rem !important;
+  width: 25vw;
+  min-width: 25vw;
+  max-width: 25vw;
+  overflow: hidden;
 }
 
 .json-cell-wrapper { position: relative; }
@@ -1579,6 +1583,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   white-space: pre;
   overflow: auto;
   max-height: 25vh;
+  max-width: calc(25vw - 1.6rem);
 }
 
 .json-empty {

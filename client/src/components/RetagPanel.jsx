@@ -3,6 +3,14 @@ import * as XLSX from 'xlsx';
 
 const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 
+function parseJsonValue(raw) {
+  let obj = raw;
+  if (typeof raw === 'string') {
+    try { obj = JSON.parse(raw); } catch { /* keep as string */ }
+  }
+  return obj;
+}
+
 function RetagPanel({ retagList, allSubtypes, onSetSubtype, onRemove, onClear }) {
   const [rowHeight, setRowHeight] = useState('3');
 
@@ -129,14 +137,22 @@ function RetagPanel({ retagList, allSubtypes, onSetSubtype, onRemove, onClear })
                     </select>
                   </td>
                   <td className="json-td">
-                    {record.attributes && Object.keys(record.attributes).length > 0
-                      ? <pre className="json-pretty">{JSON.stringify(record.attributes, null, 2)}</pre>
-                      : <div className="json-empty">(empty)</div>}
+                    {(() => {
+                      const obj = parseJsonValue(record.attributes);
+                      const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
+                      return isEmpty
+                        ? <div className="json-empty">(empty)</div>
+                        : <pre className="json-pretty">{typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj)}</pre>;
+                    })()}
                   </td>
                   <td className="json-td">
-                    {record.metadata && Object.keys(record.metadata).length > 0
-                      ? <pre className="json-pretty">{JSON.stringify(record.metadata, null, 2)}</pre>
-                      : <div className="json-empty">(empty)</div>}
+                    {(() => {
+                      const obj = parseJsonValue(record.metadata);
+                      const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
+                      return isEmpty
+                        ? <div className="json-empty">(empty)</div>
+                        : <pre className="json-pretty">{typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj)}</pre>;
+                    })()}
                   </td>
                   <td>
                     <button

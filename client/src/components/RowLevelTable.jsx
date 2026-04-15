@@ -30,8 +30,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'run2_pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'run2_pred_subtype', label: 'Subtype', width: 120, isGroup: false },
-            { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
+            { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
           ]
         ],
         columns: [
@@ -42,8 +42,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'run2_pred_type', label: 'Predicted Type', width: 100 },
           { key: 'run2_pred_subtype', label: 'Predicted Subtype', width: 120 },
-          { key: 'attributes', label: 'Attributes', width: 220 },
-          { key: 'metadata', label: 'Metadata', width: 220 }
+          { key: 'attributes', label: 'Attributes', width: '25vw' },
+          { key: 'metadata', label: 'Metadata', width: '25vw' }
         ]
       };
     } else {
@@ -61,8 +61,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'true_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
-            { key: 'attributes', label: 'Attributes', width: 220, isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: 220, isGroup: false }
+            { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
           ]
         ],
         columns: [
@@ -71,8 +71,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'true_subtype', label: 'Actual Subtype', width: 120 },
           { key: 'pred_type', label: 'Predicted Type', width: 100 },
           { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
-          { key: 'attributes', label: 'Attributes', width: 220 },
-          { key: 'metadata', label: 'Metadata', width: 220 }
+          { key: 'attributes', label: 'Attributes', width: '25vw' },
+          { key: 'metadata', label: 'Metadata', width: '25vw' }
         ]
       };
     }
