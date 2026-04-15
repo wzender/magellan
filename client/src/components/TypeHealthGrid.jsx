@@ -720,45 +720,6 @@ function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Nam
   );
 }
 
-/* ── TickerStrip ─────────────────────────────────────────── */
-function TickerStrip({ typeHealth, typeHealth2, expandedType, onTypeClick }) {
-  if (!typeHealth2) return null;
-
-  const typeMap2 = {};
-  typeHealth2.forEach(t => { typeMap2[t.type] = t; });
-
-  const items = typeHealth.map(t => {
-    const t2 = typeMap2[t.type];
-    const f1  = t.f1 ?? t.accuracy;
-    const f12 = t2 ? (t2.f1 ?? t2.accuracy) : f1;
-    const delta = f12 - f1;
-    return { type: t.type, f1, f12, delta };
-  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-
-  return (
-    <div className="ticker-strip">
-      {items.map(item => {
-        const dir = item.delta > 0.005 ? 'up' : item.delta < -0.005 ? 'down' : 'flat';
-        return (
-          <button
-            key={item.type}
-            className={`ticker-pill ticker-${dir} ${expandedType === item.type ? 'ticker-active' : ''}`}
-            onClick={() => onTypeClick(item.type)}
-            title={`${item.type}: ${pctNum(item.f1)}% → ${pctNum(item.f12)}%`}
-          >
-            <span className="ticker-symbol">{item.type}</span>
-            <span className="ticker-price">{pctNum(item.f12)}%</span>
-            <span className="ticker-delta">
-              {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '='}{' '}
-              {dir !== 'flat' ? `${item.delta > 0 ? '+' : ''}${(item.delta * 100).toFixed(1)}%` : '0%'}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /* ── TypeHealthGrid ──────────────────────────────────────── */
 function TypeHealthGrid({
   typeHealth, typeHealth2, compareTypeHealth,
@@ -847,15 +808,6 @@ function TypeHealthGrid({
           compareTypeHealth={compareTypeHealth}
           run1Name={run1Name}
           run2Name={run2Name}
-        />
-      )}
-
-      {isCompare && (
-        <TickerStrip
-          typeHealth={typeHealth}
-          typeHealth2={typeHealth2}
-          expandedType={expandedType}
-          onTypeClick={handleCardClick}
         />
       )}
 
