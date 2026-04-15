@@ -170,12 +170,14 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
     const c = row.preds[sub];
     return (typeof c === 'object' && c !== null) ? (c.total || 0) : (c || 0);
   };
+  // Off-diagonal only helper
+  const offDiagTotal = (row, sub) => sub === row.run1_pred ? 0 : cellTotal(row, sub);
 
-  const maxCount = Math.max(...rows.flatMap(r => columns.map(c => cellTotal(r, c.subtype))));
+  const maxCount = Math.max(...rows.flatMap(r => columns.map(c => offDiagTotal(r, c.subtype))));
 
-  // Filter to cells that have count >= minCount (for off-diagonal)
+  // Filter to cells that have count >= minCount (off-diagonal only)
   const hasAnyVisible = rows.some(r =>
-    columns.some(c => cellTotal(r, c.subtype) >= minCount)
+    columns.some(c => offDiagTotal(r, c.subtype) >= minCount)
   );
 
   return (
@@ -204,10 +206,8 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
           >+</button>
         </div>
         <span className="scm-legend">
-          <span className="scm-legend-swatch stm-swatch-agree" /> both same
           <span className="scm-legend-swatch stm-swatch-r1win" /> {run1Name || 'Run 1'} better
           <span className="scm-legend-swatch stm-swatch-r2win" /> {run2Name || 'Run 2'} better
-          <span className="scm-legend-swatch stm-swatch-disagree" /> both wrong
         </span>
       </div>
       {!hasAnyVisible && (
@@ -222,7 +222,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                   <span className="stm-run1-label">{run1Name || 'Run 1'} ↓</span>
                   <span className="stm-run2-label">{run2Name || 'Run 2'} →</span>
                 </th>
-                {columns.filter(c => rows.some(row => cellTotal(row, c.subtype) >= minCount)).map(c => (
+                {columns.filter(c => rows.some(row => offDiagTotal(row, c.subtype) >= minCount)).map(c => (
                   <th key={c.subtype} className="scm-col-head stm-col-head" title={c.subtype}>
                     {c.subtype}
                   </th>
@@ -231,7 +231,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
             </thead>
             <tbody>
               {rows.map(row => {
-                const rowHasVisible = columns.some(c => cellTotal(row, c.subtype) >= minCount);
+                const rowHasVisible = columns.some(c => offDiagTotal(row, c.subtype) >= minCount);
                 if (!rowHasVisible) return null;
                 return (
                   <tr key={row.run1_pred}>
@@ -240,11 +240,12 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                         {row.run1_pred}
                       </button>
                     </td>
-                    {columns.filter(c => rows.some(r => cellTotal(r, c.subtype) >= minCount)).map(col => {
+                    {columns.filter(c => rows.some(r => offDiagTotal(r, c.subtype) >= minCount)).map(col => {
+                      if (col.subtype === row.run1_pred) return <td key={col.subtype} className="scm-cell stm-cell-empty" />;
                       const cell = row.preds[col.subtype];
                       const count = cellTotal(row, col.subtype);
                       if (count < minCount) return <td key={col.subtype} className="scm-cell stm-cell-empty" />;
-                      const isDiag = col.subtype === row.run1_pred;
+                      const isDiag = false;
                       const intensity = maxCount > 0 ? count / maxCount : 0;
                       const display = showPct
                         ? (count ? (count / row.total * 100).toFixed(0) + '%' : '')
@@ -252,30 +253,20 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
 
                       // Color based on correctness breakdown
                       let bgColor;
-                      if (isDiag) {
-                        // Diagonal = both runs agree (green)
-                        bgColor = `rgba(34,197,94,${0.15 + intensity * 0.55})`;
-                      } else if (cell && typeof cell === 'object' && cell.total > 0) {
-                        const { run1Correct = 0, run2Correct = 0, bothWrong = 0 } = cell;
-                        if (run1Correct > run2Correct && run1Correct >= bothWrong) {
-                          // Run 1 dominant — orange tone
-                          bgColor = `rgba(249,115,22,${0.15 + intensity * 0.55})`;
-                        } else if (run2Correct > run1Correct && run2Correct >= bothWrong) {
-                          // Run 2 dominant — cyan tone
-                          bgColor = `rgba(6,182,212,${0.15 + intensity * 0.55})`;
-                        } else {
-                          // Both wrong dominant or tied — slate
-                          bgColor = `rgba(148,163,184,${0.15 + intensity * 0.6})`;
-                        }
+                      const r1c = (cell && typeof cell === 'object') ? (cell.run1Correct || 0) : 0;
+                      const r2c = (cell && typeof cell === 'object') ? (cell.run2Correct || 0) : 0;
+                      if (r1c > r2c) {
+                        bgColor = `rgba(249,115,22,${0.15 + intensity * 0.55})`;
+                      } else if (r2c > r1c) {
+                        bgColor = `rgba(6,182,212,${0.15 + intensity * 0.55})`;
                       } else {
                         bgColor = `rgba(148,163,184,${0.15 + intensity * 0.6})`;
                       }
 
                       // Build tooltip with correctness breakdown
                       let tooltip = `${run1Name || 'Run 1'}: ${row.run1_pred} → ${run2Name || 'Run 2'}: ${col.subtype}: ${count}`;
-                      if (!isDiag && cell && typeof cell === 'object') {
-                        const { run1Correct = 0, run2Correct = 0, bothWrong = 0 } = cell;
-                        tooltip += `\n${run1Name || 'Run 1'} correct: ${run1Correct}, ${run2Name || 'Run 2'} correct: ${run2Correct}, both wrong: ${bothWrong}`;
+                      if (r1c > 0 || r2c > 0) {
+                        tooltip += `\n${run1Name || 'Run 1'} correct: ${r1c}, ${run2Name || 'Run 2'} correct: ${r2c}`;
                       }
 
                       return (
@@ -297,6 +288,88 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── TypeDetailPanel ─────────────────────────────────────── */
+
+/* ── SubtypeChangesList (compare mode — flattened transition list) ── */
+function SubtypeChangesList({ runId1, runId2, trueType, compareFilter, run1Name, run2Name, onViewRecords }) {
+  const [matrix, setMatrix] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    let url = `/api/subtype-transition?run_id1=${runId1}&run_id2=${runId2}&true_type=${encodeURIComponent(trueType)}`;
+    if (compareFilter) url += `&compare_filter=${compareFilter}`;
+    fetch(url)
+      .then(r => r.json())
+      .then(d => { setMatrix(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [runId1, runId2, trueType, compareFilter]);
+
+  if (loading) return <div className="matrix-loading">Loading changes…</div>;
+  if (!matrix || matrix.rows.length === 0) return <div className="matrix-empty">No data for this filter</div>;
+
+  // Build list of changes from off-diagonal cells
+  const changes = [];
+  matrix.rows.forEach(row => {
+    Object.entries(row.preds).forEach(([run2Pred, cell]) => {
+      if (run2Pred === row.run1_pred) return; // skip diagonal
+      const total = (typeof cell === 'object' && cell !== null) ? (cell.total || 0) : (cell || 0);
+      if (total === 0) return;
+      const run1Correct = (typeof cell === 'object') ? (cell.run1Correct || 0) : 0;
+      const run2Correct = (typeof cell === 'object') ? (cell.run2Correct || 0) : 0;
+      const bothWrong   = (typeof cell === 'object') ? (cell.bothWrong || 0) : 0;
+      // Only keep transitions where one run is clearly better
+      if (run1Correct > run2Correct || run2Correct > run1Correct) {
+        changes.push({ from: row.run1_pred, to: run2Pred, total, run1Correct, run2Correct, bothWrong });
+      }
+    });
+  });
+
+  // Sort: largest changes first
+  changes.sort((a, b) => b.total - a.total);
+
+  if (changes.length === 0) return <div className="matrix-empty">No subtype changes between runs</div>;
+
+  const maxTotal = Math.max(...changes.map(c => c.total));
+
+  return (
+    <div className="stcl-list">
+      {changes.map((ch, i) => {
+        // Determine dominant category
+        let tintClass = 'stcl-both-wrong';
+        let indicator = 'both wrong';
+        if (ch.run1Correct > ch.run2Correct && ch.run1Correct >= ch.bothWrong) {
+          tintClass = 'stcl-run1';
+          indicator = `${run1Name || 'Run 1'} was correct`;
+        } else if (ch.run2Correct > ch.run1Correct && ch.run2Correct >= ch.bothWrong) {
+          tintClass = 'stcl-run2';
+          indicator = `${run2Name || 'Run 2'} is correct`;
+        }
+
+        const barPct = maxTotal > 0 ? (ch.total / maxTotal) * 100 : 0;
+
+        return (
+          <button
+            key={`${ch.from}-${ch.to}-${i}`}
+            className={`stcl-item ${tintClass}`}
+            onClick={() => onViewRecords(ch.from, ch.to)}
+            title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}, both wrong: ${ch.bothWrong}`}
+          >
+            <span className="stcl-from">{ch.from}</span>
+            <span className="stcl-arrow">→</span>
+            <span className="stcl-to">{ch.to}</span>
+            <span className="stcl-count">{ch.total}</span>
+            <span className="stcl-bar-track">
+              <span className="stcl-bar" style={{ width: `${barPct}%` }} />
+            </span>
+            <span className="stcl-indicator">{indicator}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -483,6 +556,7 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
 /* ── TypeHealthRowCompare (compare mode — bar layout) ─────── */
 function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isExpanded, isDimmed, compareFilter, onToggle, onViewRecords, runId, runId2, run1Name, run2Name }) {
   const { type } = typeData;
+  const [view, setView] = useState('changes');
   const f1 = typeData.f1 ?? typeData.accuracy;
   const delta = typeData2 ? (typeData2.f1 ?? typeData2.accuracy) - f1 : null;
   const sev = severityClass(f1, typeData.cross_type_rate);
@@ -523,20 +597,36 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
       {isExpanded && (
         <div className="th-row-detail">
           <div className="th-row-toolbar">
-            <span className="th-row-toolbar-label">Transition matrix</span>
+            <div className="view-toggle">
+              <button className={`view-toggle-btn ${view === 'changes' ? 'active' : ''}`} onClick={() => setView('changes')}>Subtypes</button>
+              <button className={`view-toggle-btn ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>Transition matrix</button>
+            </div>
             <button className="btn-view-records" onClick={() => onViewRecords(type, null, null, null, null)}>
               All {type} records
             </button>
           </div>
-          <SubtypeTransitionMatrix
-            runId1={runId}
-            runId2={runId2}
-            trueType={type}
-            compareFilter={compareFilter}
-            run1Name={run1Name}
-            run2Name={run2Name}
-            onViewRecords={(run1Pred, run2Pred) => onViewRecords(type, null, null, run1Pred, run2Pred)}
-          />
+          {view === 'changes' && (
+            <SubtypeChangesList
+              runId1={runId}
+              runId2={runId2}
+              trueType={type}
+              compareFilter={compareFilter}
+              run1Name={run1Name}
+              run2Name={run2Name}
+              onViewRecords={(run1Pred, run2Pred) => onViewRecords(type, null, null, run1Pred, run2Pred)}
+            />
+          )}
+          {view === 'matrix' && (
+            <SubtypeTransitionMatrix
+              runId1={runId}
+              runId2={runId2}
+              trueType={type}
+              compareFilter={compareFilter}
+              run1Name={run1Name}
+              run2Name={run2Name}
+              onViewRecords={(run1Pred, run2Pred) => onViewRecords(type, null, null, run1Pred, run2Pred)}
+            />
+          )}
         </div>
       )}
     </div>

@@ -1906,6 +1906,84 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: var(--text); user-select: none;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── SubtypeChangesList (compare transition list) ────────── */
+.stcl-list {
+  display: flex; flex-direction: column;
+  gap: 1px; padding: 0.3rem 0;
+}
+.stcl-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.2fr) 3rem 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border: none; background: transparent;
+  cursor: pointer; text-align: left;
+  font-size: 0.78rem; color: var(--text);
+  border-radius: 4px;
+  transition: background 0.12s;
+  border-left: 3px solid transparent;
+}
+.stcl-item:hover {
+  background: var(--bg-hover, #f1f5f9);
+}
+.stcl-item.stcl-run1 {
+  border-left-color: #f97316;
+  background: rgba(249,115,22,0.05);
+}
+.stcl-item.stcl-run1:hover {
+  background: rgba(249,115,22,0.12);
+}
+.stcl-item.stcl-run2 {
+  border-left-color: #06b6d4;
+  background: rgba(6,182,212,0.05);
+}
+.stcl-item.stcl-run2:hover {
+  background: rgba(6,182,212,0.12);
+}
+.stcl-item.stcl-both-wrong {
+  border-left-color: #94a3b8;
+  background: rgba(148,163,184,0.05);
+}
+.stcl-item.stcl-both-wrong:hover {
+  background: rgba(148,163,184,0.12);
+}
+.stcl-from, .stcl-to {
+  font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.stcl-arrow {
+  color: var(--text-muted); font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.stcl-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700; text-align: right;
+  color: var(--text-muted); font-size: 0.75rem;
+}
+.stcl-bar-track {
+  height: 6px; background: var(--border, #e2e8f0);
+  border-radius: 3px; overflow: hidden;
+  min-width: 40px;
+}
+.stcl-item.stcl-run1 .stcl-bar {
+  height: 100%; border-radius: 3px;
+  background: #f97316;
+}
+.stcl-item.stcl-run2 .stcl-bar {
+  height: 100%; border-radius: 3px;
+  background: #06b6d4;
+}
+.stcl-item.stcl-both-wrong .stcl-bar {
+  height: 100%; border-radius: 3px;
+  background: #94a3b8;
+}
+.stcl-indicator {
+  font-size: 0.68rem; color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .stm-corner {
   font-size: 0.7rem;
   padding: 0.2rem 0.3rem;
