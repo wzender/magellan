@@ -449,6 +449,12 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   box-shadow: var(--shadow);
 }
 .th-row.th-row-dimmed { opacity: 0.3; }
+.th-row.th-row-no-transitions {
+  opacity: 0.4;
+}
+.th-row.th-row-no-transitions .th-row-header:hover {
+  background: transparent;
+}
 
 /* severity left accent */
 .th-row.severity-good     { border-left: 4px solid var(--success); }
@@ -1910,8 +1916,30 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* ── SubtypeChangesList (compare transition list) ────────── */
 .stcl-list {
   display: flex; flex-direction: column;
-  gap: 1px; padding: 0.3rem 0;
+  gap: 0.5rem; padding: 0.3rem 0;
   max-width: 420px;
+}
+.stcl-group {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.stcl-group-header {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0.3rem 0.5rem 0.2rem;
+  color: var(--text-muted);
+}
+.stcl-group-header-run1 { color: #ea580c; }
+.stcl-group-header-run2 { color: #0891b2; }
+.stcl-group-swatch {
+  width: 10px; height: 10px; border-radius: 2px;
+  flex-shrink: 0;
+}
+.stcl-group-header-run1 .stcl-group-swatch { background: #f97316; }
+.stcl-group-header-run2 .stcl-group-swatch { background: #06b6d4; }
+.stcl-group-count {
+  font-size: 0.68rem; font-weight: 600;
+  color: var(--text-muted); opacity: 0.7;
 }
 .stcl-item {
   display: grid;

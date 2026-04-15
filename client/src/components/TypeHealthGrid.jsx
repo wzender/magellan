@@ -170,8 +170,17 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
     const c = row.preds[sub];
     return (typeof c === 'object' && c !== null) ? (c.total || 0) : (c || 0);
   };
-  // Off-diagonal only helper
-  const offDiagTotal = (row, sub) => sub === row.run1_pred ? 0 : cellTotal(row, sub);
+  // Off-diagonal only helper, excluding both-wrong (neither run dominant)
+  const offDiagTotal = (row, sub) => {
+    if (sub === row.run1_pred) return 0;
+    const c = row.preds[sub];
+    if (c && typeof c === 'object') {
+      const { run1Correct = 0, run2Correct = 0 } = c;
+      if (run1Correct === 0 && run2Correct === 0) return 0;
+      if (run1Correct === run2Correct) return 0;
+    }
+    return cellTotal(row, sub);
+  };
 
   const maxCount = Math.max(...rows.flatMap(r => columns.map(c => offDiagTotal(r, c.subtype))));
 
@@ -243,7 +252,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                     {columns.filter(c => rows.some(r => offDiagTotal(r, c.subtype) >= minCount)).map(col => {
                       if (col.subtype === row.run1_pred) return <td key={col.subtype} className="scm-cell stm-cell-empty" />;
                       const cell = row.preds[col.subtype];
-                      const count = cellTotal(row, col.subtype);
+                      const count = offDiagTotal(row, col.subtype);
                       if (count < minCount) return <td key={col.subtype} className="scm-cell stm-cell-empty" />;
                       const isDiag = false;
                       const intensity = maxCount > 0 ? count / maxCount : 0;
@@ -336,37 +345,50 @@ function SubtypeChangesList({ runId1, runId2, trueType, compareFilter, run1Name,
 
   const maxTotal = Math.max(...changes.map(c => c.total));
 
+  // Group by which run is better
+  const run1Changes = changes.filter(ch => ch.run1Correct > ch.run2Correct);
+  const run2Changes = changes.filter(ch => ch.run2Correct > ch.run1Correct);
+
+  const renderItem = (ch, i, tintClass) => {
+    const barPct = maxTotal > 0 ? (ch.total / maxTotal) * 100 : 0;
+    return (
+      <button
+        key={`${ch.from}-${ch.to}-${i}`}
+        className={`stcl-item ${tintClass}`}
+        onClick={() => onViewRecords(ch.from, ch.to)}
+        title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}`}
+      >
+        <span className="stcl-label">{ch.from} <span className="stcl-arrow">→</span> {ch.to}</span>
+        <span className="stcl-count">{ch.total}</span>
+        <span className="stcl-bar-track">
+          <span className="stcl-bar" style={{ width: `${barPct}%` }} />
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="stcl-list">
-      {changes.map((ch, i) => {
-        // Determine dominant category
-        let tintClass = 'stcl-both-wrong';
-        let indicator = 'both wrong';
-        if (ch.run1Correct > ch.run2Correct && ch.run1Correct >= ch.bothWrong) {
-          tintClass = 'stcl-run1';
-          indicator = `${run1Name || 'Run 1'} was correct`;
-        } else if (ch.run2Correct > ch.run1Correct && ch.run2Correct >= ch.bothWrong) {
-          tintClass = 'stcl-run2';
-          indicator = `${run2Name || 'Run 2'} is correct`;
-        }
-
-        const barPct = maxTotal > 0 ? (ch.total / maxTotal) * 100 : 0;
-
-        return (
-          <button
-            key={`${ch.from}-${ch.to}-${i}`}
-            className={`stcl-item ${tintClass}`}
-            onClick={() => onViewRecords(ch.from, ch.to)}
-            title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}`}
-          >
-            <span className="stcl-label">{ch.from} <span className="stcl-arrow">→</span> {ch.to}</span>
-            <span className="stcl-count">{ch.total}</span>
-            <span className="stcl-bar-track">
-              <span className="stcl-bar" style={{ width: `${barPct}%` }} />
-            </span>
-          </button>
-        );
-      })}
+      {run1Changes.length > 0 && (
+        <div className="stcl-group stcl-group-run1">
+          <div className="stcl-group-header stcl-group-header-run1">
+            <span className="stcl-group-swatch" />
+            {run1Name || 'Run 1'} better
+            <span className="stcl-group-count">{run1Changes.length}</span>
+          </div>
+          {run1Changes.map((ch, i) => renderItem(ch, i, 'stcl-run1'))}
+        </div>
+      )}
+      {run2Changes.length > 0 && (
+        <div className="stcl-group stcl-group-run2">
+          <div className="stcl-group-header stcl-group-header-run2">
+            <span className="stcl-group-swatch" />
+            {run2Name || 'Run 2'} better
+            <span className="stcl-group-count">{run2Changes.length}</span>
+          </div>
+          {run2Changes.map((ch, i) => renderItem(ch, i, 'stcl-run2'))}
+        </div>
+      )}
     </div>
   );
 }
@@ -574,10 +596,13 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
 
   const barTip = `Both correct: ${bc.toLocaleString()} (${bcPct.toFixed(1)}%) · ${run1Name || 'Run 1'} only: ${r1.toLocaleString()} (${r1Pct.toFixed(1)}%) · ${run2Name || 'Run 2'} only: ${r2.toLocaleString()} (${r2Pct.toFixed(1)}%) · Both wrong: ${bw.toLocaleString()} (${bwPct.toFixed(1)}%)`;
 
+  const hasTransitions = r1 > 0 || r2 > 0;
+  const noTransitions = !hasTransitions;
+
   return (
-    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''}`}>
-      <button className="th-row-header" onClick={onToggle}>
-        <span className="th-row-expand">{isExpanded ? '▾' : '▸'}</span>
+    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''} ${noTransitions ? 'th-row-no-transitions' : ''}`}>
+      <button className="th-row-header" onClick={hasTransitions ? onToggle : undefined} style={noTransitions ? { cursor: 'default' } : undefined}>
+        <span className="th-row-expand">{isExpanded ? '▾' : hasTransitions ? '▸' : ' '}</span>
         <span className="th-row-name" title={type}>{type}</span>
         <span className="th-row-f1">{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</span>
         <span className="th-row-count">{tot.toLocaleString()}</span>
