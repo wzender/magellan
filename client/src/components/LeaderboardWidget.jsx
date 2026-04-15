@@ -205,6 +205,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
               {columns.map(col => {
                 switch (col.key) {
                   case 'select': {
+                    if (!onRunToggle) return <td key={`${row.run_id}-${col.key}`} />;
                     const isChecked = selectedRuns.includes(row.run_id);
                     const isDisabled = (selectedRuns.length >= 2 && !isChecked) || row.table_exists === false;
                     return (

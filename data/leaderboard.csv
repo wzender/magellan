@@ -9,3 +9,5 @@ Test Benchmark,model_v3,1.2.0,0.0320,0.0320,2026-03-31T23:50:00Z
 Test Benchmark,model_v2,1.1.0,0.0345,0.0345,2026-03-30T12:00:00Z
 Test Benchmark,model_v1,1.0.0,0.0585,0.0585,2026-03-25T09:30:00Z
 Test Benchmark,perfect model,perfect,1.0,1.0,2026-03-31T18:00:00Z
+Unknowns,model_v1,1.0.0,0,0,2026-04-01T10:00:00Z
+Unknowns,model_v2,1.1.0,0,0,2026-04-05T14:00:00Z

@@ -4,6 +4,9 @@ import BenchmarkGallery from './BenchmarkGallery';
 import LeaderboardWidget from './LeaderboardWidget';
 import TypeHealthGrid from './TypeHealthGrid';
 import RowLevelTable from './RowLevelTable';
+import ValidationPanel from './ValidationPanel';
+
+const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function pctNum(n) { return (n * 100).toFixed(1); }
@@ -92,6 +95,13 @@ function Dashboard() {
   const [loading, setLoading]           = useState(false);
   const [correctnessFilter, setCorrectnessFilter] = useState(null); // null | 'correct' | 'same_type' | 'cross_type'
 
+  /* ── Unknowns validation state ── */
+  const [validationRecords, setValidationRecords] = useState([]);
+  const [validationVerdicts, setValidationVerdicts] = useState({});
+  const [validationLoading, setValidationLoading] = useState(false);
+
+  const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
+
   /* ── initial load: benchmarks + all leaderboards ── */
   useEffect(() => {
     const init = async () => {
@@ -125,28 +135,88 @@ function Dashboard() {
     setTypeHealth2(null);
     setRecordQuery(null);
     setRecordsData(null);
+    setValidationRecords([]);
+    setValidationVerdicts({});
     setScreen('benchmark');
     if (champion) {
       setSelectedRunIds([champion.run_id]);
-      // Always re-fetch — useEffect won't fire if the same run_id was already selected
-      const res  = await fetch(`/api/type-health?run_id=${champion.run_id}`);
-      const data = await res.json();
-      setTypeHealth(data);
+      if (benchmark.name !== UNKNOWNS_BENCHMARK_NAME) {
+        // Always re-fetch — useEffect won't fire if the same run_id was already selected
+        const res  = await fetch(`/api/type-health?run_id=${champion.run_id}`);
+        const data = await res.json();
+        setTypeHealth(data);
+      }
     } else {
       setSelectedRunIds([]);
     }
   }, [allLeaderboards]);
 
-  /* ── load type health when run 1 changes ── */
+  /* ── load type health when run 1 changes (skip for Unknowns) ── */
   useEffect(() => {
-    if (selectedRunIds.length === 0) return;
+    if (selectedRunIds.length === 0 || isUnknownsBenchmark) return;
     const load = async () => {
       const res  = await fetch(`/api/type-health?run_id=${selectedRunIds[0]}`);
       const data = await res.json();
       setTypeHealth(data);
     };
     load();
-  }, [selectedRunIds[0]]);
+  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Unknowns: load validation records + verdicts when run changes ── */
+  useEffect(() => {
+    if (!isUnknownsBenchmark || selectedRunIds.length === 0) return;
+    const runId = selectedRunIds[0];
+    const load = async () => {
+      setValidationLoading(true);
+      try {
+        const [recRes, verdRes] = await Promise.all([
+          fetch(`/api/records?run_id=${runId}&limit=999999`),
+          fetch(`/api/validation?run_id=${runId}`),
+        ]);
+        const recData = await recRes.json();
+        const verdData = await verdRes.json();
+        setValidationRecords(recData.data || []);
+        setValidationVerdicts(verdData || {});
+      } finally {
+        setValidationLoading(false);
+      }
+    };
+    load();
+  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Unknowns: set single verdict ── */
+  const handleSetVerdict = useCallback(async (requestId, verdict) => {
+    const runId = selectedRunIds[0];
+    setValidationVerdicts(prev => {
+      const next = { ...prev };
+      if (verdict) next[requestId] = verdict;
+      else delete next[requestId];
+      return next;
+    });
+    await fetch('/api/validation', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: String(runId), verdicts: { [requestId]: verdict } }),
+    });
+  }, [selectedRunIds]);
+
+  /* ── Unknowns: bulk verdict ── */
+  const handleBulkVerdict = useCallback(async (verdictMap) => {
+    const runId = selectedRunIds[0];
+    setValidationVerdicts(prev => {
+      const next = { ...prev };
+      for (const [reqId, v] of Object.entries(verdictMap)) {
+        if (v) next[reqId] = v;
+        else delete next[reqId];
+      }
+      return next;
+    });
+    await fetch('/api/validation', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: String(runId), verdicts: verdictMap }),
+    });
+  }, [selectedRunIds]);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
@@ -190,9 +260,9 @@ function Dashboard() {
     setRecordsData(null);
   };
 
-  /* ── auto-show all records when a single run is selected ── */
+  /* ── auto-show all records when a single run is selected (skip for Unknowns) ── */
   useEffect(() => {
-    if (selectedRunIds.length !== 1 || !selectedRunIds[0]) return;
+    if (selectedRunIds.length !== 1 || !selectedRunIds[0] || isUnknownsBenchmark) return;
     const runId = selectedRunIds[0];
     const load = async () => {
       setRecordQuery({ runId, runId2: null, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
@@ -383,10 +453,27 @@ function Dashboard() {
             data={leaderboard}
             selectedRuns={selectedRunIds}
             onRunSelect={handleRunSelect}
-            onRunToggle={handleRunToggle}
+            onRunToggle={isUnknownsBenchmark ? undefined : handleRunToggle}
           />
 
-          {typeHealth.length > 0 && (
+          {isUnknownsBenchmark && selectedRunIds.length > 0 && (
+            <div className="validation-section">
+              <h3 className="validation-section-title">Prediction Validation — {run1Name}</h3>
+              {validationLoading && <div className="viewer-loading">Loading records…</div>}
+              {!validationLoading && (
+                <ValidationPanel
+                  runId={selectedRunIds[0]}
+                  runName={run1Name}
+                  records={validationRecords}
+                  verdicts={validationVerdicts}
+                  onSetVerdict={handleSetVerdict}
+                  onBulkVerdict={handleBulkVerdict}
+                />
+              )}
+            </div>
+          )}
+
+          {!isUnknownsBenchmark && typeHealth.length > 0 && (
             <TypeHealthGrid
               typeHealth={typeHealth}
               typeHealth2={typeHealth2}
@@ -404,7 +491,7 @@ function Dashboard() {
             />
           )}
 
-          {(recordQuery || recordsLoading) && (
+          {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
             <div className="records-section" ref={recordsRef}>
               <div className="records-section-header" ref={recordsHeaderRef}>
                 <div className="records-section-title">

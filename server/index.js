@@ -19,6 +19,8 @@ const recordsRouter = require('./api/records');
 const retagRouter     = require('./api/retag');
 const translateRouter = require('./api/translate');
 const typeHealthRouter = require('./api/typeHealth');
+const validationRouter = require('./api/validation');
+const askGptRouter     = require('./api/askGpt');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,6 +51,8 @@ app.use('/api', recordsRouter);
 app.use('/api', retagRouter);
 app.use('/api', translateRouter);
 app.use('/api', typeHealthRouter);
+app.use('/api', validationRouter);
+app.use('/api', askGptRouter);
 
 // Serve React app for all non-API routes
 app.get('*', (req, res) => {
