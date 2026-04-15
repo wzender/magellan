@@ -413,6 +413,7 @@ function Dashboard() {
               <div className="records-section-header">
                 <div className="records-section-title">
                   <span>{recordsTitle}</span>
+                  <span className="records-section-desc">Individual classified records — expand a row to see full attributes and metadata</span>
                 </div>
                 <button className="btn-close-viewer" onClick={() => { setRecordQuery(null); setRecordsData(null); }}>
                   ✕ Clear

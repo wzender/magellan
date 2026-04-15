@@ -293,6 +293,11 @@ function TypeDetailPanel({ typeData, typeData2, runId, runId2, run1Name, run2Nam
               <span className="stat-critical"> &nbsp;·&nbsp; ⚠ {pct(typeData.cross_type_rate)} cross-type</span>
             )}
           </span>
+          <span className="type-detail-desc">
+            {isCompare
+              ? 'Transition matrix shows how predictions shifted between runs'
+              : 'Subtype breakdown — click a badge to view records, switch to confusion matrix for error patterns'}
+          </span>
         </div>
         <div className="type-detail-actions">
           <div className="view-toggle">

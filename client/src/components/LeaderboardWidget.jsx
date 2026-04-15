@@ -150,7 +150,10 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
 
   return (
     <div className="leaderboard-widget">
-      <h2>Leaderboard</h2>
+      <div className="leaderboard-title-block">
+        <h2>Leaderboard</h2>
+        <span className="leaderboard-desc">Ranked model runs by weighted F1. Click a row to inspect, check two to compare.</span>
+      </div>
       <div className="leaderboard-table-wrapper">
       <table className="leaderboard-table">
         <thead>
