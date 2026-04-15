@@ -598,13 +598,20 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
 
   const hasTransitions = r1 > 0 || r2 > 0;
   const noTransitions = !hasTransitions;
+  const netChange = r2 - r1;
+  const dirClass = netChange > 0 ? 'th-row-dir-up' : netChange < 0 ? 'th-row-dir-down' : '';
 
   return (
-    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''} ${noTransitions ? 'th-row-no-transitions' : ''}`}>
-      <button className="th-row-header" onClick={hasTransitions ? onToggle : undefined} style={noTransitions ? { cursor: 'default' } : undefined}>
+    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''} ${noTransitions ? 'th-row-no-transitions' : ''} ${dirClass}`}>
+      <button className="th-row-header th-row-header-cmp" onClick={hasTransitions ? onToggle : undefined} style={noTransitions ? { cursor: 'default' } : undefined}>
         <span className="th-row-expand">{isExpanded ? '▾' : hasTransitions ? '▸' : ' '}</span>
         <span className="th-row-name" title={type}>{type}</span>
         <span className="th-row-f1">{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</span>
+        <span className="th-row-change-pills">
+          {r2 > 0 && <span className="change-pill pill-improved" title={`${r2} records improved (${run2Name} newly correct)`}>▲{r2}</span>}
+          {r1 > 0 && <span className="change-pill pill-regressed" title={`${r1} records regressed (${run1Name} was correct)`}>▼{r1}</span>}
+          {bw > 0 && <span className="change-pill pill-both-wrong" title={`${bw} records both wrong`}>={bw}</span>}
+        </span>
         <span className="th-row-count">{tot.toLocaleString()}</span>
         <div className="th-row-bar-track" title={barTip}>
           <div className="th-row-bar" style={{ width: `${barScale}%` }}>
@@ -651,6 +658,103 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── CompareScoreboard ────────────────────────────────────── */
+function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Name, run2Name }) {
+  if (!typeHealth2 || !compareTypeHealth) return null;
+
+  const total1   = typeHealth.reduce((s, t) => s + t.total, 0);
+  const correct1 = typeHealth.reduce((s, t) => s + t.correct, 0);
+  const acc1     = total1 > 0 ? correct1 / total1 : 0;
+
+  const total2   = typeHealth2.reduce((s, t) => s + t.total, 0);
+  const correct2 = typeHealth2.reduce((s, t) => s + t.correct, 0);
+  const acc2     = total2 > 0 ? correct2 / total2 : 0;
+
+  const delta     = acc2 - acc1;
+  const deltaAbs  = Math.abs(delta * 100).toFixed(2);
+  const deltaSign = delta > 0.0005 ? '+' : delta < -0.0005 ? '' : '';
+  const deltaDir  = delta > 0.0005 ? 'up' : delta < -0.0005 ? 'down' : 'flat';
+
+  const improved  = compareTypeHealth.reduce((s, t) => s + (t.run2_only || 0), 0);
+  const regressed = compareTypeHealth.reduce((s, t) => s + (t.run1_only || 0), 0);
+  const bothCorrect = compareTypeHealth.reduce((s, t) => s + (t.both_correct || 0), 0);
+  const bothWrong   = compareTypeHealth.reduce((s, t) => s + (t.both_wrong || 0), 0);
+  const net = improved - regressed;
+
+  return (
+    <div className="cmp-scoreboard">
+      <div className="cmp-score-card">
+        <span className="cmp-score-label">{run1Name || 'Run 1'}</span>
+        <span className="cmp-score-value">{pctNum(acc1)}%</span>
+      </div>
+      <div className={`cmp-score-delta cmp-score-delta-${deltaDir}`}>
+        <span className="cmp-score-delta-arrow">{deltaDir === 'up' ? '▲' : deltaDir === 'down' ? '▼' : '='}</span>
+        <span className="cmp-score-delta-num">{deltaSign}{deltaAbs}%</span>
+        <span className="cmp-score-delta-label">net accuracy</span>
+      </div>
+      <div className="cmp-score-card">
+        <span className="cmp-score-label">{run2Name || 'Run 2'}</span>
+        <span className="cmp-score-value">{pctNum(acc2)}%</span>
+      </div>
+      <div className="cmp-score-divider" />
+      <div className="cmp-score-stats">
+        <span className="cmp-stat cmp-stat-improved" title={`${run2Name} newly correct`}>
+          <span className="cmp-stat-icon">▲</span>
+          <span className="cmp-stat-num">{improved.toLocaleString()}</span>
+          <span className="cmp-stat-label">improved</span>
+        </span>
+        <span className="cmp-stat cmp-stat-regressed" title={`${run1Name} correct, ${run2Name} regressed`}>
+          <span className="cmp-stat-icon">▼</span>
+          <span className="cmp-stat-num">{regressed.toLocaleString()}</span>
+          <span className="cmp-stat-label">regressed</span>
+        </span>
+        <span className={`cmp-stat-net ${net > 0 ? 'cmp-stat-net-up' : net < 0 ? 'cmp-stat-net-down' : 'cmp-stat-net-flat'}`}>
+          {net > 0 ? `+${net}` : net} net
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── TickerStrip ─────────────────────────────────────────── */
+function TickerStrip({ typeHealth, typeHealth2, expandedType, onTypeClick }) {
+  if (!typeHealth2) return null;
+
+  const typeMap2 = {};
+  typeHealth2.forEach(t => { typeMap2[t.type] = t; });
+
+  const items = typeHealth.map(t => {
+    const t2 = typeMap2[t.type];
+    const f1  = t.f1 ?? t.accuracy;
+    const f12 = t2 ? (t2.f1 ?? t2.accuracy) : f1;
+    const delta = f12 - f1;
+    return { type: t.type, f1, f12, delta };
+  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  return (
+    <div className="ticker-strip">
+      {items.map(item => {
+        const dir = item.delta > 0.005 ? 'up' : item.delta < -0.005 ? 'down' : 'flat';
+        return (
+          <button
+            key={item.type}
+            className={`ticker-pill ticker-${dir} ${expandedType === item.type ? 'ticker-active' : ''}`}
+            onClick={() => onTypeClick(item.type)}
+            title={`${item.type}: ${pctNum(item.f1)}% → ${pctNum(item.f12)}%`}
+          >
+            <span className="ticker-symbol">{item.type}</span>
+            <span className="ticker-price">{pctNum(item.f12)}%</span>
+            <span className="ticker-delta">
+              {dir === 'up' ? '▲' : dir === 'down' ? '▼' : '='}{' '}
+              {dir !== 'flat' ? `${item.delta > 0 ? '+' : ''}${(item.delta * 100).toFixed(1)}%` : '0%'}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -736,6 +840,25 @@ function TypeHealthGrid({
 
   return (
     <div className="type-health-section">
+      {isCompare && (
+        <CompareScoreboard
+          typeHealth={typeHealth}
+          typeHealth2={typeHealth2}
+          compareTypeHealth={compareTypeHealth}
+          run1Name={run1Name}
+          run2Name={run2Name}
+        />
+      )}
+
+      {isCompare && (
+        <TickerStrip
+          typeHealth={typeHealth}
+          typeHealth2={typeHealth2}
+          expandedType={expandedType}
+          onTypeClick={handleCardClick}
+        />
+      )}
+
       <div className="type-section-header">
         <div className="type-section-title-block">
           <span className="type-section-label">
