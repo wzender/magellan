@@ -357,16 +357,13 @@ function SubtypeChangesList({ runId1, runId2, trueType, compareFilter, run1Name,
             key={`${ch.from}-${ch.to}-${i}`}
             className={`stcl-item ${tintClass}`}
             onClick={() => onViewRecords(ch.from, ch.to)}
-            title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}, both wrong: ${ch.bothWrong}`}
+            title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}`}
           >
-            <span className="stcl-from">{ch.from}</span>
-            <span className="stcl-arrow">→</span>
-            <span className="stcl-to">{ch.to}</span>
+            <span className="stcl-label">{ch.from} <span className="stcl-arrow">→</span> {ch.to}</span>
             <span className="stcl-count">{ch.total}</span>
             <span className="stcl-bar-track">
               <span className="stcl-bar" style={{ width: `${barPct}%` }} />
             </span>
-            <span className="stcl-indicator">{indicator}</span>
           </button>
         );
       })}
