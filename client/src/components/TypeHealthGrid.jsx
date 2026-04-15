@@ -534,6 +534,17 @@ function TypeHealthGrid({
 
   return (
     <div className="type-health-section">
+      <div className="type-section-header">
+        <div className="type-section-title-block">
+          <span className="type-section-label">
+            {isCompare ? 'Type Comparison' : 'Type Accuracy'}
+          </span>
+          <span className="type-section-desc">
+            {isCompare
+              ? 'Side-by-side breakdown per type — see where each run improved or regressed'
+              : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
+          </span>
+        </div>
       <div className="type-grid-legend">
         {isCompare
           ? LEGEND_COMPARE.map(l => (
@@ -557,6 +568,7 @@ function TypeHealthGrid({
               </button>
             ))
         }
+      </div>
       </div>
 
       <div className="type-grid">

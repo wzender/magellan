@@ -321,6 +321,30 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .type-health-section { flex: 1; padding: 1.25rem 1.5rem 2rem; }
 
+.type-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.type-section-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.type-section-label {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.type-section-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 /* ── Type table (row layout) ─────────────────────────────── */
 
 .type-grid {
