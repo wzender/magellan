@@ -195,7 +195,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
               key={row.run_id}
               onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
               className={[
-                selectedRuns.includes(row.run_id) ? 'selected' : '',
+                selectedRuns[0] === row.run_id ? 'selected selected-run1' :
+                selectedRuns[1] === row.run_id ? 'selected selected-run2' : '',
                 row.table_exists === false ? 'table-missing' : '',
               ].filter(Boolean).join(' ')}
               style={{ cursor: row.table_exists === false ? 'not-allowed' : onRunSelect ? 'pointer' : 'default' }}

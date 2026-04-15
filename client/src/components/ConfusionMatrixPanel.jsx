@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import RowLevelTable from './RowLevelTable';
 import RetagPanel from './RetagPanel';
 
-function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData, onExportAll, benchmarkId, onTranslated }) {
+function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedTypePair, onCellClick, onSubtypeCellClick, loading, recordsData, allRecordsData, onExportAll, benchmarkId }) {
   const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'errors' | 'retag'
   const [retagList, setRetagList] = useState([]); // [{ record, retag_subtype: '' }]
   const [expandedGroup, setExpandedGroup] = useState(null);         // trueSubtype (within-type section)
@@ -709,7 +709,6 @@ function ConfusionMatrixPanel({ data, subtypeMatrixData, selectedCell, selectedT
                   );
                   return { ...result, data: rows };
                 } : undefined}
-                onTranslated={onTranslated}
               />
             </div>
           )}

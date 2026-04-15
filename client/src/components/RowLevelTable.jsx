@@ -1,17 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'en_attributes', 'metadata', 'en_metadata'];
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, onTranslated }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
-  const [localOverrides, setLocalOverrides] = useState(new Map()); // request_id -> { en_attributes?, en_metadata? }
-
-  // Clear overrides when fresh data arrives from re-fetch
-  useEffect(() => { setLocalOverrides(new Map()); }, [data]);
   const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 
@@ -97,10 +93,6 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
 
   const [attrLang, setAttrLang] = useState('original');
   const [metaLang, setMetaLang] = useState('original');
-  const [attrTranslating, setAttrTranslating] = useState(null); // null | { done, total }
-  const [metaTranslating, setMetaTranslating] = useState(null); // null | { done, total }
-  const attrAbortRef = useRef(null);
-  const metaAbortRef = useRef(null);
   const [columnFilters, setColumnFilters] = useState({});
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
@@ -110,13 +102,21 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [exporting, setExporting] = useState(false); // 'csv' | 'excel' | false
   const [addingAllToRetag, setAddingAllToRetag] = useState(false);
   const tableRef = useRef(null);
+  const toolbarRef = useRef(null);
+  const panelRef = useRef(null);
+
+  /* expose toolbar height as CSS custom property for sticky thead stacking */
+  useLayoutEffect(() => {
+    const tb = toolbarRef.current;
+    const panel = panelRef.current;
+    if (!tb || !panel) return;
+    const h = tb.getBoundingClientRect().height;
+    panel.style.setProperty('--table-toolbar-h', `${h}px`);
+  });
 
   if (!data || !data.data) return <div>No records</div>;
 
-  // Merge local translation overrides into the prop data
-  const mergedData = localOverrides.size > 0
-    ? data.data.map(r => { const ov = localOverrides.get(r.request_id); return ov ? { ...r, ...ov } : r; })
-    : data.data;
+  const mergedData = data.data;
 
   const getSortedData = () => {
     if (!sortConfig.key) return [...mergedData];
@@ -316,87 +316,9 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
   };
 
-  const handleTranslateField = async (field) => {
-    const setTranslating = field === 'metadata' ? setMetaTranslating : setAttrTranslating;
-    const abortRef = field === 'metadata' ? metaAbortRef : attrAbortRef;
-    const enField = field === 'metadata' ? 'en_metadata' : 'en_attributes';
-
-    const allData = await getExportData('_translate');
-    if (!allData || allData.length === 0) return;
-
-    const hasContent = (val) => {
-      if (!val) return false;
-      if (typeof val === 'object') return Object.keys(val).length > 0;
-      if (typeof val === 'string') { try { const p = JSON.parse(val); return typeof p === 'object' && Object.keys(p).length > 0; } catch { return val.trim().length > 0; } }
-      return false;
-    };
-
-    const records = allData
-      .filter(r => !hasContent(r[enField]))   // no translation yet
-      .filter(r => hasContent(r[field]))       // but source field has content to translate
-      .map(r => ({ request_id: r.request_id, [field]: r[field] }));
-
-    if (records.length === 0) {
-      setToast(`All records already have English ${field}.`);
-      return;
-    }
-    setTranslating({ done: 0, total: records.length });
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records, field }),
-      });
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const event = JSON.parse(line.slice(6));
-          if (event.finished) {
-            setTranslating(null);
-            if (onTranslated) onTranslated();
-          } else {
-            setTranslating({ done: event.done, total: event.total });
-            // Apply translation immediately to visible rows
-            if (event.request_id && event.attrsEn !== undefined) {
-              const enKey = field === 'metadata' ? 'en_metadata' : 'en_attributes';
-              setLocalOverrides(prev => {
-                const next = new Map(prev);
-                next.set(event.request_id, { ...prev.get(event.request_id), [enKey]: event.attrsEn });
-                return next;
-              });
-            }
-          }
-        }
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setToast(`${field} translation cancelled`);
-      } else {
-        console.error('Translation error:', err);
-        setToast('Translation failed: ' + err.message);
-      }
-      setTranslating(null);
-    }
-  };
-
   return (
-    <div className="row-level-table-panel">
-      <div className="table-toolbar">
+    <div className="row-level-table-panel" ref={panelRef}>
+      <div className="table-toolbar" ref={toolbarRef}>
         <h3>{tableTitle} ({Object.values(columnFilters).some(v => v) ? `${sortedData.length} of ${data.pagination.total}` : data.pagination.total} total)</h3>
         {onAddToRetag && (
           <button
@@ -435,18 +357,6 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           ))}
         </div>
       </div>
-      {attrTranslating && (
-        <div className="translate-progress-bar-wrap">
-          <div className="translate-progress-bar-fill" style={{ width: `${Math.round((attrTranslating.done / attrTranslating.total) * 100)}%` }} />
-          <span className="translate-progress-label">Attributes: {attrTranslating.done} / {attrTranslating.total}</span>
-        </div>
-      )}
-      {metaTranslating && (
-        <div className="translate-progress-bar-wrap">
-          <div className="translate-progress-bar-fill" style={{ width: `${Math.round((metaTranslating.done / metaTranslating.total) * 100)}%` }} />
-          <span className="translate-progress-label">Metadata: {metaTranslating.done} / {metaTranslating.total}</span>
-        </div>
-      )}
       <div className="table-wrapper" ref={tableRef}>
         {toast && <div className="toast-message">{toast}</div>}
         <table className={`records-table row-height-${rowHeight.toLowerCase()}`}>
@@ -485,20 +395,12 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                         </div>
                         {col.key === 'attributes' && (
                           <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                            {onExport && (attrTranslating
-                              ? <button className="attr-lang-btn cancel-translate-btn" onClick={() => attrAbortRef.current && attrAbortRef.current.abort()}>✕</button>
-                              : <button className="attr-lang-btn" onClick={() => handleTranslateField('attributes')}>Translate</button>
-                            )}
                             <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
                             <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
                           </div>
                         )}
                         {col.key === 'metadata' && (
                           <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                            {onExport && (metaTranslating
-                              ? <button className="attr-lang-btn cancel-translate-btn" onClick={() => metaAbortRef.current && metaAbortRef.current.abort()}>✕</button>
-                              : <button className="attr-lang-btn" onClick={() => handleTranslateField('metadata')}>Translate</button>
-                            )}
                             <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
                             <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
                           </div>

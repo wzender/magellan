@@ -126,7 +126,7 @@ function SubtypeConfusionMatrix({ runId, trueType, onViewRecords }) {
                   return (
                     <td
                       key={col.subtype}
-                      className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
+                      className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err' : ''} ${count > 0 ? 'scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
                       style={count > 0 ? { background: bgColor } : {}}
                       title={count > 0 ? `${row.true_subtype} → ${col.subtype}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count} — click to view` : ''}
                       onClick={count > 0 ? () => onViewRecords(row.true_subtype, isDiag ? null : col.subtype, null, null) : undefined}
@@ -165,14 +165,17 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
   if (!matrix || matrix.rows.length === 0) return <div className="matrix-empty">No data for this filter</div>;
 
   const { columns, rows } = matrix;
-  const maxCount = Math.max(...rows.flatMap(r => columns.map(c => r.preds[c.subtype] || 0)));
+  // Helper: extract total from cell (which is now { total, run1Correct, run2Correct, bothWrong })
+  const cellTotal = (row, sub) => {
+    const c = row.preds[sub];
+    return (typeof c === 'object' && c !== null) ? (c.total || 0) : (c || 0);
+  };
+
+  const maxCount = Math.max(...rows.flatMap(r => columns.map(c => cellTotal(r, c.subtype))));
 
   // Filter to cells that have count >= minCount (for off-diagonal)
   const hasAnyVisible = rows.some(r =>
-    columns.some(c => {
-      const count = r.preds[c.subtype] || 0;
-      return count >= minCount;
-    })
+    columns.some(c => cellTotal(r, c.subtype) >= minCount)
   );
 
   return (
@@ -184,18 +187,22 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
         >
           {showPct ? '% of row' : '# count'}
         </button>
-        <label className="stm-slider-label">
-          Min cells:
-          <input
-            type="range"
-            className="stm-slider"
-            min={1}
-            max={Math.max(1, maxCount)}
-            value={minCount}
-            onChange={e => setMinCount(parseInt(e.target.value))}
-          />
-          <span className="stm-slider-val">{minCount}</span>
-        </label>
+        <div className="stm-stepper">
+          <span className="stm-stepper-label">Min cells</span>
+          <button
+            className="stm-stepper-btn stm-stepper-minus"
+            disabled={minCount <= 1}
+            onClick={() => setMinCount(c => Math.max(1, c - 1))}
+            title="Decrease"
+          >−</button>
+          <span className="stm-stepper-val">{minCount}</span>
+          <button
+            className="stm-stepper-btn stm-stepper-plus"
+            disabled={minCount >= maxCount}
+            onClick={() => setMinCount(c => Math.min(maxCount, c + 1))}
+            title="Increase"
+          >+</button>
+        </div>
         <span className="scm-legend">
           <span className="scm-legend-swatch stm-swatch-agree" /> both same
           <span className="scm-legend-swatch stm-swatch-r1win" /> {run1Name || 'Run 1'} better
@@ -204,7 +211,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
         </span>
       </div>
       {!hasAnyVisible && (
-        <div className="matrix-empty">No cells ≥ {minCount} records — lower the slider</div>
+        <div className="matrix-empty">No cells ≥ {minCount} records — tap − to lower</div>
       )}
       {hasAnyVisible && (
         <div className="subtype-confusion-scroll">
@@ -215,7 +222,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                   <span className="stm-run1-label">{run1Name || 'Run 1'} ↓</span>
                   <span className="stm-run2-label">{run2Name || 'Run 2'} →</span>
                 </th>
-                {columns.map(c => (
+                {columns.filter(c => rows.some(row => cellTotal(row, c.subtype) >= minCount)).map(c => (
                   <th key={c.subtype} className="scm-col-head stm-col-head" title={c.subtype}>
                     {c.subtype}
                   </th>
@@ -224,7 +231,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
             </thead>
             <tbody>
               {rows.map(row => {
-                const rowHasVisible = columns.some(c => (row.preds[c.subtype] || 0) >= minCount);
+                const rowHasVisible = columns.some(c => cellTotal(row, c.subtype) >= minCount);
                 if (!rowHasVisible) return null;
                 return (
                   <tr key={row.run1_pred}>
@@ -233,27 +240,50 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                         {row.run1_pred}
                       </button>
                     </td>
-                    {columns.map(col => {
-                      const count = row.preds[col.subtype] || 0;
+                    {columns.filter(c => rows.some(r => cellTotal(r, c.subtype) >= minCount)).map(col => {
+                      const cell = row.preds[col.subtype];
+                      const count = cellTotal(row, col.subtype);
                       if (count < minCount) return <td key={col.subtype} className="scm-cell stm-cell-empty" />;
                       const isDiag = col.subtype === row.run1_pred;
                       const intensity = maxCount > 0 ? count / maxCount : 0;
                       const display = showPct
                         ? (count ? (count / row.total * 100).toFixed(0) + '%' : '')
                         : count;
-                      // Diagonal: both predict same subtype. Is it correct? Check via subtype name vs trueType context - we don't have that here,
-                      // so color by outcome: diagonal cells = agreement, off-diagonal = disagreement
-                      // Color: diagonal = green if on run1 true-subtype matches, but we don't know true_subtype here...
-                      // Use a simpler heuristic: diagonal = agreement (gray-green), off-diagonal = disagreement (orange/teal)
-                      const bgColor = isDiag
-                        ? `rgba(100,180,120,${0.15 + intensity * 0.65})`
-                        : `rgba(200,120,60,${0.15 + intensity * 0.65})`;
+
+                      // Color based on correctness breakdown
+                      let bgColor;
+                      if (isDiag) {
+                        // Diagonal = both runs agree (green)
+                        bgColor = `rgba(34,197,94,${0.15 + intensity * 0.55})`;
+                      } else if (cell && typeof cell === 'object' && cell.total > 0) {
+                        const { run1Correct = 0, run2Correct = 0, bothWrong = 0 } = cell;
+                        if (run1Correct > run2Correct && run1Correct >= bothWrong) {
+                          // Run 1 dominant — orange tone
+                          bgColor = `rgba(249,115,22,${0.15 + intensity * 0.55})`;
+                        } else if (run2Correct > run1Correct && run2Correct >= bothWrong) {
+                          // Run 2 dominant — cyan tone
+                          bgColor = `rgba(6,182,212,${0.15 + intensity * 0.55})`;
+                        } else {
+                          // Both wrong dominant or tied — slate
+                          bgColor = `rgba(148,163,184,${0.15 + intensity * 0.6})`;
+                        }
+                      } else {
+                        bgColor = `rgba(148,163,184,${0.15 + intensity * 0.6})`;
+                      }
+
+                      // Build tooltip with correctness breakdown
+                      let tooltip = `${run1Name || 'Run 1'}: ${row.run1_pred} → ${run2Name || 'Run 2'}: ${col.subtype}: ${count}`;
+                      if (!isDiag && cell && typeof cell === 'object') {
+                        const { run1Correct = 0, run2Correct = 0, bothWrong = 0 } = cell;
+                        tooltip += `\n${run1Name || 'Run 1'} correct: ${run1Correct}, ${run2Name || 'Run 2'} correct: ${run2Correct}, both wrong: ${bothWrong}`;
+                      }
+
                       return (
                         <td
                           key={col.subtype}
-                          className={`scm-cell stm-cell ${isDiag ? 'stm-diag' : 'stm-diff scm-cell-clickable'}`}
+                          className={`scm-cell stm-cell ${isDiag ? 'stm-diag' : 'stm-diff'} ${count > 0 ? 'scm-cell-clickable' : ''}`}
                           style={count > 0 ? { background: bgColor } : {}}
-                          title={`${run1Name || 'Run 1'}: ${row.run1_pred} → ${run2Name || 'Run 2'}: ${col.subtype}: ${count} — click to view`}
+                          title={tooltip}
                           onClick={() => onViewRecords(row.run1_pred, col.subtype)}
                         >
                           {display}
@@ -357,104 +387,159 @@ function TypeDetailPanel({ typeData, typeData2, runId, runId2, run1Name, run2Nam
   );
 }
 
-/* ── TypeCard (single mode) ──────────────────────────────── */
-function TypeCard({ typeData, typeData2, isExpanded, isDimmed, correctnessFilter, onClick, widthPx }) {
-  const { f1, accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
+/* ── TypeHealthRow (single mode — bar layout) ────────────── */
+function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFilter, onToggle, onViewRecords, runId, activeSubtype, badgeMatchesFilter }) {
+  const { accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
+  const f1 = typeData.f1 ?? accuracy;
   const sev = severityClass(f1, cross_type_rate);
 
-  const correctPct   = (correct / total) * 100;
-  const samePct      = (same_type_wrong / total) * 100;
-  const crossPct     = (cross_type_wrong / total) * 100;
+  const correctPct = (correct / total) * 100;
+  const samePct    = (same_type_wrong / total) * 100;
+  const crossPct   = (cross_type_wrong / total) * 100;
+  const barScale   = maxTotal > 0 ? (total / maxTotal) * 100 : 100;
 
-  const delta = typeData2 ? typeData2.f1 - f1 : null;
+  const barTip = `Correct: ${correct.toLocaleString()} (${correctPct.toFixed(1)}%) · Same-type wrong: ${same_type_wrong.toLocaleString()} (${samePct.toFixed(1)}%) · Cross-type: ${cross_type_wrong.toLocaleString()} (${crossPct.toFixed(1)}%)`;
 
-  const filteredCount = correctnessFilter === 'correct'    ? correct
-                      : correctnessFilter === 'same_type'  ? same_type_wrong
-                      : correctnessFilter === 'cross_type' ? cross_type_wrong
-                      : null;
-  const filteredPct   = filteredCount !== null ? (filteredCount / total) * 100 : null;
+  const [view, setView] = useState('bars');
+
+  const maxSubtypeTotal = Math.max(...typeData.subtypes.map(st => st.total), 1);
 
   return (
-    <button
-      className={`type-card ${sev} ${isExpanded ? 'expanded' : ''} ${isDimmed ? 'type-card-dimmed' : ''}`}
-      style={{ width: `${widthPx}px` }}
-      onClick={onClick}
-    >
-      <div className="type-card-name">{typeData.type}</div>
+    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''}`}>
+      <button className="th-row-header" onClick={onToggle}>
+        <span className="th-row-expand">{isExpanded ? '▾' : '▸'}</span>
+        <span className="th-row-name" title={typeData.type}>{typeData.type}</span>
+        <span className="th-row-f1">{pctNum(f1)}%</span>
+        <span className="th-row-count">{total.toLocaleString()}</span>
+        <div className="th-row-bar-track" title={barTip}>
+          <div className="th-row-bar" style={{ width: `${barScale}%` }}>
+            <div className="bar-correct"    style={{ width: `${correctPct}%`,  opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
+            <div className="bar-same-type"  style={{ width: `${samePct}%`,     opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
+            <div className="bar-cross-type" style={{ width: `${crossPct}%`,    opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
+          </div>
+        </div>
+      </button>
 
-      <div className="type-card-accuracy">
-        {filteredPct !== null
-          ? <><span className={`type-card-filtered-pct pct-${correctnessFilter}`}>{filteredPct.toFixed(1)}%</span><span className="type-card-filtered-of"> of {total}</span></>
-          : <>{pctNum(f1)}%{typeData2 && <DeltaBadge delta={delta} />}</>
-        }
-      </div>
+      {isExpanded && (
+        <div className="th-row-detail">
+          <div className="th-row-toolbar">
+            <div className="view-toggle">
+              <button className={`view-toggle-btn ${view === 'bars' ? 'active' : ''}`} onClick={() => setView('bars')}>Subtypes</button>
+              <button className={`view-toggle-btn ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>Confusion matrix</button>
+            </div>
+            <button className="btn-view-records" onClick={() => onViewRecords(typeData.type, null, null, null, null)}>
+              All {typeData.type} records
+            </button>
+          </div>
 
-      <div className="type-card-bar" title={`F1: ${pctNum(f1)}% · Correct: ${pct(accuracy)} · Same-type wrong: ${pct(same_type_wrong/total)} · Cross-type: ${pct(cross_type_rate)}`}>
-        <div className="bar-correct"   style={{ width: `${correctPct}%`,  opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
-        <div className="bar-same-type" style={{ width: `${samePct}%`,     opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
-        <div className="bar-cross-type" style={{ width: `${crossPct}%`,   opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
-      </div>
+          {view === 'bars' && (
+            <div className="th-subtype-list">
+              {typeData.subtypes.map(st => {
+                const stF1 = st.f1 ?? st.accuracy;
+                const stCorrectPct = (st.correct / st.total) * 100;
+                const stCrossPct   = (st.cross_type / st.total) * 100;
+                const stSameWrong  = st.total - st.correct - st.cross_type;
+                const stSamePct    = Math.max(0, (stSameWrong / st.total) * 100);
+                const stBarScale   = (st.total / maxSubtypeTotal) * 100;
+                const stTip = `${st.subtype} · ${st.total.toLocaleString()} records\nCorrect: ${st.correct.toLocaleString()} (${stCorrectPct.toFixed(1)}%)\nSame-type wrong: ${stSameWrong.toLocaleString()} (${stSamePct.toFixed(1)}%)\nCross-type: ${st.cross_type.toLocaleString()} (${stCrossPct.toFixed(1)}%)`;
+                const isActive = activeSubtype === st.subtype;
+                const dim = badgeMatchesFilter ? !badgeMatchesFilter(st) : false;
+                return (
+                  <button
+                    key={st.subtype}
+                    className={`th-subrow ${isActive ? 'th-subrow-active' : ''} ${dim ? 'th-subrow-dimmed' : ''}`}
+                    onClick={() => onViewRecords(typeData.type, st.subtype, null, null, null)}
+                    title={stTip}
+                  >
+                    <span className="th-subrow-name">{st.subtype}</span>
+                    <span className="th-subrow-f1">{pctNum(stF1)}%</span>
+                    <span className="th-subrow-count">{st.total.toLocaleString()}</span>
+                    <div className="th-subrow-bar-track">
+                      <div className="th-subrow-bar" style={{ width: `${stBarScale}%` }}>
+                        <div className="bar-correct"    style={{ width: `${stCorrectPct}%`, opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
+                        <div className="bar-same-type"  style={{ width: `${stSamePct}%`,    opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
+                        <div className="bar-cross-type" style={{ width: `${stCrossPct}%`,   opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-      <div className="type-card-meta">
-        <span>{filteredCount !== null ? `${filteredCount.toLocaleString()} / ${total.toLocaleString()}` : total.toLocaleString()} records</span>
-        {cross_type_wrong > 0 && !correctnessFilter && <span className="type-card-cross-flag">⚠ cross-type</span>}
-      </div>
-    </button>
+          {view === 'matrix' && (
+            <SubtypeConfusionMatrix
+              runId={runId}
+              trueType={typeData.type}
+              onViewRecords={(subtype, predSubtype) => onViewRecords(typeData.type, subtype, predSubtype, null, null)}
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-/* ── TypeCardCompare ─────────────────────────────────────── */
-function TypeCardCompare({ typeData, typeData2, compareData, isExpanded, isDimmed, compareFilter, onClick, widthPx }) {
-  const { type, f1, total } = typeData;
-  const delta = typeData2 ? typeData2.f1 - f1 : null;
+/* ── TypeHealthRowCompare (compare mode — bar layout) ─────── */
+function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isExpanded, isDimmed, compareFilter, onToggle, onViewRecords, runId, runId2, run1Name, run2Name }) {
+  const { type } = typeData;
+  const f1 = typeData.f1 ?? typeData.accuracy;
+  const delta = typeData2 ? (typeData2.f1 ?? typeData2.accuracy) - f1 : null;
   const sev = severityClass(f1, typeData.cross_type_rate);
 
-  const bc  = compareData ? compareData.both_correct  : 0;
-  const r1  = compareData ? compareData.run1_only      : 0;
-  const r2  = compareData ? compareData.run2_only      : 0;
-  const bw  = compareData ? compareData.both_wrong     : 0;
-  const tot = compareData ? (bc + r1 + r2 + bw) : total;
+  const bc  = compareData ? compareData.both_correct : 0;
+  const r1  = compareData ? compareData.run1_only    : 0;
+  const r2  = compareData ? compareData.run2_only    : 0;
+  const bw  = compareData ? compareData.both_wrong   : 0;
+  const tot = compareData ? (bc + r1 + r2 + bw) : typeData.total;
 
   const bcPct = tot > 0 ? (bc / tot) * 100 : 0;
   const r1Pct = tot > 0 ? (r1 / tot) * 100 : 0;
   const r2Pct = tot > 0 ? (r2 / tot) * 100 : 0;
   const bwPct = tot > 0 ? (bw / tot) * 100 : 0;
-
-  const filteredCount = compareFilter === 'both_correct' ? bc
-                      : compareFilter === 'run1_only'    ? r1
-                      : compareFilter === 'run2_only'    ? r2
-                      : compareFilter === 'both_wrong'   ? bw
-                      : null;
-  const filteredPct = filteredCount !== null ? (filteredCount / tot) * 100 : null;
+  const barScale = maxTotal > 0 ? (tot / maxTotal) * 100 : 100;
 
   const opacityFor = (key) => !compareFilter || compareFilter === key ? 1 : 0.15;
 
+  const barTip = `Both correct: ${bc.toLocaleString()} (${bcPct.toFixed(1)}%) · ${run1Name || 'Run 1'} only: ${r1.toLocaleString()} (${r1Pct.toFixed(1)}%) · ${run2Name || 'Run 2'} only: ${r2.toLocaleString()} (${r2Pct.toFixed(1)}%) · Both wrong: ${bw.toLocaleString()} (${bwPct.toFixed(1)}%)`;
+
   return (
-    <button
-      className={`type-card ${sev} ${isExpanded ? 'expanded' : ''} ${isDimmed ? 'type-card-dimmed' : ''}`}
-      style={{ width: `${widthPx}px` }}
-      onClick={onClick}
-    >
-      <div className="type-card-name">{type}</div>
+    <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''}`}>
+      <button className="th-row-header" onClick={onToggle}>
+        <span className="th-row-expand">{isExpanded ? '▾' : '▸'}</span>
+        <span className="th-row-name" title={type}>{type}</span>
+        <span className="th-row-f1">{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</span>
+        <span className="th-row-count">{tot.toLocaleString()}</span>
+        <div className="th-row-bar-track" title={barTip}>
+          <div className="th-row-bar" style={{ width: `${barScale}%` }}>
+            <div className="bar-cmp-both-correct" style={{ width: `${bcPct}%`, opacity: opacityFor('both_correct') }} />
+            <div className="bar-cmp-run1-only"    style={{ width: `${r1Pct}%`, opacity: opacityFor('run1_only') }} />
+            <div className="bar-cmp-run2-only"    style={{ width: `${r2Pct}%`, opacity: opacityFor('run2_only') }} />
+            <div className="bar-cmp-both-wrong"   style={{ width: `${bwPct}%`, opacity: opacityFor('both_wrong') }} />
+          </div>
+        </div>
+      </button>
 
-      <div className="type-card-accuracy">
-        {filteredPct !== null
-          ? <><span className={`type-card-filtered-pct cmp-pct-${compareFilter}`}>{filteredPct.toFixed(1)}%</span><span className="type-card-filtered-of"> of {tot}</span></>
-          : <>{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</>
-        }
-      </div>
-
-      <div className="type-card-bar" title={`F1: ${pctNum(f1)}% · Both correct: ${bcPct.toFixed(0)}% · Run1 only: ${r1Pct.toFixed(0)}% · Run2 only: ${r2Pct.toFixed(0)}% · Both wrong: ${bwPct.toFixed(0)}%`}>
-        <div className="bar-cmp-both-correct" style={{ width: `${bcPct}%`, opacity: opacityFor('both_correct') }} />
-        <div className="bar-cmp-run1-only"    style={{ width: `${r1Pct}%`, opacity: opacityFor('run1_only') }} />
-        <div className="bar-cmp-run2-only"    style={{ width: `${r2Pct}%`, opacity: opacityFor('run2_only') }} />
-        <div className="bar-cmp-both-wrong"   style={{ width: `${bwPct}%`, opacity: opacityFor('both_wrong') }} />
-      </div>
-
-      <div className="type-card-meta">
-        <span>{filteredCount !== null ? `${filteredCount.toLocaleString()} / ${tot.toLocaleString()}` : tot.toLocaleString()} records</span>
-      </div>
-    </button>
+      {isExpanded && (
+        <div className="th-row-detail">
+          <div className="th-row-toolbar">
+            <span className="th-row-toolbar-label">Transition matrix</span>
+            <button className="btn-view-records" onClick={() => onViewRecords(type, null, null, null, null)}>
+              All {type} records
+            </button>
+          </div>
+          <SubtypeTransitionMatrix
+            runId1={runId}
+            runId2={runId2}
+            trueType={type}
+            compareFilter={compareFilter}
+            run1Name={run1Name}
+            run2Name={run2Name}
+            onViewRecords={(run1Pred, run2Pred) => onViewRecords(type, null, null, run1Pred, run2Pred)}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -576,54 +661,46 @@ function TypeHealthGrid({
       </div>
       </div>
 
-      <div className="type-grid">
+      <div className="th-list">
         {typeHealth.map(t => {
-          const tot = isCompare
-            ? (() => { const cd = compareMap[t.type]; return cd ? (cd.both_correct + cd.run1_only + cd.run2_only + cd.both_wrong) : t.total; })()
-            : t.total;
-          const widthPx = Math.round(100 + (tot / maxTotal) * 140);
-          return isCompare
-            ? <TypeCardCompare
+          if (isCompare) {
+            const cd = compareMap[t.type];
+            return (
+              <TypeHealthRowCompare
                 key={t.type}
                 typeData={t}
                 typeData2={typeMap2[t.type] || null}
-                compareData={compareMap[t.type] || null}
+                compareData={cd || null}
+                maxTotal={maxTotal}
                 isExpanded={expandedType === t.type}
                 isDimmed={!cardMatchesCompareFilter(t)}
                 compareFilter={compareFilter}
-                onClick={() => handleCardClick(t.type)}
-                widthPx={widthPx}
+                onToggle={() => handleCardClick(t.type)}
+                onViewRecords={onViewRecords}
+                runId={runId}
+                runId2={runId2}
+                run1Name={run1Name}
+                run2Name={run2Name}
               />
-            : <TypeCard
-                key={t.type}
-                typeData={t}
-                typeData2={typeMap2[t.type] || null}
-                isExpanded={expandedType === t.type}
-                isDimmed={!cardMatchesFilter(t)}
-                correctnessFilter={correctnessFilter}
-                onClick={() => handleCardClick(t.type)}
-                widthPx={widthPx}
-              />;
+            );
+          }
+          return (
+            <TypeHealthRow
+              key={t.type}
+              typeData={t}
+              maxTotal={maxTotal}
+              isExpanded={expandedType === t.type}
+              isDimmed={!cardMatchesFilter(t)}
+              correctnessFilter={correctnessFilter}
+              onToggle={() => handleCardClick(t.type)}
+              onViewRecords={onViewRecords}
+              runId={runId}
+              activeSubtype={activeSubtype}
+              badgeMatchesFilter={badgeMatchesFilter}
+            />
+          );
         })}
       </div>
-
-      {expandedData && (
-        <TypeDetailPanel
-          typeData={expandedData}
-          typeData2={expandedData2}
-          runId={runId}
-          runId2={isCompare ? runId2 : null}
-          run1Name={run1Name}
-          run2Name={run2Name}
-          compareFilter={compareFilter}
-          onViewRecords={(subtype, predSubtype, run1PredSubtype, run2PredSubtype) => {
-            onViewRecords(expandedType, subtype, predSubtype, run1PredSubtype, run2PredSubtype);
-          }}
-          onClose={() => setExpandedType(null)}
-          activeSubtype={activeSubtype}
-          badgeMatchesFilter={badgeMatchesFilter}
-        />
-      )}
     </div>
   );
 }

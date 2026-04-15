@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import './styles.css';
 import BenchmarkGallery from './BenchmarkGallery';
 import LeaderboardWidget from './LeaderboardWidget';
@@ -251,6 +251,8 @@ function Dashboard() {
     } finally {
       setRecordsLoading(false);
     }
+    // scroll to records after async render
+    setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   }, [selectedRunIds, fetchRecords, correctnessFilter, compareFilter]);
 
   /* for RowLevelTable export: fetch all records without limit */
@@ -306,22 +308,6 @@ function Dashboard() {
     refetch();
   }, [compareFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* re-fetch after translation */
-  const handleTranslated = useCallback(async () => {
-    if (!recordQuery) return;
-    const isCompare = !!recordQuery.runId2;
-    const data = await fetchRecords(
-      recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50,
-      isCompare ? null : correctnessFilter,
-      recordQuery.runId2 ?? null,
-      isCompare ? null : (recordQuery.predSubtype ?? null),
-      isCompare ? compareFilter : null,
-      isCompare ? (recordQuery.run1PredSubtype ?? null) : null,
-      isCompare ? (recordQuery.run2PredSubtype ?? null) : null,
-    );
-    setRecordsData(data);
-  }, [recordQuery, fetchRecords, correctnessFilter, compareFilter]);
-
   /* ── run names for summary bar ── */
   const run1Entry = leaderboard.find(e => e.run_id === selectedRunIds[0]);
   const run2Entry = leaderboard.find(e => e.run_id === selectedRunIds[1]);
@@ -329,6 +315,16 @@ function Dashboard() {
   const run2Name  = run2Entry?.run_name ?? '';
 
   const recordsRef = useRef(null);
+  const recordsHeaderRef = useRef(null);
+
+  /* measure records-section-header height and expose as CSS var */
+  useLayoutEffect(() => {
+    const el = recordsHeaderRef.current;
+    const container = recordsRef.current;
+    if (!el || !container) return;
+    const h = el.getBoundingClientRect().height;
+    container.style.setProperty('--records-header-h', `${h}px`);
+  });
 
   const recordsTitle = recordQuery
     ? (() => {
@@ -410,7 +406,7 @@ function Dashboard() {
 
           {(recordQuery || recordsLoading) && (
             <div className="records-section" ref={recordsRef}>
-              <div className="records-section-header">
+              <div className="records-section-header" ref={recordsHeaderRef}>
                 <div className="records-section-title">
                   <span>{recordsTitle}</span>
                   <span className="records-section-desc">Individual classified records — expand a row to see full attributes and metadata</span>
@@ -427,7 +423,6 @@ function Dashboard() {
                   run2Name={run2Name}
                   showRun2Columns={!!recordQuery?.runId2}
                   onExport={handleExportRecords}
-                  onTranslated={handleTranslated}
                 />
               )}
             </div>

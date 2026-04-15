@@ -33,7 +33,8 @@ function saveMetadataTranslationsFile(translations) {
 }
 
 function tryParseJson(value) {
-  if (typeof value !== 'string') return value || {};
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch { return value; }
 }
 
@@ -407,6 +408,126 @@ function getTypeHealthSummary(runId) {
   }).sort((a, b) => a.accuracy - b.accuracy);
 }
 
+/* ── Compare type health (4-outcome per type) ──────────── */
+function getCompareTypeHealth(runId1, runId2) {
+  const data = loadData();
+  const r1Map = {};
+  data.run_results.filter(r => r.run_id === runId1).forEach(r => { r1Map[r.request_id] = r; });
+  const r2All = data.run_results.filter(r => r.run_id === runId2);
+
+  const typeMap = {};
+  r2All.forEach(r2 => {
+    const r1 = r1Map[r2.request_id];
+    if (!r1) return;
+    const type = r1.true_type;
+    if (!typeMap[type]) typeMap[type] = { type, total: 0, both_correct: 0, run1_only: 0, run2_only: 0, both_wrong: 0 };
+    const t = typeMap[type];
+    t.total++;
+    const c1 = r1.pred_subtype === r1.true_subtype;
+    const c2 = r2.pred_subtype === r2.true_subtype;
+    if      (c1 && c2)  t.both_correct++;
+    else if (c1 && !c2) t.run1_only++;
+    else if (!c1 && c2) t.run2_only++;
+    else                t.both_wrong++;
+  });
+  return Object.values(typeMap).sort((a, b) => a.type.localeCompare(b.type));
+}
+
+/* ── Subtype confusion matrix (for one type) ─────────────── */
+function getSubtypeConfusionMatrix(runId, trueType) {
+  const data = loadData();
+  const results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType);
+
+  const rowMap = {};
+  const colMeta = {};
+
+  results.forEach(r => {
+    if (!rowMap[r.true_subtype]) rowMap[r.true_subtype] = { preds: {}, total: 0 };
+    const row = rowMap[r.true_subtype];
+    row.total++;
+    row.preds[r.pred_subtype] = (row.preds[r.pred_subtype] || 0) + 1;
+
+    if (!colMeta[r.pred_subtype]) {
+      colMeta[r.pred_subtype] = { total: 0, isCrossType: r.pred_type !== trueType, pred_type: r.pred_type };
+    }
+    colMeta[r.pred_subtype].total++;
+  });
+
+  const rows = Object.entries(rowMap)
+    .map(([subtype, d]) => ({ true_subtype: subtype, total: d.total, preds: d.preds }))
+    .sort((a, b) => b.total - a.total);
+
+  const rowOrder = rows.map(r => r.true_subtype);
+  const sameTypePredSet = new Set(Object.keys(colMeta).filter(k => !colMeta[k].isCrossType));
+  const sameTypeCols = [
+    ...rowOrder.filter(s => sameTypePredSet.has(s)),
+    ...Object.keys(colMeta)
+      .filter(k => !colMeta[k].isCrossType && !rowOrder.includes(k))
+      .sort((a, b) => colMeta[b].total - colMeta[a].total),
+  ].map(subtype => ({ subtype, isCrossType: false, pred_type: colMeta[subtype].pred_type }));
+
+  const crossTypeCols = Object.entries(colMeta)
+    .filter(([, m]) => m.isCrossType)
+    .sort(([, a], [, b]) => b.total - a.total)
+    .map(([subtype, m]) => ({ subtype, isCrossType: true, pred_type: m.pred_type }));
+
+  return { trueType, columns: [...sameTypeCols, ...crossTypeCols], rows };
+}
+
+/* ── Subtype transition matrix (compare two runs for one type) ── */
+function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilter = null) {
+  const data = loadData();
+  const r1Map = {};
+  data.run_results.filter(r => r.run_id === runId1 && r.true_type === trueType).forEach(r => { r1Map[r.request_id] = r; });
+  const r2All = data.run_results.filter(r => r.run_id === runId2 && r.true_type === trueType);
+
+  const pairs = [];
+  r2All.forEach(r2 => {
+    const r1 = r1Map[r2.request_id];
+    if (!r1) return;
+    const c1 = r1.pred_subtype === r1.true_subtype;
+    const c2 = r2.pred_subtype === r2.true_subtype;
+    if (compareFilter === 'both_correct' && !(c1 && c2))  return;
+    if (compareFilter === 'run1_only'    && !(c1 && !c2)) return;
+    if (compareFilter === 'run2_only'    && !(!c1 && c2)) return;
+    if (compareFilter === 'both_wrong'   && !(!c1 && !c2)) return;
+    pairs.push({ r1, r2 });
+  });
+
+  const rowMap = {};
+  const colMeta = {};
+  pairs.forEach(({ r1, r2 }) => {
+    const c1 = r1.pred_subtype === r1.true_subtype;
+    const c2 = r2.pred_subtype === r2.true_subtype;
+    if (!rowMap[r1.pred_subtype]) rowMap[r1.pred_subtype] = { pred_type: r1.pred_type, preds: {}, total: 0 };
+    if (!rowMap[r1.pred_subtype].preds[r2.pred_subtype]) {
+      rowMap[r1.pred_subtype].preds[r2.pred_subtype] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
+    const cell = rowMap[r1.pred_subtype].preds[r2.pred_subtype];
+    cell.total++;
+    if (c1 && !c2) cell.run1Correct++;
+    else if (!c1 && c2) cell.run2Correct++;
+    else if (!c1 && !c2) cell.bothWrong++;
+    rowMap[r1.pred_subtype].total++;
+    if (!colMeta[r2.pred_subtype]) colMeta[r2.pred_subtype] = { pred_type: r2.pred_type, total: 0 };
+    colMeta[r2.pred_subtype].total++;
+  });
+
+  const allSubtypes = Array.from(new Set([...Object.keys(rowMap), ...Object.keys(colMeta)]))
+    .sort((a, b) => {
+      const at = (rowMap[a]?.total || 0) + (colMeta[a]?.total || 0);
+      const bt = (rowMap[b]?.total || 0) + (colMeta[b]?.total || 0);
+      return bt - at;
+    });
+
+  const rows = allSubtypes.filter(s => rowMap[s])
+    .map(s => ({ run1_pred: s, pred_type: rowMap[s].pred_type, total: rowMap[s].total, preds: rowMap[s].preds }));
+  const columns = allSubtypes.filter(s => colMeta[s])
+    .map(s => ({ subtype: s, pred_type: colMeta[s].pred_type }));
+
+  return { trueType, columns, rows };
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -421,4 +542,7 @@ module.exports = {
   updateTranslation,
   updateMetadataTranslation,
   getTypeHealthSummary,
+  getCompareTypeHealth,
+  getSubtypeConfusionMatrix,
+  getSubtypeTransitionMatrix,
 };

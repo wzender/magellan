@@ -23,7 +23,8 @@ const idColumnCache = new Map();
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function tryParseJson(value) {
-  if (typeof value !== 'string') return value || {};
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch { return value; }
 }
 
@@ -655,7 +656,10 @@ async function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilte
   const result = await query(
     `SELECT r1.pred_subtype AS run1_pred, r1.pred_type AS run1_pred_type,
             r2.pred_subtype AS run2_pred, r2.pred_type AS run2_pred_type,
-            COUNT(*)::int AS count
+            COUNT(*)::int AS count,
+            SUM(CASE WHEN r1.pred_subtype = r1.true_subtype AND r2.pred_subtype != r1.true_subtype THEN 1 ELSE 0 END)::int AS run1_correct,
+            SUM(CASE WHEN r1.pred_subtype != r1.true_subtype AND r2.pred_subtype = r1.true_subtype THEN 1 ELSE 0 END)::int AS run2_correct,
+            SUM(CASE WHEN r1.pred_subtype != r1.true_subtype AND r2.pred_subtype != r1.true_subtype THEN 1 ELSE 0 END)::int AS both_wrong
      FROM "${tbl1}" r1
      JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2}
      WHERE r1.true_type = $1${filterClause}
@@ -664,12 +668,19 @@ async function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilte
     [trueType]
   );
 
-  const rowMap = {};   // run1_pred -> { pred_type, preds: {run2_pred->count}, total }
-  const colMeta = {};  // run2_pred -> { pred_type, total }
+  const rowMap = {};
+  const colMeta = {};
 
   result.rows.forEach(r => {
     if (!rowMap[r.run1_pred]) rowMap[r.run1_pred] = { pred_type: r.run1_pred_type, preds: {}, total: 0 };
-    rowMap[r.run1_pred].preds[r.run2_pred] = (rowMap[r.run1_pred].preds[r.run2_pred] || 0) + r.count;
+    if (!rowMap[r.run1_pred].preds[r.run2_pred]) {
+      rowMap[r.run1_pred].preds[r.run2_pred] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
+    const cell = rowMap[r.run1_pred].preds[r.run2_pred];
+    cell.total += r.count;
+    cell.run1Correct += r.run1_correct;
+    cell.run2Correct += r.run2_correct;
+    cell.bothWrong += r.both_wrong;
     rowMap[r.run1_pred].total += r.count;
     if (!colMeta[r.run2_pred]) colMeta[r.run2_pred] = { pred_type: r.run2_pred_type, total: 0 };
     colMeta[r.run2_pred].total += r.count;

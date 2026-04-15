@@ -318,6 +318,11 @@ input[type='range']:focus {
 
 .matrix-cell.populated {
   color: var(--primary-color);
+  cursor: pointer;
+}
+.matrix-cell.populated:hover {
+  outline: 2px solid var(--primary-color, #4f46e5);
+  outline-offset: -2px;
 }
 
 .matrix-cell.selected {
@@ -325,6 +330,16 @@ input[type='range']:focus {
   border: 2px solid var(--primary-color);
   font-weight: bold;
 }
+
+/* ── Transition matrix correctness cell colours ──────────── */
+/* Run 1 correct tones — orange family matching #f97316 */
+.matrix-cell.correctness-run1-only   { background: rgba(249,115,22,0.25); }
+.matrix-cell.correctness-run1-mostly { background: rgba(249,115,22,0.15); }
+/* Run 2 correct tones — cyan family matching #06b6d4 */
+.matrix-cell.correctness-run2-only   { background: rgba(6,182,212,0.25); }
+.matrix-cell.correctness-run2-mostly { background: rgba(6,182,212,0.15); }
+/* Both wrong — slate matching #94a3b8 */
+.matrix-cell.correctness-both-wrong  { background: rgba(148,163,184,0.25); }
 
 .subtype-matrix {
   margin-bottom: 1rem;

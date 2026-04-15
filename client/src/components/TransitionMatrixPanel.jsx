@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import RowLevelTable from './RowLevelTable';
 
-function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [], onExportAll, onTranslated }) {
+function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recordsData, selectedRunNames = [], onExportAll }) {
   const [indicatorFilter, setIndicatorFilter] = useState(null);
   const [persistentFilter, setPersistentFilter] = useState(null);
 
@@ -86,9 +86,16 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
 
   const getTransitionCellStyle = (cell, row, col, isSelected) => {
     const total = cell?.total || 0;
-    if (isSelected || total === 0 || getCorrectnessCssClass(cell)) return {};
+    if (isSelected || total === 0) return {};
     const alpha = Math.min(0.08 + (total / maxTotal) * 0.45, 0.55);
-    return { backgroundColor: row === col ? `rgba(40,167,69,${alpha})` : `rgba(0,102,204,${alpha})` };
+    if (row === col) return { backgroundColor: `rgba(34,197,94,${alpha})` }; // diagonal: green
+
+    // Off-diagonal: color by dominant correctness outcome
+    const { run1Correct = 0, run2Correct = 0, bothWrong = 0 } = cell;
+    if (run1Correct > run2Correct && run1Correct > bothWrong) return { backgroundColor: `rgba(249,115,22,${alpha})` }; // orange — run1 better
+    if (run2Correct > run1Correct && run2Correct > bothWrong) return { backgroundColor: `rgba(6,182,212,${alpha})` };   // cyan — run2 better
+    if (bothWrong > 0 && run1Correct === 0 && run2Correct === 0) return { backgroundColor: `rgba(148,163,184,${alpha})` }; // slate — both wrong
+    return { backgroundColor: `rgba(148,163,184,${alpha})` }; // neutral fallback
   };
 
   const rows = allRows.filter(row => {
@@ -254,7 +261,7 @@ function TransitionMatrixPanel({ data, selectedCell, onCellClick, loading, recor
               }
               return { ...result, data: rows };
             } : undefined}
-            onTranslated={onTranslated}
+
           />
         </div>
       )}

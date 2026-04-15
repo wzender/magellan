@@ -11,7 +11,7 @@ function DirectionCounts({ improved, regressed, lateral }) {
   );
 }
 
-function RunComparisonPanel({ allRecordsData, selectedRunNames, loading, onTranslated }) {
+function RunComparisonPanel({ allRecordsData, selectedRunNames, loading }) {
   const [expandedCrossKey, setExpandedCrossKey] = useState(null);
   const [expandedCrossPair, setExpandedCrossPair] = useState(null);
   const [expandedWithinKey, setExpandedWithinKey] = useState(null);
@@ -244,7 +244,6 @@ function RunComparisonPanel({ allRecordsData, selectedRunNames, loading, onTrans
                         showRun2Columns={true}
                         run1Name={runA}
                         run2Name={runB}
-                        onTranslated={onTranslated}
                       />
                     </div>
                   )}
@@ -321,7 +320,6 @@ function RunComparisonPanel({ allRecordsData, selectedRunNames, loading, onTrans
                         showRun2Columns={true}
                         run1Name={runA}
                         run2Name={runB}
-                        onTranslated={onTranslated}
                       />
                     </div>
                   )}
