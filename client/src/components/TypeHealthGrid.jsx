@@ -663,7 +663,7 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
 }
 
 /* ── CompareScoreboard ────────────────────────────────────── */
-function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Name, run2Name }) {
+function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Name, run2Name, compareFilter, onCompareFilter, onViewRecords }) {
   if (!typeHealth2 || !compareTypeHealth) return null;
 
   const total1   = typeHealth.reduce((s, t) => s + t.total, 0);
@@ -702,16 +702,24 @@ function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Nam
       </div>
       <div className="cmp-score-divider" />
       <div className="cmp-score-stats">
-        <span className="cmp-stat cmp-stat-improved" title={`${run2Name} newly correct`}>
+        <button
+          className={`cmp-stat cmp-stat-improved${compareFilter === 'run2_only' ? ' cmp-stat-active' : ''}`}
+          title={`${run2Name} newly correct — click to filter`}
+          onClick={() => { onCompareFilter('run2_only'); onViewRecords(null, null, null, null, null); }}
+        >
           <span className="cmp-stat-icon">▲</span>
           <span className="cmp-stat-num">{improved.toLocaleString()}</span>
           <span className="cmp-stat-label">improved</span>
-        </span>
-        <span className="cmp-stat cmp-stat-regressed" title={`${run1Name} correct, ${run2Name} regressed`}>
+        </button>
+        <button
+          className={`cmp-stat cmp-stat-regressed${compareFilter === 'run1_only' ? ' cmp-stat-active' : ''}`}
+          title={`${run1Name} correct, ${run2Name} regressed — click to filter`}
+          onClick={() => { onCompareFilter('run1_only'); onViewRecords(null, null, null, null, null); }}
+        >
           <span className="cmp-stat-icon">▼</span>
           <span className="cmp-stat-num">{regressed.toLocaleString()}</span>
           <span className="cmp-stat-label">regressed</span>
-        </span>
+        </button>
         <span className={`cmp-stat-net ${net > 0 ? 'cmp-stat-net-up' : net < 0 ? 'cmp-stat-net-down' : 'cmp-stat-net-flat'}`}>
           {net > 0 ? `+${net}` : net} net
         </span>
@@ -808,6 +816,9 @@ function TypeHealthGrid({
           compareTypeHealth={compareTypeHealth}
           run1Name={run1Name}
           run2Name={run2Name}
+          compareFilter={compareFilter}
+          onCompareFilter={onCompareFilter}
+          onViewRecords={onViewRecords}
         />
       )}
 
