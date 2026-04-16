@@ -35,7 +35,9 @@ function saveMetadataTranslationsFile(translations) {
 function tryParseJson(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') return value;
-  try { return JSON.parse(value); } catch { return value; }
+  try { return JSON.parse(value); } catch {
+    try { return JSON.parse(value.replace(/'/g, '"')); } catch { return value; }
+  }
 }
 
 function sanitize(name) {
@@ -299,6 +301,21 @@ function getRecords(filters = {}) {
   if (filters.true_subtype)  results = results.filter(r => r.true_subtype  === filters.true_subtype);
   if (filters.pred_subtype)  results = results.filter(r => r.pred_subtype  === filters.pred_subtype);
   if (filters.incorrectOnly) results = results.filter(r => r.pred_subtype  !== r.true_subtype);
+  if (filters.correctnessOr) {
+    const ors = filters.correctnessOr;
+    results = results.filter(r => {
+      const isCorrect   = r.pred_subtype === r.true_subtype;
+      const isSameType  = !isCorrect && r.pred_type === r.true_type;
+      const isCrossType = !isCorrect && r.pred_type !== r.true_type;
+      return (ors.includes('correct') && isCorrect) ||
+             (ors.includes('same_type') && isSameType) ||
+             (ors.includes('cross_type') && isCrossType);
+    });
+  } else {
+    if (filters.correctOnly)   results = results.filter(r => r.pred_subtype  === r.true_subtype);
+    if (filters.sameTypeOnly)  results = results.filter(r => r.pred_subtype  !== r.true_subtype && r.pred_type === r.true_type);
+    if (filters.crossTypeOnly) results = results.filter(r => r.pred_subtype  !== r.true_subtype && r.pred_type !== r.true_type);
+  }
 
   const limit  = filters.limit  || 100;
   const offset = filters.offset || 0;
@@ -434,9 +451,22 @@ function getCompareTypeHealth(runId1, runId2) {
 }
 
 /* ── Subtype confusion matrix (for one type) ─────────────── */
-function getSubtypeConfusionMatrix(runId, trueType) {
+function getSubtypeConfusionMatrix(runId, trueType, filter = null) {
   const data = loadData();
-  const results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType);
+  let results = data.run_results.filter(r => r.run_id === runId && r.true_type === trueType);
+
+  // Apply correctness filter (comma-separated list of: correct, same_type, cross_type)
+  if (filter) {
+    const filters = filter.split(',').map(f => f.trim());
+    results = results.filter(r => {
+      const isCorrect   = r.pred_subtype === r.true_subtype;
+      const isSameType  = !isCorrect && r.pred_type === r.true_type;
+      const isCrossType = !isCorrect && r.pred_type !== r.true_type;
+      return (filters.includes('correct') && isCorrect) ||
+             (filters.includes('same_type') && isSameType) ||
+             (filters.includes('cross_type') && isCrossType);
+    });
+  }
 
   const rowMap = {};
   const colMeta = {};

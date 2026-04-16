@@ -52,18 +52,22 @@ function cellIntensity(count, rowTotal) {
   return count / rowTotal;
 }
 
-function SubtypeConfusionMatrix({ runId, trueType, onViewRecords }) {
+function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewRecords }) {
   const [matrix, setMatrix] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPct, setShowPct] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/subtype-confusion?run_id=${runId}&true_type=${encodeURIComponent(trueType)}`)
+    let url = `/api/subtype-confusion?run_id=${runId}&true_type=${encodeURIComponent(trueType)}`;
+    if (correctnessFilter && correctnessFilter.size > 0) {
+      url += `&filter=${[...correctnessFilter].join(',')}`;
+    }
+    fetch(url)
       .then(r => r.json())
       .then(d => { setMatrix(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [runId, trueType]);
+  }, [runId, trueType, correctnessFilter]);
 
   if (loading) return <div className="matrix-loading">Loading matrix…</div>;
   if (!matrix || matrix.rows.length === 0) return <div className="matrix-empty">No data</div>;
@@ -496,18 +500,21 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
 
   const maxSubtypeTotal = Math.max(...typeData.subtypes.map(st => st.total), 1);
 
+  const noFilter = !correctnessFilter || correctnessFilter.size === 0;
+  const opacityFor = (key) => noFilter || correctnessFilter.has(key) ? 1 : 0.15;
+
   return (
     <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''}`}>
       <button className="th-row-header" onClick={onToggle}>
-        <span className="th-row-expand">{isExpanded ? '▾' : '▸'}</span>
+        <span className="th-row-expand" title="Click to explore subtypes">{isExpanded ? '▾' : '▸'}</span>
         <span className="th-row-name" title={typeData.type}>{typeData.type}</span>
         <span className="th-row-f1">{pctNum(f1)}%</span>
         <span className="th-row-count">{total.toLocaleString()}</span>
         <div className="th-row-bar-track" title={barTip}>
           <div className="th-row-bar" style={{ width: `${barScale}%` }}>
-            <div className="bar-correct"    style={{ width: `${correctPct}%`,  opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
-            <div className="bar-same-type"  style={{ width: `${samePct}%`,     opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
-            <div className="bar-cross-type" style={{ width: `${crossPct}%`,    opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
+            <div className="bar-correct"    style={{ width: `${correctPct}%`,  opacity: opacityFor('correct') }} />
+            <div className="bar-same-type"  style={{ width: `${samePct}%`,     opacity: opacityFor('same_type') }} />
+            <div className="bar-cross-type" style={{ width: `${crossPct}%`,    opacity: opacityFor('cross_type') }} />
           </div>
         </div>
       </button>
@@ -548,9 +555,9 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
                     <span className="th-subrow-count">{st.total.toLocaleString()}</span>
                     <div className="th-subrow-bar-track">
                       <div className="th-subrow-bar" style={{ width: `${stBarScale}%` }}>
-                        <div className="bar-correct"    style={{ width: `${stCorrectPct}%`, opacity: !correctnessFilter || correctnessFilter === 'correct'    ? 1 : 0.15 }} />
-                        <div className="bar-same-type"  style={{ width: `${stSamePct}%`,    opacity: !correctnessFilter || correctnessFilter === 'same_type'  ? 1 : 0.15 }} />
-                        <div className="bar-cross-type" style={{ width: `${stCrossPct}%`,   opacity: !correctnessFilter || correctnessFilter === 'cross_type' ? 1 : 0.15 }} />
+                        <div className="bar-correct"    style={{ width: `${stCorrectPct}%`, opacity: opacityFor('correct') }} />
+                        <div className="bar-same-type"  style={{ width: `${stSamePct}%`,    opacity: opacityFor('same_type') }} />
+                        <div className="bar-cross-type" style={{ width: `${stCrossPct}%`,   opacity: opacityFor('cross_type') }} />
                       </div>
                     </div>
                   </button>
@@ -563,6 +570,7 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
             <SubtypeConfusionMatrix
               runId={runId}
               trueType={typeData.type}
+              correctnessFilter={correctnessFilter}
               onViewRecords={(subtype, predSubtype) => onViewRecords(typeData.type, subtype, predSubtype, null, null)}
             />
           )}
@@ -604,7 +612,7 @@ function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isEx
   return (
     <div className={`th-row ${sev} ${isExpanded ? 'th-row-expanded' : ''} ${isDimmed ? 'th-row-dimmed' : ''} ${noTransitions ? 'th-row-no-transitions' : ''} ${dirClass}`}>
       <button className="th-row-header th-row-header-cmp" onClick={hasTransitions ? onToggle : undefined} style={noTransitions ? { cursor: 'default' } : undefined}>
-        <span className="th-row-expand">{isExpanded ? '▾' : hasTransitions ? '▸' : ' '}</span>
+        <span className="th-row-expand" title={hasTransitions ? 'Click to explore subtypes' : undefined}>{isExpanded ? '▾' : hasTransitions ? '▸' : ' '}</span>
         <span className="th-row-name" title={type}>{type}</span>
         <span className="th-row-f1">{pctNum(f1)}%{delta !== null && <DeltaBadge delta={delta} />}</span>
         <span className="th-row-change-pills">
@@ -758,11 +766,11 @@ function TypeHealthGrid({
 
   /* dim cards that have zero records in the active filter category (single mode) */
   function cardMatchesFilter(t) {
-    if (!correctnessFilter) return true;
-    if (correctnessFilter === 'correct')    return t.correct > 0;
-    if (correctnessFilter === 'same_type')  return t.same_type_wrong > 0;
-    if (correctnessFilter === 'cross_type') return t.cross_type_wrong > 0;
-    return true;
+    if (!correctnessFilter || correctnessFilter.size === 0) return true;
+    if (correctnessFilter.has('correct')    && t.correct > 0) return true;
+    if (correctnessFilter.has('same_type')  && t.same_type_wrong > 0) return true;
+    if (correctnessFilter.has('cross_type') && t.cross_type_wrong > 0) return true;
+    return false;
   }
 
   /* dim cards in compare mode */
@@ -778,11 +786,11 @@ function TypeHealthGrid({
   }
 
   function badgeMatchesFilter(st) {
-    if (!correctnessFilter) return true;
-    if (correctnessFilter === 'correct')    return st.correct > 0;
-    if (correctnessFilter === 'same_type')  return (st.total - st.correct - st.cross_type) > 0;
-    if (correctnessFilter === 'cross_type') return st.cross_type > 0;
-    return true;
+    if (!correctnessFilter || correctnessFilter.size === 0) return true;
+    if (correctnessFilter.has('correct')    && st.correct > 0) return true;
+    if (correctnessFilter.has('same_type')  && (st.total - st.correct - st.cross_type) > 0) return true;
+    if (correctnessFilter.has('cross_type') && st.cross_type > 0) return true;
+    return false;
   }
 
   const maxTotal = Math.max(...typeHealth.map(t => {
@@ -848,7 +856,7 @@ function TypeHealthGrid({
           : LEGEND_SINGLE.map(l => (
               <button
                 key={l.key}
-                className={`legend-btn ${correctnessFilter === l.key ? 'legend-btn-active' : ''}`}
+                className={`legend-btn ${correctnessFilter && correctnessFilter.has(l.key) ? 'legend-btn-active' : ''}`}
                 onClick={() => onCorrectnessFilter(l.key)}
               >
                 <span className={`legend-swatch ${l.cls}`} />
@@ -857,6 +865,24 @@ function TypeHealthGrid({
             ))
         }
       </div>
+      </div>
+
+      <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
+        <span className="th-col-expand" />
+        <span className="th-col-label">True Type</span>
+        {isCompare ? (
+          <>
+            <span className="th-col-f1">F1</span>
+            <span className="th-col-changes">Changes</span>
+            <span className="th-col-count">#</span>
+          </>
+        ) : (
+          <>
+            <span className="th-col-f1">F1</span>
+            <span className="th-col-count">#</span>
+          </>
+        )}
+        <span className="th-col-bar">Breakdown</span>
       </div>
 
       <div className="th-list">

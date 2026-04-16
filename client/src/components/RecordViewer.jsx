@@ -17,7 +17,9 @@ function renderVal(v) {
   if (v === null || v === undefined) return '—';
   let val = v;
   if (typeof val === 'string') {
-    try { val = JSON.parse(val); } catch { /* keep as string */ }
+    try { val = JSON.parse(val); } catch {
+      try { val = JSON.parse(val.replace(/'/g, '"')); } catch { /* keep as string */ }
+    }
   }
   if (Array.isArray(val)) return val.join(', ');
   if (typeof val === 'object') return <pre className="json-pretty">{JSON.stringify(val, null, 2)}</pre>;

@@ -52,10 +52,20 @@ router.get('/records', async (req, res) => {
     if (run1_true_subtype) filters.run1_true_subtype = run1_true_subtype;
     if (run2_true_subtype) filters.run2_true_subtype = run2_true_subtype;
     if (compare_filter) filters.compareFilter = compare_filter;
-    if (filter === 'incorrect')  filters.incorrectOnly  = true;
-    if (filter === 'correct')    filters.correctOnly    = true;
-    if (filter === 'same_type')  filters.sameTypeOnly   = true;
-    if (filter === 'cross_type') filters.crossTypeOnly  = true;
+    if (filter) {
+      const parts = filter.split(',').map(f => f.trim());
+      if (parts.includes('incorrect'))  filters.incorrectOnly  = true;
+      if (parts.includes('correct'))    filters.correctOnly    = true;
+      if (parts.includes('same_type'))  filters.sameTypeOnly   = true;
+      if (parts.includes('cross_type')) filters.crossTypeOnly  = true;
+      // When multiple correctness filters are selected, use OR logic
+      if ((filters.correctOnly ? 1 : 0) + (filters.sameTypeOnly ? 1 : 0) + (filters.crossTypeOnly ? 1 : 0) > 1) {
+        filters.correctnessOr = parts.filter(p => ['correct', 'same_type', 'cross_type'].includes(p));
+        delete filters.correctOnly;
+        delete filters.sameTypeOnly;
+        delete filters.crossTypeOnly;
+      }
+    }
 
     console.log('Records API called with filters:', JSON.stringify(filters, null, 2));
 

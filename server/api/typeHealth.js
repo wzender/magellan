@@ -56,9 +56,9 @@ router.get('/subtype-transition', async (req, res) => {
  */
 router.get('/subtype-confusion', async (req, res) => {
   try {
-    const { run_id, true_type } = req.query;
+    const { run_id, true_type, filter } = req.query;
     if (!run_id || !true_type) return res.status(400).json({ error: 'run_id and true_type are required' });
-    const data = await dbLoader.getSubtypeConfusionMatrix(parseInt(run_id), true_type);
+    const data = await dbLoader.getSubtypeConfusionMatrix(parseInt(run_id), true_type, filter || null);
     res.json(data);
   } catch (error) {
     console.error('Error fetching subtype confusion matrix:', error);

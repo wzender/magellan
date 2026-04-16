@@ -21,7 +21,6 @@ function BenchmarkGallery({ benchmarks, allLeaderboards, onSelect }) {
               {champion && (
                 <div className="benchmark-card-champion">
                   <span className="badge badge-gold">Champion</span>
-                  <span className="champion-model">{champion.run_name}</span>
                   <span className="champion-accuracy">{champAcc}%</span>
                 </div>
               )}

@@ -93,7 +93,7 @@ function Dashboard() {
   const [recordsData, setRecordsData]     = useState(null); // { data, pagination }
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [loading, setLoading]           = useState(false);
-  const [correctnessFilter, setCorrectnessFilter] = useState(null); // null | 'correct' | 'same_type' | 'cross_type'
+  const [correctnessFilter, setCorrectnessFilter] = useState(new Set()); // Set of 'correct' | 'same_type' | 'cross_type'
 
   /* ── Unknowns validation state ── */
   const [validationRecords, setValidationRecords] = useState([]);
@@ -269,7 +269,7 @@ function Dashboard() {
       setRecordsLoading(true);
       setRecordsData(null);
       try {
-        const data = await fetchRecords(runId, null, null, 50, correctnessFilter);
+        const data = await fetchRecords(runId, null, null, 50, correctnessFilter.size > 0 ? correctnessFilter : null);
         setRecordsData(data);
       } finally {
         setRecordsLoading(false);
@@ -281,6 +281,8 @@ function Dashboard() {
   /* ── record fetch ── */
   // run1PredSubtype / run2PredSubtype are for compare-mode transition matrix cell filtering
   const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null, cmpFilter = null, run1PredSubtype = null, run2PredSubtype = null) => {
+    // filter can be a Set or a string
+    const filterStr = filter instanceof Set ? [...filter].join(',') : filter;
     let url = runId2
       ? `/api/records?run_id1=${runId1}&run_id2=${runId2}&limit=${limit}`
       : `/api/records?run_id=${runId1}&limit=${limit}`;
@@ -290,11 +292,11 @@ function Dashboard() {
     if (run2PredSubtype)  url += `&run2_pred_subtype=${encodeURIComponent(run2PredSubtype)}`;
     if (!runId2 && predSubtype) {
       // '__cross_type__' is a sentinel meaning filter=cross_type
-      const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filter;
+      const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filterStr;
       url += `&pred_subtype=${encodeURIComponent(predSubtype)}`;
       if (resolvedFilter) url += `&filter=${resolvedFilter}`;
-    } else if (!runId2 && filter) {
-      url += `&filter=${filter}`;
+    } else if (!runId2 && filterStr) {
+      url += `&filter=${filterStr}`;
     }
     if (cmpFilter) url += `&compare_filter=${cmpFilter}`;
     const res = await fetch(url);
@@ -311,7 +313,7 @@ function Dashboard() {
     try {
       const data = await fetchRecords(
         runId1, trueType, trueSubtype, 50,
-        isCompare ? null : correctnessFilter,
+        isCompare ? null : (correctnessFilter.size > 0 ? correctnessFilter : null),
         runId2, isCompare ? null : predSubtype,
         isCompare ? compareFilter : null,
         isCompare ? run1PredSubtype : null,
@@ -331,7 +333,7 @@ function Dashboard() {
     const isCompare = !!recordQuery.runId2;
     return fetchRecords(
       recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999,
-      isCompare ? null : correctnessFilter,
+      isCompare ? null : (correctnessFilter.size > 0 ? correctnessFilter : null),
       recordQuery.runId2 ?? null,
       isCompare ? null : (recordQuery.predSubtype ?? null),
       isCompare ? compareFilter : null,
@@ -347,7 +349,7 @@ function Dashboard() {
       setRecordsLoading(true);
       setRecordsData(null);
       try {
-        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter, null, recordQuery.predSubtype ?? null, null);
+        const data = await fetchRecords(recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 50, correctnessFilter.size > 0 ? correctnessFilter : null, null, recordQuery.predSubtype ?? null, null);
         setRecordsData(data);
       } finally {
         setRecordsLoading(false);
@@ -485,7 +487,11 @@ function Dashboard() {
               onViewRecords={handleViewRecords}
               activeSubtype={recordQuery?.trueSubtype ?? null}
               correctnessFilter={correctnessFilter}
-              onCorrectnessFilter={v => setCorrectnessFilter(prev => prev === v ? null : v)}
+              onCorrectnessFilter={v => setCorrectnessFilter(prev => {
+                const next = new Set(prev);
+                if (next.has(v)) next.delete(v); else next.add(v);
+                return next;
+              })}
               compareFilter={compareFilter}
               onCompareFilter={v => setCompareFilter(prev => prev === v ? null : v)}
             />
@@ -498,8 +504,21 @@ function Dashboard() {
                   <span>{recordsTitle}</span>
                   <span className="records-section-desc">Individual classified records — expand a row to see full attributes and metadata</span>
                 </div>
-                <button className="btn-close-viewer" onClick={() => { setRecordQuery(null); setRecordsData(null); }}>
-                  ✕ Clear
+                <button className="btn-close-viewer" onClick={async () => {
+                  const runId1 = selectedRunIds[0];
+                  const runId2 = selectedRunIds[1] ?? null;
+                  setCorrectnessFilter(new Set());
+                  setRecordQuery({ runId: runId1, runId2, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
+                  setRecordsLoading(true);
+                  setRecordsData(null);
+                  try {
+                    const data = await fetchRecords(runId1, null, null, 50, null, runId2);
+                    setRecordsData(data);
+                  } finally {
+                    setRecordsLoading(false);
+                  }
+                }}>
+                  ↺ Show All
                 </button>
               </div>
               {recordsLoading && <div className="viewer-loading">Loading records…</div>}

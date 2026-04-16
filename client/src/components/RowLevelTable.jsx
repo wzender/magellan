@@ -194,11 +194,33 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   }, [resizingColumnIndex, resizeStartX, columns]);
 
   const copyCellJson = (obj, label, cellKey) => {
-    navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
-      setToast(`${label} copied!`);
-      setCopiedCell(cellKey);
-      setTimeout(() => setCopiedCell(null), 1000);
-    }).catch(() => setToast(`Failed to copy ${label}`));
+    const text = JSON.stringify(obj, null, 2);
+    const doFallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setToast(`${label} copied!`);
+        setCopiedCell(cellKey);
+        setTimeout(() => setCopiedCell(null), 1000);
+      } catch {
+        setToast(`Failed to copy ${label}`);
+      }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(() => {
+        setToast(`${label} copied!`);
+        setCopiedCell(cellKey);
+        setTimeout(() => setCopiedCell(null), 1000);
+      }).catch(doFallback);
+    } else {
+      doFallback();
+    }
   };
 
   React.useEffect(() => {
@@ -210,7 +232,9 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const renderPrettyJson = (raw, cellKey, label) => {
     let obj = raw;
     if (typeof raw === 'string') {
-      try { obj = JSON.parse(raw); } catch { /* leave as string */ }
+      try { obj = JSON.parse(raw); } catch {
+        try { obj = JSON.parse(raw.replace(/'/g, '"')); } catch { /* leave as string */ }
+      }
     }
     const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
     if (isEmpty) {

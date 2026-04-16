@@ -25,7 +25,9 @@ const idColumnCache = new Map();
 function tryParseJson(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') return value;
-  try { return JSON.parse(value); } catch { return value; }
+  try { return JSON.parse(value); } catch {
+    try { return JSON.parse(value.replace(/'/g, '"')); } catch { return value; }
+  }
 }
 
 function parseJsonFields(row) {
@@ -705,16 +707,26 @@ async function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilte
   return { trueType, columns, rows };
 }
 
-async function getSubtypeConfusionMatrix(runId, trueType) {
+async function getSubtypeConfusionMatrix(runId, trueType, filter = null) {
   const { runs } = await getRunIndex();
   const run = runById(runs, runId);
   if (!run) throw new Error(`Run ${runId} not found`);
   const tbl = run.run_name;
 
+  let whereClause = 'WHERE true_type = $1';
+  if (filter) {
+    const parts = filter.split(',').map(f => f.trim());
+    const conds = [];
+    if (parts.includes('correct'))    conds.push('pred_subtype = true_subtype');
+    if (parts.includes('same_type'))  conds.push('(pred_subtype != true_subtype AND pred_type = true_type)');
+    if (parts.includes('cross_type')) conds.push('(pred_subtype != true_subtype AND pred_type != true_type)');
+    if (conds.length > 0) whereClause += ` AND (${conds.join(' OR ')})`;
+  }
+
   const result = await query(
     `SELECT true_subtype, pred_subtype, pred_type, COUNT(*)::int AS count
      FROM "${tbl}"
-     WHERE true_type = $1
+     ${whereClause}
      GROUP BY true_subtype, pred_subtype, pred_type
      ORDER BY true_subtype, count DESC`,
     [trueType]

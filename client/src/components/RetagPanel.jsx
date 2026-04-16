@@ -6,7 +6,9 @@ const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 function parseJsonValue(raw) {
   let obj = raw;
   if (typeof raw === 'string') {
-    try { obj = JSON.parse(raw); } catch { /* keep as string */ }
+    try { obj = JSON.parse(raw); } catch {
+      try { obj = JSON.parse(raw.replace(/'/g, '"')); } catch { /* keep as string */ }
+    }
   }
   return obj;
 }

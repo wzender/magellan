@@ -4,7 +4,7 @@
     {
       "label": "Export this workspace to DOCX via docme",
       "type": "shell",
-      "command": "/home/eyalshw/gitlab/rafael/ai_team/docme/scripts/export-workspace-docx.sh",
+      "command": "/home/eyalshw/gitlab/rafael/ai_team/test/docme/scripts/export-workspace-docx.sh",
       "args": [
         "${workspaceFolder}",
         "${input:docxOutputPath}",
