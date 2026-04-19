@@ -1,0 +1,5 @@
+{
+  "watch": ["server", ".env"],
+  "ext": "js,json",
+  "ignore": ["server/mock/*", "node_modules/*"]
+}

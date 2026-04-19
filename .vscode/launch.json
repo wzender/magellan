@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Start Server",
+      "program": "${workspaceFolder}/server/index.js",
+      "envFile": "${workspaceFolder}/.env",
+      "env": { "DATA_SOURCE": "postgres" },
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

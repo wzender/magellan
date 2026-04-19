@@ -560,6 +560,65 @@ function getSubtypeTransitionMatrix(runId1, runId2, trueType, compareFilter = nu
   return { trueType, columns, rows };
 }
 
+function csvEscapeCell(v) {
+  const s = v == null ? '' : String(v);
+  return s.includes(',') || s.includes('"') || s.includes('\n')
+    ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Return { request_id: { verdict, reasoning } } for all records that have GPT results. */
+function getGptResults(runId) {
+  const data = loadData();
+  const out = {};
+  data.run_results
+    .filter(r => r.run_id === runId && r.gpt_verdict)
+    .forEach(r => { out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning }; });
+  return out;
+}
+
+/**
+ * Persist GPT results for a run.
+ * results = { request_id: { verdict, reasoning } }
+ * Updates the in-memory cache and writes gpt_verdict/gpt_reasoning back to the run CSV file.
+ */
+function updateGptResults(runId, results) {
+  const data = loadData();
+  const run = data.runs.find(r => r.id === runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const fname = runFileName(run.benchmark_id, run.run_name);
+  const fpath = path.join(RUNS_DIR, fname);
+  if (!fs.existsSync(fpath)) throw new Error(`Run file not found: ${fname}`);
+
+  const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
+
+  // Ensure gpt columns are present in the header
+  const baseHeaders = Object.keys(records[0] || {});
+  const headers = baseHeaders.includes('gpt_verdict')
+    ? baseHeaders
+    : [...baseHeaders, 'gpt_verdict', 'gpt_reasoning'];
+
+  const updated = records.map(r => {
+    const hit = results[r.request_id];
+    if (!hit) return r;
+    return { ...r, gpt_verdict: hit.verdict, gpt_reasoning: hit.reasoning };
+  });
+
+  const csvContent = [
+    headers.join(','),
+    ...updated.map(r => headers.map(h => csvEscapeCell(r[h])).join(',')),
+  ].join('\n') + '\n';
+  fs.writeFileSync(fpath, csvContent, 'utf-8');
+
+  // Update in-memory cache too (avoids a full reload)
+  data.run_results.forEach(r => {
+    if (r.run_id === runId && results[r.request_id]) {
+      r.gpt_verdict  = results[r.request_id].verdict;
+      r.gpt_reasoning = results[r.request_id].reasoning;
+    }
+  });
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -577,4 +636,6 @@ module.exports = {
   getCompareTypeHealth,
   getSubtypeConfusionMatrix,
   getSubtypeTransitionMatrix,
+  getGptResults,
+  updateGptResults,
 };

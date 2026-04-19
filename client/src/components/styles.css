@@ -1364,7 +1364,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   transition: opacity 0.12s;
 }
 
-.json-td:hover .copy-json-btn { opacity: 1; }
+.json-td:hover .copy-json-btn,
+.cell-json:hover .copy-json-btn { opacity: 1; }
 
 /* Correctness badge */
 .record-id-cell {
