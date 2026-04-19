@@ -116,6 +116,8 @@ function loadData() {
         en_attributes: tryParseJson(r.en_attributes),
         metadata:      tryParseJson(r.metadata),
         en_metadata:   tryParseJson(r.en_metadata),
+        gpt_verdict:   r.gpt_verdict   || null,
+        gpt_reasoning: r.gpt_reasoning || null,
       });
     });
   });

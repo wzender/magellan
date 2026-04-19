@@ -7,21 +7,24 @@ const VERDICTS = [
   { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
 ];
 
+const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_verdict: '', gpt_reasoning: '' };
+
 function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBulkVerdict }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
-  const [filterText, setFilterText] = useState('');
-  const [verdictFilter, setVerdictFilter] = useState('all'); // 'all' | 'unreviewed' | 'justified' | 'unjustified' | 'unclear'
+  const [colFilters, setColFilters] = useState(EMPTY_COL_FILTERS);
+  const [verdictFilter, setVerdictFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [attrLang, setAttrLang] = useState('original');
   const [metaLang, setMetaLang] = useState('original');
   const [toast, setToast] = useState(null);
   const [copiedCell, setCopiedCell] = useState(null);
-  const [exporting, setExporting] = useState(false);
-  const [gptAnswers, setGptAnswers] = useState({});   // request_id -> answer string
-  const [gptLoading, setGptLoading] = useState({});    // request_id -> true
+  const [gptResults, setGptResults] = useState({});   // request_id -> { verdict, reasoning }
+  const [gptRunning, setGptRunning] = useState(false);
+  const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
+  const gptCancelledRef = useRef(false);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -32,16 +35,26 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
     const tb = toolbarRef.current;
     const panel = panelRef.current;
     if (!tb || !panel) return;
-    const h = tb.getBoundingClientRect().height;
-    panel.style.setProperty('--table-toolbar-h', `${h}px`);
+    panel.style.setProperty('--table-toolbar-h', `${tb.getBoundingClientRect().height}px`);
   });
 
   useEffect(() => {
     setCurrentPage(0);
     setSelectedIds(new Set());
-    setGptAnswers({});
-    setGptLoading({});
-  }, [runId, verdictFilter, filterText]);
+    setGptResults({});
+    setGptRunning(false);
+    setColFilters(EMPTY_COL_FILTERS);
+    if (runId) {
+      fetch(`/api/gpt-results?run_id=${runId}`)
+        .then(r => r.json())
+        .then(data => setGptResults(data && typeof data === 'object' ? data : {}))
+        .catch(() => {});
+    }
+  }, [runId]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [verdictFilter, JSON.stringify(colFilters)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toast) return;
@@ -53,32 +66,32 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
     return <div className="validation-empty">No records for this run.</div>;
   }
 
-  /* ── filtering & sorting ── */
+  /* ── filtering ── */
   let filtered = records;
-  if (filterText) {
-    const q = filterText.toLowerCase();
-    filtered = filtered.filter(r =>
-      r.request_id.toLowerCase().includes(q) ||
-      (r.pred_subtype || '').toLowerCase().includes(q) ||
-      (r.pred_type || '').toLowerCase().includes(q) ||
-      JSON.stringify(r.attributes || '').toLowerCase().includes(q) ||
-      JSON.stringify(r.metadata || '').toLowerCase().includes(q)
-    );
-  }
+  if (colFilters.request_id)   filtered = filtered.filter(r => r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase()));
+  if (colFilters.pred_subtype) filtered = filtered.filter(r => (r.pred_subtype || '').toLowerCase().includes(colFilters.pred_subtype.toLowerCase()));
+  if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
+  if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
+  if (colFilters.gpt_verdict)  filtered = filtered.filter(r => (gptResults[r.request_id]?.verdict || '').toLowerCase().includes(colFilters.gpt_verdict.toLowerCase()));
+  if (colFilters.gpt_reasoning) filtered = filtered.filter(r => (gptResults[r.request_id]?.reasoning || '').toLowerCase().includes(colFilters.gpt_reasoning.toLowerCase()));
   if (verdictFilter !== 'all') {
-    if (verdictFilter === 'unreviewed') {
-      filtered = filtered.filter(r => !verdicts[r.request_id]);
-    } else {
-      filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
-    }
+    if (verdictFilter === 'unreviewed') filtered = filtered.filter(r => !verdicts[r.request_id]);
+    else filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
   }
 
+  /* ── sorting ── */
   if (sortConfig.key) {
     filtered = [...filtered].sort((a, b) => {
       let aVal, bVal;
       if (sortConfig.key === 'verdict') {
         aVal = verdicts[a.request_id] || '';
         bVal = verdicts[b.request_id] || '';
+      } else if (sortConfig.key === 'gpt_verdict') {
+        aVal = gptResults[a.request_id]?.verdict || '';
+        bVal = gptResults[b.request_id]?.verdict || '';
+      } else if (sortConfig.key === 'gpt_reasoning') {
+        aVal = gptResults[a.request_id]?.reasoning || '';
+        bVal = gptResults[b.request_id]?.reasoning || '';
       } else {
         aVal = a[sortConfig.key] ?? '';
         bVal = b[sortConfig.key] ?? '';
@@ -96,27 +109,20 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
   /* ── stats ── */
   const total = records.length;
   const reviewed = records.filter(r => verdicts[r.request_id]).length;
-  const justifiedCount = records.filter(r => verdicts[r.request_id] === 'justified').length;
+  const justifiedCount   = records.filter(r => verdicts[r.request_id] === 'justified').length;
   const unjustifiedCount = records.filter(r => verdicts[r.request_id] === 'unjustified').length;
-  const unclearCount = records.filter(r => verdicts[r.request_id] === 'unclear').length;
+  const unclearCount     = records.filter(r => verdicts[r.request_id] === 'unclear').length;
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
 
   const toggleSelectAll = () => {
-    if (allPageSelected) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        pageData.forEach(r => next.delete(r.request_id));
-        return next;
-      });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        pageData.forEach(r => next.add(r.request_id));
-        return next;
-      });
-    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageData.forEach(r => next.delete(r.request_id));
+      else pageData.forEach(r => next.add(r.request_id));
+      return next;
+    });
   };
 
   const toggleSelect = (requestId) => {
@@ -149,28 +155,43 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
     return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
   };
 
-  /* ── ask GPT ── */
-  const askGpt = async (record) => {
-    const reqId = record.request_id;
-    setGptLoading(prev => ({ ...prev, [reqId]: true }));
-    try {
-      const res = await fetch('/api/ask-gpt', {
-        method: 'POST',
+  /* ── col filter helper ── */
+  const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
+
+  /* ── ask GPT (filtered records only) ── */
+  const askGptAll = async (recordsToProcess) => {
+    gptCancelledRef.current = false;
+    setGptRunning(true);
+    setGptProgress({ done: 0, total: recordsToProcess.length });
+    for (const record of recordsToProcess) {
+      if (gptCancelledRef.current) break;
+      let result;
+      try {
+        const res = await fetch('/api/ask-gpt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            attributes: record.attributes,
+            metadata: record.metadata,
+            suggested_type: record.pred_type,
+            suggested_subtype: record.pred_subtype,
+          }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        result = { verdict: data.verdict, reasoning: data.reasoning };
+      } catch (err) {
+        result = { verdict: '?', reasoning: err.message || '(error)' };
+      }
+      setGptResults(prev => ({ ...prev, [record.request_id]: result }));
+      fetch('/api/gpt-results', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          attributes: record.attributes,
-          metadata: record.metadata,
-          suggested_type: record.pred_type,
-          suggested_subtype: record.pred_subtype,
-        }),
-      });
-      const data = await res.json();
-      setGptAnswers(prev => ({ ...prev, [reqId]: data.answer || data.error || '(error)' }));
-    } catch (err) {
-      setGptAnswers(prev => ({ ...prev, [reqId]: '(request failed)' }));
-    } finally {
-      setGptLoading(prev => ({ ...prev, [reqId]: false }));
+        body: JSON.stringify({ run_id: runId, results: { [record.request_id]: result } }),
+      }).catch(() => {});
+      setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
     }
+    setGptRunning(false);
   };
 
   /* ── json rendering ── */
@@ -192,10 +213,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
     const display = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
     return (
       <div className="json-cell-wrapper">
-        <button
-          className="copy-json-btn"
-          onClick={e => { e.stopPropagation(); copyCellJson(obj, label, cellKey); }}
-        >
+        <button className="copy-json-btn" onClick={e => { e.stopPropagation(); copyCellJson(obj, label, cellKey); }}>
           {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
         </button>
         <pre className="json-pretty">{display}</pre>
@@ -205,12 +223,14 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
 
   /* ── export ── */
   const doExport = (kind) => {
-    const headers = ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'attributes', 'metadata'];
+    const headers = ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata'];
     const rows = filtered.map(r => [
       r.request_id,
       r.pred_type,
       r.pred_subtype,
       verdicts[r.request_id] || '',
+      gptResults[r.request_id]?.verdict || '',
+      gptResults[r.request_id]?.reasoning || '',
       JSON.stringify(r.attributes ?? ''),
       JSON.stringify(r.metadata ?? ''),
     ]);
@@ -251,15 +271,8 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
           <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
         </div>
 
-        {/* Filters */}
+        {/* Verdict filter */}
         <div className="validation-filters">
-          <input
-            className="validation-search"
-            type="text"
-            placeholder="Search records…"
-            value={filterText}
-            onChange={e => setFilterText(e.target.value)}
-          />
           <select
             className="validation-verdict-filter"
             value={verdictFilter}
@@ -278,11 +291,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
           <div className="validation-bulk">
             <span className="validation-bulk-count">{selectedIds.size} selected</span>
             {VERDICTS.map(v => (
-              <button
-                key={v.value}
-                className={`validation-bulk-btn ${v.className}`}
-                onClick={() => handleBulkVerdict(v.value)}
-              >
+              <button key={v.value} className={`validation-bulk-btn ${v.className}`} onClick={() => handleBulkVerdict(v.value)}>
                 {v.label}
               </button>
             ))}
@@ -290,20 +299,28 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
           </div>
         )}
 
-        {/* Row height, language, export */}
+        {/* Row height, export, ask gpt */}
         <div className="validation-controls">
           <div className="row-height-control">
             <span className="row-height-label">Row height:</span>
             {ROW_HEIGHT_OPTIONS.map(opt => (
-              <button
-                key={opt}
-                className={`row-height-btn${rowHeight === opt ? ' active' : ''}`}
-                onClick={() => setRowHeight(opt)}
-              >{opt}</button>
+              <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
             ))}
           </div>
           <button className="export-csv-btn" onClick={() => doExport('csv')}>CSV</button>
           <button className="export-csv-btn" onClick={() => doExport('excel')}>Excel</button>
+          <button
+            className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
+            onClick={() => askGptAll(filtered)}
+            disabled={gptRunning}
+          >
+            {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
+          </button>
+          {gptRunning && (
+            <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
+              Cancel
+            </button>
+          )}
         </div>
       </div>
 
@@ -311,6 +328,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
       <div className="validation-table-wrap">
         <table className="validation-table records-table">
           <thead>
+            {/* Column headers */}
             <tr>
               <th style={{ width: 40 }}>
                 <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
@@ -339,34 +357,44 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
                   </div>
                 </div>
               </th>
-              <th style={{ width: 200, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
+              <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                 Verdict{sortIndicator('verdict')}
               </th>
+              <th style={{ width: 80, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
+                GPT Verdict{sortIndicator('gpt_verdict')}
+              </th>
+              <th style={{ width: 260, cursor: 'pointer' }} onClick={() => handleSort('gpt_reasoning')}>
+                GPT Reasoning{sortIndicator('gpt_reasoning')}
+              </th>
+            </tr>
+            {/* Column filters */}
+            <tr className="col-filter-row">
+              <th />
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
+              <th />
+              <th><input className="col-filter-input" placeholder="yes/no" value={colFilters.gpt_verdict} onChange={e => setColFilter('gpt_verdict', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.gpt_reasoning} onChange={e => setColFilter('gpt_reasoning', e.target.value)} /></th>
             </tr>
           </thead>
           <tbody>
-            {pageData.map((r, idx) => {
+            {pageData.map(r => {
               const verdict = verdicts[r.request_id] || '';
+              const gpt = gptResults[r.request_id];
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
 
               return (
                 <tr key={r.request_id} className={verdict ? `validation-row-${verdict}` : ''}>
                   <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(r.request_id)}
-                      onChange={() => toggleSelect(r.request_id)}
-                    />
+                    <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
                   </td>
                   <td className="cell-request-id">{r.request_id}</td>
                   <td><strong>{r.pred_subtype}</strong></td>
-                  <td className="cell-json">
-                    {renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}
-                  </td>
-                  <td className="cell-json">
-                    {renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}
-                  </td>
+                  <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
+                  <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
                   <td className="cell-verdict">
                     <div className="verdict-buttons">
                       {VERDICTS.map(v => (
@@ -379,18 +407,13 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
                           {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
                         </button>
                       ))}
-                      <button
-                        className={`verdict-btn verdict-gpt${gptLoading[r.request_id] ? ' loading' : ''}`}
-                        onClick={() => askGpt(r)}
-                        disabled={gptLoading[r.request_id]}
-                        title="Ask GPT"
-                      >
-                        {gptLoading[r.request_id] ? '…' : '🤖'}
-                      </button>
                     </div>
-                    {gptAnswers[r.request_id] && (
-                      <div className="gpt-answer">{gptAnswers[r.request_id]}</div>
-                    )}
+                  </td>
+                  <td className={`cell-gpt-verdict${gpt ? ` gpt-verdict-${gpt.verdict}` : ''}`}>
+                    {gpt ? gpt.verdict : ''}
+                  </td>
+                  <td className="cell-gpt-reasoning">
+                    {gpt?.reasoning || ''}
                   </td>
                 </tr>
               );
@@ -404,11 +427,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
         <div className="page-size-control">
           <span className="page-size-label">Per page:</span>
           {PAGE_SIZE_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              className={`page-size-btn${pageSize === opt ? ' active' : ''}`}
-              onClick={() => { setPageSize(opt); setCurrentPage(0); }}
-            >{opt}</button>
+            <button key={opt} className={`page-size-btn${pageSize === opt ? ' active' : ''}`} onClick={() => { setPageSize(opt); setCurrentPage(0); }}>{opt}</button>
           ))}
         </div>
         {totalPages > 1 && (

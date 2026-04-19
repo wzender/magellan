@@ -1,21 +1,22 @@
 /**
  * Ask-GPT API
- * Sends attributes + metadata to OpenAI and asks for a subtype classification opinion.
+ * Sends attributes + metadata to OpenAI; returns a yes/no verdict and reasoning.
  */
 
 const express = require('express');
 const router = express.Router();
 const fetch = require('node-fetch');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL   = process.env.OPENAI_MODEL   || 'gpt-4o-mini';
-const OPENAI_API_URL = process.env.OPENAI_API_URL  || 'https://api.openai.com/v1/chat/completions';
-const TIMEOUT_MS     = 20000;
+const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL      = process.env.OPENAI_MODEL      || 'gpt-4o-mini';
+const OPENAI_API_URL    = process.env.OPENAI_API_URL    || 'https://api.openai.com/v1/chat/completions';
+const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS, 10) || 200;
+const TIMEOUT_MS        = 20000;
 
 /**
  * POST /api/ask-gpt
  * Body: { attributes, metadata, suggested_subtype, suggested_type }
- * Returns: { answer: "short text" }
+ * Returns: { verdict: "yes"|"no", reasoning: "..." }
  */
 router.post('/ask-gpt', async (req, res) => {
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
@@ -27,13 +28,16 @@ router.post('/ask-gpt', async (req, res) => {
     return res.status(400).json({ error: 'attributes or metadata required' });
   }
 
-  const prompt = `Based ONLY on the attributes and metadata below, what classification subtype would you assign to this record? Reply in 10 words or less.
+  const prompt = `Based ONLY on the attributes and metadata below, is classifying this record as subtype "${suggested_subtype}" (type: "${suggested_type}") justified?
 
 Attributes:
 ${JSON.stringify(attributes, null, 2)}
 
 Metadata:
-${JSON.stringify(metadata, null, 2)}`;
+${JSON.stringify(metadata, null, 2)}
+
+Respond with a JSON object only — no markdown, no extra text:
+{"verdict": "yes" or "no", "reasoning": "1-2 sentence explanation"}`;
 
   try {
     const response = await fetch(OPENAI_API_URL, {
@@ -45,7 +49,7 @@ ${JSON.stringify(metadata, null, 2)}`;
       },
       body: JSON.stringify({
         model: OPENAI_MODEL,
-        max_tokens: 60,
+        max_tokens: OPENAI_MAX_TOKENS,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -56,9 +60,16 @@ ${JSON.stringify(metadata, null, 2)}`;
     }
 
     const data = await response.json();
-    const answer = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '').trim() || '(no answer)';
-    console.log(`[ask-gpt] model=${data.model} tokens=${data.usage && data.usage.total_tokens}`);
-    res.json({ answer });
+    const raw = (data.choices?.[0]?.message?.content || '').trim();
+    console.log(`[ask-gpt] model=${data.model} tokens=${data.usage?.total_tokens}`);
+
+    try {
+      const parsed = JSON.parse(raw);
+      res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw });
+    } catch {
+      const isYes = /\byes\b/i.test(raw);
+      res.json({ verdict: isYes ? 'yes' : 'no', reasoning: raw });
+    }
   } catch (err) {
     console.error('[ask-gpt] error:', err.message);
     res.status(500).json({ error: err.message });
