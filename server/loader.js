@@ -15,7 +15,7 @@ if (wantsPostgres && hasDbUrl) {
   if (wantsPostgres && !hasDbUrl) {
     console.log('⚠ DATA_SOURCE=postgres but DATABASE_URL is not set — falling back to CSV');
   } else if (!wantsPostgres && hasDbUrl) {
-    console.log('ℹ DATABASE_URL is set but DATA_SOURCE is not "postgres" — using CSV');
+    console.log(`ℹ DATABASE_URL is set but DATA_SOURCE="${process.env.DATA_SOURCE || ''}" is not "postgres" — using CSV`);
   }
   console.log('Data source: CSV');
   module.exports = require('./csv-loader');
