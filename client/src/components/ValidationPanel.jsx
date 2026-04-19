@@ -161,9 +161,11 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
   /* ── ask GPT (filtered records only) ── */
   const askGptAll = async (recordsToProcess) => {
     gptCancelledRef.current = false;
+    const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
+    if (pending.length === 0) return;
     setGptRunning(true);
-    setGptProgress({ done: 0, total: recordsToProcess.length });
-    for (const record of recordsToProcess) {
+    setGptProgress({ done: 0, total: pending.length });
+    for (const record of pending) {
       if (gptCancelledRef.current) break;
       let result;
       try {
