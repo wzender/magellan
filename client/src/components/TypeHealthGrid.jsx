@@ -830,59 +830,61 @@ function TypeHealthGrid({
         />
       )}
 
-      <div className="type-section-header">
-        <div className="type-section-title-block">
-          <span className="type-section-label">
-            {isCompare ? 'Type Comparison' : 'Type Accuracy'}
-          </span>
-          <span className="type-section-desc">
+      <div className="th-sticky-header">
+        <div className="type-section-header">
+          <div className="type-section-title-block">
+            <span className="type-section-label">
+              {isCompare ? 'Type Comparison' : 'Type Accuracy'}
+            </span>
+            <span className="type-section-desc">
+              {isCompare
+                ? 'Side-by-side breakdown per type — see where each run improved or regressed'
+                : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
+            </span>
+          </div>
+          <div className="type-grid-legend">
             {isCompare
-              ? 'Side-by-side breakdown per type — see where each run improved or regressed'
-              : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
-          </span>
+              ? LEGEND_COMPARE.map(l => (
+                  <button
+                    key={l.key}
+                    className={`legend-btn ${compareFilter === l.key ? 'legend-btn-active' : ''}`}
+                    onClick={() => onCompareFilter(l.key)}
+                  >
+                    <span className={`legend-swatch ${l.cls}`} />
+                    {l.label}
+                  </button>
+                ))
+              : LEGEND_SINGLE.map(l => (
+                  <button
+                    key={l.key}
+                    className={`legend-btn ${correctnessFilter && correctnessFilter.has(l.key) ? 'legend-btn-active' : ''}`}
+                    onClick={() => onCorrectnessFilter(l.key)}
+                  >
+                    <span className={`legend-swatch ${l.cls}`} />
+                    {l.label}
+                  </button>
+                ))
+            }
+          </div>
         </div>
-      <div className="type-grid-legend">
-        {isCompare
-          ? LEGEND_COMPARE.map(l => (
-              <button
-                key={l.key}
-                className={`legend-btn ${compareFilter === l.key ? 'legend-btn-active' : ''}`}
-                onClick={() => onCompareFilter(l.key)}
-              >
-                <span className={`legend-swatch ${l.cls}`} />
-                {l.label}
-              </button>
-            ))
-          : LEGEND_SINGLE.map(l => (
-              <button
-                key={l.key}
-                className={`legend-btn ${correctnessFilter && correctnessFilter.has(l.key) ? 'legend-btn-active' : ''}`}
-                onClick={() => onCorrectnessFilter(l.key)}
-              >
-                <span className={`legend-swatch ${l.cls}`} />
-                {l.label}
-              </button>
-            ))
-        }
-      </div>
-      </div>
 
-      <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
-        <span className="th-col-expand" />
-        <span className="th-col-label">True Type</span>
-        {isCompare ? (
-          <>
-            <span className="th-col-f1">F1</span>
-            <span className="th-col-changes">Changes</span>
-            <span className="th-col-count">#</span>
-          </>
-        ) : (
-          <>
-            <span className="th-col-f1">F1</span>
-            <span className="th-col-count">#</span>
-          </>
-        )}
-        <span className="th-col-bar">Breakdown</span>
+        <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
+          <span className="th-col-expand" />
+          <span className="th-col-label">True Type</span>
+          {isCompare ? (
+            <>
+              <span className="th-col-f1">F1</span>
+              <span className="th-col-changes">Changes</span>
+              <span className="th-col-count">#</span>
+            </>
+          ) : (
+            <>
+              <span className="th-col-f1">F1</span>
+              <span className="th-col-count">#</span>
+            </>
+          )}
+          <span className="th-col-bar">Breakdown</span>
+        </div>
       </div>
 
       <div className="th-list">

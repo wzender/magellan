@@ -43,7 +43,6 @@
 
   --header-h: 52px;
   --topbar-h: var(--header-h);
-  --type-section-header-h: 86px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -488,23 +487,24 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .type-health-section { flex: 1; padding: 1.25rem 1.5rem 2rem; }
 
+.th-sticky-header {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 30;
+  background: var(--bg);
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+}
+
 .type-section-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 0.5rem;
-  position: sticky;
-  top: var(--header-h);
-  z-index: 30;
-  background: var(--bg);
-  padding: 0.5rem 0 0.4rem;
+  margin-bottom: 0;
+  padding: 0.5rem 1.5rem 0.4rem;
   border-bottom: 1px solid var(--border);
-  margin-left: -1.5rem;
-  margin-right: -1.5rem;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
 }
 .type-section-title-block {
   display: flex;
@@ -616,17 +616,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   display: grid;
   grid-template-columns: 1.2rem 160px 56px 64px 1fr;
   gap: 0.75rem;
-  padding: 0.25rem 1rem 0.18rem;
   align-items: center;
-  position: sticky;
-  top: calc(var(--header-h) + var(--type-section-header-h, 82px));
-  z-index: 29;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
-  margin-left: -1.5rem;
-  margin-right: -1.5rem;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
+  padding: 0.25rem 1.5rem 0.18rem;
 }
 
 .th-col-header-cmp {
