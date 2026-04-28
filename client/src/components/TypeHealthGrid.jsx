@@ -666,7 +666,7 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
 /* ── TypeHealthRowCompare (compare mode — bar layout) ─────── */
 function TypeHealthRowCompare({ typeData, typeData2, compareData, maxTotal, isExpanded, isDimmed, compareFilter, onToggle, onViewRecords, runId, runId2, run1Name, run2Name }) {
   const { type } = typeData;
-  const [view, setView] = useState('changes');
+  const [view, setView] = useState('matrix');
   const f1 = typeData.f1 ?? typeData.accuracy;
   const delta = typeData2 ? (typeData2.f1 ?? typeData2.accuracy) - f1 : null;
   const sev = severityClass(f1, typeData.cross_type_rate);
