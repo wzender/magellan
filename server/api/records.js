@@ -25,6 +25,8 @@ router.get('/records', async (req, res) => {
       pred_subtype,
       run1_pred_subtype,
       run2_pred_subtype,
+      run1_pred_type,
+      run2_pred_type,
       run1_true_subtype,
       run2_true_subtype,
       limit = 100,
@@ -49,6 +51,8 @@ router.get('/records', async (req, res) => {
     if (pred_subtype) filters.pred_subtype = pred_subtype;
     if (run1_pred_subtype) filters.run1_pred_subtype = run1_pred_subtype;
     if (run2_pred_subtype) filters.run2_pred_subtype = run2_pred_subtype;
+    if (run1_pred_type) filters.run1_pred_type = run1_pred_type;
+    if (run2_pred_type) filters.run2_pred_type = run2_pred_type;
     if (run1_true_subtype) filters.run1_true_subtype = run1_true_subtype;
     if (run2_true_subtype) filters.run2_true_subtype = run2_true_subtype;
     if (compare_filter) filters.compareFilter = compare_filter;

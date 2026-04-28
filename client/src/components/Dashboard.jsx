@@ -296,7 +296,7 @@ function Dashboard() {
 
   /* ── record fetch ── */
   // run1PredSubtype / run2PredSubtype are for compare-mode transition matrix cell filtering
-  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null, cmpFilter = null, run1PredSubtype = null, run2PredSubtype = null) => {
+  const fetchRecords = useCallback(async (runId1, trueType, trueSubtype, limit = 50, filter = null, runId2 = null, predSubtype = null, cmpFilter = null, run1PredSubtype = null, run2PredSubtype = null, run1PredType = null, run2PredType = null) => {
     // filter can be a Set or a string
     const filterStr = filter instanceof Set ? [...filter].join(',') : filter;
     let url = runId2
@@ -306,6 +306,8 @@ function Dashboard() {
     if (trueSubtype)      url += `&true_subtype=${encodeURIComponent(trueSubtype)}`;
     if (run1PredSubtype)  url += `&run1_pred_subtype=${encodeURIComponent(run1PredSubtype)}`;
     if (run2PredSubtype)  url += `&run2_pred_subtype=${encodeURIComponent(run2PredSubtype)}`;
+    if (run1PredType)     url += `&run1_pred_type=${encodeURIComponent(run1PredType)}`;
+    if (run2PredType)     url += `&run2_pred_type=${encodeURIComponent(run2PredType)}`;
     if (!runId2 && predSubtype) {
       // '__cross_type__' is a sentinel meaning filter=cross_type
       const resolvedFilter = predSubtype === '__cross_type__' ? 'cross_type' : filterStr;
@@ -319,11 +321,12 @@ function Dashboard() {
     return res.json();
   }, []);
 
-  const handleViewRecords = useCallback(async (trueType, trueSubtype, predSubtype = null, run1PredSubtype = null, run2PredSubtype = null) => {
+  const handleViewRecords = useCallback(async (trueType, trueSubtype, predSubtype = null, run1PredSubtype = null, run2PredSubtype = null, run1PredType = null, run2PredType = null) => {
     const runId1 = selectedRunIds[0];
     const runId2 = selectedRunIds[1] ?? null;
     const isCompare = !!runId2;
-    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype, run1PredSubtype, run2PredSubtype });
+    const isTypeLookup = !!(run1PredType || run2PredType);
+    setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype, run1PredSubtype, run2PredSubtype, run1PredType, run2PredType });
     setRecordsLoading(true);
     setRecordsData(null);
     try {
@@ -331,9 +334,11 @@ function Dashboard() {
         runId1, trueType, trueSubtype, 50,
         isCompare ? null : (correctnessFilter.size > 0 ? correctnessFilter : null),
         runId2, isCompare ? null : predSubtype,
-        isCompare ? compareFilter : null,
+        (isCompare && !isTypeLookup) ? compareFilter : null,
         isCompare ? run1PredSubtype : null,
         isCompare ? run2PredSubtype : null,
+        isCompare ? run1PredType : null,
+        isCompare ? run2PredType : null,
       );
       setRecordsData(data);
     } finally {
@@ -347,14 +352,17 @@ function Dashboard() {
   const handleExportRecords = useCallback(async () => {
     if (!recordQuery) return { data: [], pagination: { total: 0 } };
     const isCompare = !!recordQuery.runId2;
+    const isTypeLookup = !!(recordQuery.run1PredType || recordQuery.run2PredType);
     return fetchRecords(
       recordQuery.runId, recordQuery.trueType, recordQuery.trueSubtype, 999999,
       isCompare ? null : (correctnessFilter.size > 0 ? correctnessFilter : null),
       recordQuery.runId2 ?? null,
       isCompare ? null : (recordQuery.predSubtype ?? null),
-      isCompare ? compareFilter : null,
+      (isCompare && !isTypeLookup) ? compareFilter : null,
       isCompare ? (recordQuery.run1PredSubtype ?? null) : null,
       isCompare ? (recordQuery.run2PredSubtype ?? null) : null,
+      isCompare ? (recordQuery.run1PredType ?? null) : null,
+      isCompare ? (recordQuery.run2PredType ?? null) : null,
     );
   }, [recordQuery, fetchRecords, correctnessFilter, compareFilter]);
 
@@ -374,9 +382,10 @@ function Dashboard() {
     refetch();
   }, [correctnessFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* re-fetch when compare filter changes while in compare mode */
+  /* re-fetch when compare filter changes while in compare mode (skip type-level cell queries) */
   useEffect(() => {
     if (!recordQuery || !recordQuery.runId2) return;
+    if (recordQuery.run1PredType || recordQuery.run2PredType) return;
     const refetch = async () => {
       setRecordsLoading(true);
       setRecordsData(null);
@@ -416,7 +425,13 @@ function Dashboard() {
 
   const recordsTitle = recordQuery
     ? (() => {
-        // Compare mode with transition matrix preds
+        // Type transition matrix cell click
+        if (recordQuery.run1PredType || recordQuery.run2PredType) {
+          const r1 = recordQuery.run1PredType || '…';
+          const r2 = recordQuery.run2PredType || '…';
+          return `${run1Name || 'Run 1'}: ${r1} → ${run2Name || 'Run 2'}: ${r2} (type)`;
+        }
+        // Compare mode with subtype transition matrix preds
         if (recordQuery.run1PredSubtype || recordQuery.run2PredSubtype) {
           const typeLabel = recordQuery.trueType ? `${recordQuery.trueType} › ` : '';
           const r1 = recordQuery.run1PredSubtype || '…';

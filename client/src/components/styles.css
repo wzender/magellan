@@ -487,6 +487,20 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .type-health-section { flex: 1; padding: 1.25rem 1.5rem 2rem; }
 
+.type-transition-toggle {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.type-transition-matrix-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
 .th-sticky-header {
   position: sticky;
   top: var(--header-h);

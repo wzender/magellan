@@ -148,6 +148,89 @@ function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewReco
   );
 }
 
+/* ── TypeTransitionMatrix ────────────────────────────────── */
+function TypeTransitionMatrix({ runId1, runId2, run1Name, run2Name, onCellClick }) {
+  const [matrixData, setMatrixData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/type-transition?run_id1=${runId1}&run_id2=${runId2}`)
+      .then(r => r.json())
+      .then(d => { setMatrixData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [runId1, runId2]);
+
+  if (loading) return <div className="matrix-loading">Loading type transition…</div>;
+  if (!matrixData || !matrixData.rows || matrixData.rows.length === 0) return <div className="matrix-empty">No data</div>;
+
+  const { rows, cols, data } = matrixData;
+  const maxTotal = Math.max(1, ...rows.flatMap(r => cols.map(c => data[r]?.[c]?.total || 0)));
+
+  const getCellStyle = (cell, row, col) => {
+    const total = cell?.total || 0;
+    if (total === 0) return {};
+    const alpha = Math.min(0.1 + (total / maxTotal) * 0.5, 0.65);
+    if (row === col) return { backgroundColor: `rgba(34,197,94,${alpha})` };
+    const { run1Correct = 0, run2Correct = 0 } = cell;
+    if (run2Correct > run1Correct) return { backgroundColor: `rgba(6,182,212,${alpha})` };
+    if (run1Correct > run2Correct) return { backgroundColor: `rgba(249,115,22,${alpha})` };
+    return { backgroundColor: `rgba(148,163,184,${alpha})` };
+  };
+
+  return (
+    <div className="type-transition-matrix-wrap">
+      <div className="subtype-confusion-toolbar">
+        <span className="scm-legend">
+          <span className="scm-legend-swatch" style={{ background: 'rgba(34,197,94,0.55)' }} /> same type
+          <span className="scm-legend-swatch stm-swatch-r2win" /> {run2Name || 'Run 2'} better
+          <span className="scm-legend-swatch stm-swatch-r1win" /> {run1Name || 'Run 1'} better
+          <span className="scm-legend-swatch" style={{ background: 'rgba(148,163,184,0.55)' }} /> both wrong
+        </span>
+      </div>
+      <div className="subtype-confusion-scroll">
+        <table className="subtype-confusion-table">
+          <thead>
+            <tr>
+              <th className="scm-corner stm-corner">
+                <span className="stm-run1-label">{run1Name || 'Run 1'} ↓</span>
+                <span className="stm-run2-label">{run2Name || 'Run 2'} →</span>
+              </th>
+              {cols.map(col => (
+                <th key={col} className="scm-col-head" title={col}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row}>
+                <td className="scm-row-head">
+                  <span className="scm-row-label" style={{ cursor: 'default' }}>{row}</span>
+                </td>
+                {cols.map(col => {
+                  const cell = data[row]?.[col];
+                  const total = cell?.total || 0;
+                  return (
+                    <td
+                      key={col}
+                      className={`scm-cell ${total > 0 ? 'scm-cell-clickable' : ''} ${row === col ? 'scm-diag' : total > 0 ? 'scm-err' : ''}`}
+                      style={total > 0 ? getCellStyle(cell, row, col) : {}}
+                      title={total > 0 ? `${run1Name || 'Run 1'}: ${row} → ${run2Name || 'Run 2'}: ${col}: ${total} records` : ''}
+                      onClick={total > 0 ? () => onCellClick(row, col) : undefined}
+                    >
+                      {total || ''}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ── SubtypeTransitionMatrix ─────────────────────────────── */
 function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1Name, run2Name, onViewRecords }) {
   const [matrix, setMatrix] = useState(null);
@@ -745,7 +828,12 @@ function TypeHealthGrid({
   compareFilter, onCompareFilter,
 }) {
   const [expandedType, setExpandedType] = useState(null);
+  const [transitionView, setTransitionView] = useState('type-transition');
   const isCompare = !!runId2;
+
+  useEffect(() => {
+    if (isCompare) setTransitionView('type-transition');
+  }, [isCompare, runId2]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typeMap2 = {};
   if (typeHealth2) {
@@ -830,6 +918,33 @@ function TypeHealthGrid({
         />
       )}
 
+      {isCompare && (
+        <div className="type-transition-toggle">
+          <div className="view-toggle">
+            <button
+              className={`view-toggle-btn ${transitionView === 'type-transition' ? 'active' : ''}`}
+              onClick={() => setTransitionView('type-transition')}
+            >Type Transition</button>
+            <button
+              className={`view-toggle-btn ${transitionView === 'breakdown' ? 'active' : ''}`}
+              onClick={() => setTransitionView('breakdown')}
+            >Breakdown</button>
+          </div>
+        </div>
+      )}
+
+      {isCompare && transitionView === 'type-transition' && (
+        <TypeTransitionMatrix
+          runId1={runId}
+          runId2={runId2}
+          run1Name={run1Name}
+          run2Name={run2Name}
+          onCellClick={(r1Type, r2Type) => onViewRecords(null, null, null, null, null, r1Type, r2Type)}
+        />
+      )}
+
+      {(!isCompare || transitionView === 'breakdown') && (
+      <>
       <div className="th-sticky-header">
         <div className="type-section-header">
           <div className="type-section-title-block">
@@ -927,6 +1042,8 @@ function TypeHealthGrid({
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 }

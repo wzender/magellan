@@ -263,6 +263,41 @@ function getTransitionMatrix(runId1, runId2, minCount = 1) {
   return { rows: subtypeArray, cols: subtypeArray, data: filteredData };
 }
 
+function getTypeTransitionMatrix(runId1, runId2) {
+  const data = loadData();
+  const run1Map = {};
+  data.run_results.filter(r => r.run_id === runId1).forEach(r => {
+    run1Map[r.request_id] = { pred_type: r.pred_type, true_type: r.true_type };
+  });
+
+  const matrixData = {};
+  const predTypes = new Set();
+
+  data.run_results.filter(r => r.run_id === runId2).forEach(r => {
+    const r1 = run1Map[r.request_id];
+    if (!r1) return;
+    const run1Pred = r1.pred_type;
+    const run2Pred = r.pred_type;
+    const trueType = r1.true_type;
+    predTypes.add(run1Pred);
+    predTypes.add(run2Pred);
+    if (!matrixData[run1Pred]) matrixData[run1Pred] = {};
+    if (!matrixData[run1Pred][run2Pred]) {
+      matrixData[run1Pred][run2Pred] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
+    const cell = matrixData[run1Pred][run2Pred];
+    cell.total++;
+    const r1c = run1Pred === trueType;
+    const r2c = run2Pred === trueType;
+    if      (r1c && !r2c) cell.run1Correct++;
+    else if (!r1c && r2c) cell.run2Correct++;
+    else if (!r1c && !r2c) cell.bothWrong++;
+  });
+
+  const typeArray = Array.from(predTypes).sort();
+  return { rows: typeArray, cols: typeArray, data: matrixData };
+}
+
 function getRecords(filters = {}) {
   const data = loadData();
 
@@ -280,11 +315,17 @@ function getRecords(filters = {}) {
         if (!r2) return null;
         return { ...r1, run2_pred_type: r2.pred_type, run2_pred_subtype: r2.pred_subtype };
       })
-      .filter(Boolean)
-      .filter(r => r.pred_subtype !== r.run2_pred_subtype);
+      .filter(Boolean);
+
+    // only filter to changed subtypes when not doing a type-level cell lookup
+    if (!filters.run1_pred_type && !filters.run2_pred_type) {
+      combined = combined.filter(r => r.pred_subtype !== r.run2_pred_subtype);
+    }
 
     if (filters.run1_pred_subtype)  combined = combined.filter(r => r.pred_subtype       === filters.run1_pred_subtype);
     if (filters.run2_pred_subtype)  combined = combined.filter(r => r.run2_pred_subtype   === filters.run2_pred_subtype);
+    if (filters.run1_pred_type)     combined = combined.filter(r => r.pred_type           === filters.run1_pred_type);
+    if (filters.run2_pred_type)     combined = combined.filter(r => r.run2_pred_type      === filters.run2_pred_type);
     if (filters.true_type)          combined = combined.filter(r => r.true_type           === filters.true_type);
     if (filters.pred_type)          combined = combined.filter(r => r.pred_type           === filters.pred_type);
 
@@ -629,6 +670,7 @@ module.exports = {
   getConfusionMatrix,
   getSubtypeMatrixForTypePair,
   getTransitionMatrix,
+  getTypeTransitionMatrix,
   getRecords,
   updateTranslation,
   updateMetadataTranslation,
