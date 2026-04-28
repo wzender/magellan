@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const VALIDATION_FILE = path.join(__dirname, '../../data/validation.json');
-const VALID_VERDICTS = ['justified', 'unjustified', 'unclear', ''];
+const VALID_VERDICTS = null; // accepts any string — used for both verdicts and retag subtypes
 
 function load() {
   if (!fs.existsSync(VALIDATION_FILE)) return {};
@@ -59,14 +59,7 @@ router.put('/validation', (req, res) => {
     return res.status(400).json({ error: 'verdicts object is required' });
   }
 
-  // Validate all verdict values
-  for (const [, verdict] of Object.entries(verdicts)) {
-    if (!VALID_VERDICTS.includes(verdict)) {
-      return res.status(400).json({ error: `Invalid verdict: ${verdict}. Must be one of: ${VALID_VERDICTS.join(', ')}` });
-    }
-  }
-
-  const data = load();
+const data = load();
   if (!data[run_id]) data[run_id] = {};
   Object.assign(data[run_id], verdicts);
 

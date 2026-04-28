@@ -1,6 +1,92 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
 
+/* ── SubtypeCombobox ──────────────────────────────────────────────────────── */
+// options: [{ subtype, type }] — only subtype names are shown / filtered
+function SubtypeCombobox({ value, options, onChange }) {
+  const [query, setQuery]     = useState('');
+  const [open, setOpen]       = useState(false);
+  const [focused, setFocused] = useState(0);
+  const wrapperRef = useRef(null);
+  const inputRef   = useRef(null);
+  const listRef    = useRef(null);
+
+  const subtypes = Array.from(new Set(options.map(o => String(o.subtype || '').trim())));
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? subtypes.filter(s => s.toLowerCase().includes(normalizedQuery))
+    : subtypes;
+
+  // Close on click outside — no blur/focus involved so typing can't accidentally close
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e) => {
+      if (!wrapperRef.current?.contains(e.target)) { setOpen(false); setQuery(''); }
+    };
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [open]);
+
+  // Focus the input whenever the dropdown opens
+  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+
+  const commit = (subtype) => { onChange(subtype); setQuery(''); setOpen(false); };
+
+  const toggle = () => setOpen(o => { if (o) setQuery(''); return !o; });
+
+  const handleKey = (e) => {
+    if (!open) return;
+    if      (e.key === 'ArrowDown') { e.preventDefault(); setFocused(f => Math.min(f + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); setFocused(f => Math.max(f - 1, 0)); }
+    else if (e.key === 'Enter')     { e.preventDefault(); if (filtered[focused]) commit(filtered[focused]); }
+    else if (e.key === 'Escape')    { setOpen(false); setQuery(''); }
+  };
+
+  useEffect(() => { setFocused(0); }, [query]);
+
+  useEffect(() => {
+    listRef.current?.querySelectorAll('.subtype-combobox-option')[focused]
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [focused]);
+
+  return (
+    <div className="subtype-combobox" ref={wrapperRef}>
+      <div className={`subtype-combobox-input-wrap${open ? ' open' : ''}`} onClick={toggle}>
+        <input
+          ref={inputRef}
+          className="subtype-combobox-search"
+          placeholder={value || '— select subtype —'}
+          value={open ? query : ''}
+          readOnly={!open}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={handleKey}
+          onClick={e => e.stopPropagation()}
+        />
+        <span className="subtype-combobox-arrow">{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <ul ref={listRef} className="subtype-combobox-list">
+          {value && (
+            <li className="subtype-combobox-clear" onMouseDown={e => { e.preventDefault(); commit(''); }}>
+              ✕ Clear
+            </li>
+          )}
+          {filtered.map((s, i) => (
+            <li
+              key={s}
+              className={`subtype-combobox-option${i === focused ? ' focused' : ''}${s === value ? ' selected' : ''}`}
+              onMouseDown={e => { e.preventDefault(); commit(s); }}
+              onMouseEnter={() => setFocused(i)}
+            >
+              {s}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const VERDICTS = [
   { value: 'justified', label: 'Justified', className: 'verdict-justified' },
   { value: 'unjustified', label: 'Not Justified', className: 'verdict-unjustified' },
@@ -9,7 +95,8 @@ const VERDICTS = [
 
 const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_verdict: '', gpt_reasoning: '' };
 
-function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBulkVerdict }) {
+function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, onSetVerdict, onBulkVerdict }) {
+  const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -112,6 +199,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
   const justifiedCount   = records.filter(r => verdicts[r.request_id] === 'justified').length;
   const unjustifiedCount = records.filter(r => verdicts[r.request_id] === 'unjustified').length;
   const unclearCount     = records.filter(r => verdicts[r.request_id] === 'unclear').length;
+  const retaggedCount    = reviewed; // in retag mode, any selection counts as reviewed
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
@@ -267,13 +355,24 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
       <div className="validation-toolbar" ref={toolbarRef}>
         {/* Progress stats */}
         <div className="validation-stats">
-          <span className="validation-progress">{reviewed}/{total} reviewed</span>
-          <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
-          <span className="validation-stat verdict-unjustified-bg">{unjustifiedCount} not justified</span>
-          <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
+          {isRetag ? (
+            <>
+              <span className="validation-progress">{retaggedCount}/{total} retagged</span>
+              <span className="validation-stat" style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                {total - retaggedCount} pending
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="validation-progress">{reviewed}/{total} reviewed</span>
+              <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
+              <span className="validation-stat verdict-unjustified-bg">{unjustifiedCount} not justified</span>
+              <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
+            </>
+          )}
         </div>
 
-        {/* Verdict filter */}
+        {/* Filter */}
         <div className="validation-filters">
           <select
             className="validation-verdict-filter"
@@ -281,15 +380,15 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
             onChange={e => setVerdictFilter(e.target.value)}
           >
             <option value="all">All</option>
-            <option value="unreviewed">Unreviewed</option>
-            <option value="justified">Justified</option>
-            <option value="unjustified">Not Justified</option>
-            <option value="unclear">Unclear</option>
+            <option value="unreviewed">{isRetag ? 'Not retagged' : 'Unreviewed'}</option>
+            {!isRetag && <option value="justified">Justified</option>}
+            {!isRetag && <option value="unjustified">Not Justified</option>}
+            {!isRetag && <option value="unclear">Unclear</option>}
           </select>
         </div>
 
-        {/* Bulk actions */}
-        {selectedIds.size > 0 && (
+        {/* Bulk actions — only for verdict mode */}
+        {!isRetag && selectedIds.size > 0 && (
           <div className="validation-bulk">
             <span className="validation-bulk-count">{selectedIds.size} selected</span>
             {VERDICTS.map(v => (
@@ -332,9 +431,11 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
           <thead>
             {/* Column headers */}
             <tr>
-              <th style={{ width: 40 }}>
-                <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
-              </th>
+              {!isRetag && (
+                <th style={{ width: 40 }}>
+                  <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
+                </th>
+              )}
               <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
                 Request ID{sortIndicator('request_id')}
               </th>
@@ -359,9 +460,15 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
                   </div>
                 </div>
               </th>
-              <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                Verdict{sortIndicator('verdict')}
-              </th>
+              {isRetag ? (
+                <th style={{ width: 200, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
+                  Retag{sortIndicator('verdict')}
+                </th>
+              ) : (
+                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
+                  Verdict{sortIndicator('verdict')}
+                </th>
+              )}
               <th style={{ width: 80, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
                 GPT Verdict{sortIndicator('gpt_verdict')}
               </th>
@@ -371,7 +478,7 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
             </tr>
             {/* Column filters */}
             <tr className="col-filter-row">
-              <th />
+              {!isRetag && <th />}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
@@ -387,30 +494,43 @@ function ValidationPanel({ runId, runName, records, verdicts, onSetVerdict, onBu
               const gpt = gptResults[r.request_id];
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
+              const effectiveSubtypeOptions = countrySubtypes;
 
               return (
-                <tr key={r.request_id} className={verdict ? `validation-row-${verdict}` : ''}>
-                  <td>
-                    <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
-                  </td>
+                <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
+                  {!isRetag && (
+                    <td>
+                      <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
+                    </td>
+                  )}
                   <td className="cell-request-id">{r.request_id}</td>
                   <td><strong>{r.pred_subtype}</strong></td>
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
-                  <td className="cell-verdict">
-                    <div className="verdict-buttons">
-                      {VERDICTS.map(v => (
-                        <button
-                          key={v.value}
-                          className={`verdict-btn ${v.className}${verdict === v.value ? ' active' : ''}`}
-                          onClick={() => onSetVerdict(r.request_id, verdict === v.value ? '' : v.value)}
-                          title={v.label}
-                        >
-                          {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
+                  {isRetag ? (
+                    <td className="cell-verdict cell-retag">
+                      <SubtypeCombobox
+                        value={verdict}
+                        options={effectiveSubtypeOptions}
+                        onChange={val => onSetVerdict(r.request_id, val)}
+                      />
+                    </td>
+                  ) : (
+                    <td className="cell-verdict">
+                      <div className="verdict-buttons">
+                        {VERDICTS.map(v => (
+                          <button
+                            key={v.value}
+                            className={`verdict-btn ${v.className}${verdict === v.value ? ' active' : ''}`}
+                            onClick={() => onSetVerdict(r.request_id, verdict === v.value ? '' : v.value)}
+                            title={v.label}
+                          >
+                            {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  )}
                   <td className={`cell-gpt-verdict${gpt ? ` gpt-verdict-${gpt.verdict}` : ''}`}>
                     {gpt ? gpt.verdict : ''}
                   </td>

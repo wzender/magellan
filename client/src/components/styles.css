@@ -2584,3 +2584,100 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   white-space: normal;
   word-break: break-word;
 }
+
+/* ── SubtypeCombobox ─────────────────────────────────────────────────────── */
+.cell-retag { min-width: 200px; }
+
+.subtype-combobox {
+  position: relative;
+  font-size: 0.82rem;
+}
+
+.subtype-combobox-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  background: #fff;
+  min-height: 30px;
+  transition: border-color 0.15s;
+}
+.subtype-combobox-input-wrap:hover,
+.subtype-combobox-input-wrap.open { border-color: var(--accent); }
+
+.subtype-combobox-search {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 0.82rem;
+  background: transparent;
+  min-width: 0;
+}
+
+.subtype-combobox-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.subtype-combobox-value.placeholder { color: var(--text-muted); }
+
+.subtype-combobox-arrow {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.subtype-combobox-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 999;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.subtype-combobox-clear {
+  padding: 5px 10px;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 0.78rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.subtype-combobox-clear:hover { background: #fef2f2; }
+
+.subtype-combobox-empty {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.subtype-combobox-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.subtype-combobox-option.focused  { background: #eff6ff; }
+.subtype-combobox-option.selected { background: #dbeafe; font-weight: 600; }
+.subtype-combobox-option:hover    { background: #f0f9ff; }
+
+.subtype-combobox-subtype { color: var(--text); }
+.subtype-combobox-type {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}

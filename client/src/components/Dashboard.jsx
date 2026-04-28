@@ -99,8 +99,15 @@ function Dashboard() {
   const [validationRecords, setValidationRecords] = useState([]);
   const [validationVerdicts, setValidationVerdicts] = useState({});
   const [validationLoading, setValidationLoading] = useState(false);
+  const [countrySubtypes, setCountrySubtypes] = useState([]);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
+
+  /* derive country name from run_name (spain → Spain) */
+  const _unknownsRun = leaderboard.find(r => r.run_id === selectedRunIds[0]);
+  const unknownsCountry = isUnknownsBenchmark && _unknownsRun
+    ? _unknownsRun.run_name.charAt(0).toUpperCase() + _unknownsRun.run_name.slice(1)
+    : null;
 
   /* ── initial load: benchmarks + all leaderboards ── */
   useEffect(() => {
@@ -161,6 +168,15 @@ function Dashboard() {
     };
     load();
   }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Unknowns: fetch country-specific subtypes when run changes ── */
+  useEffect(() => {
+    if (!unknownsCountry) return;
+    fetch(`/api/subtypes-by-country?country=${encodeURIComponent(unknownsCountry)}`)
+      .then(r => r.json())
+      .then(data => setCountrySubtypes(Array.isArray(data) ? data : []))
+      .catch(() => setCountrySubtypes([]));
+  }, [unknownsCountry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Unknowns: load validation records + verdicts when run changes ── */
   useEffect(() => {
@@ -460,12 +476,16 @@ function Dashboard() {
 
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (
             <div className="validation-section">
-              <h3 className="validation-section-title">Prediction Validation — {run1Name}</h3>
+              <h3 className="validation-section-title">
+                {unknownsCountry ?? run1Name} — Prediction Validation
+              </h3>
               {validationLoading && <div className="viewer-loading">Loading records…</div>}
               {!validationLoading && (
                 <ValidationPanel
                   runId={selectedRunIds[0]}
                   runName={run1Name}
+                  country={unknownsCountry}
+                  countrySubtypes={countrySubtypes}
                   records={validationRecords}
                   verdicts={validationVerdicts}
                   onSetVerdict={handleSetVerdict}
