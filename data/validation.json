@@ -11,6 +11,7 @@
     "UNK-B001": "Alert"
   },
   "12": {
-    "UNK-C001": "Attribution"
+    "UNK-C001": "Vulnerability",
+    "UNK-C004": "Ticket"
   }
 }
