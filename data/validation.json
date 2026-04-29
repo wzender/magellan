@@ -3,10 +3,14 @@
     "UNK-A005": "Bank Transfer",
     "UNK-A004": "Bank Transfer",
     "UNK-A002": "Admin",
-    "UNK-A001": "Bug Report",
+    "UNK-A001": "Guide",
     "UNK-A003": "Bank Transfer"
   },
   "11": {
-    "UNK-B002": "Blog"
+    "UNK-B002": "Contract",
+    "UNK-B001": "Alert"
+  },
+  "12": {
+    "UNK-C001": "Attribution"
   }
 }

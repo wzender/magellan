@@ -7,6 +7,7 @@ import RowLevelTable from './RowLevelTable';
 import ValidationPanel from './ValidationPanel';
 
 const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
+const NOT_RETAGGED_LABEL = 'Not retagged';
 const EMPTY_UNKNOWNS_GRID_FILTER = { trueType: null, trueSubtype: null, predSubtype: null };
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -18,9 +19,11 @@ function computeUnknownsTypeHealth(records, verdicts, countrySubtypes) {
   const typeMap = {};
 
   records.forEach(r => {
-    const trueSubtype = verdicts[r.request_id];
-    if (!trueSubtype) return;
-    const trueType   = subtypeToType[trueSubtype] || 'Unknown';
+    const rawSubtype = verdicts[r.request_id];
+    const trueSubtype = rawSubtype === undefined || rawSubtype === null ? '' : rawSubtype;
+    const trueType = trueSubtype === ''
+      ? NOT_RETAGGED_LABEL
+      : (subtypeToType[trueSubtype] || 'Unknown');
     const predType   = r.pred_type;
     const predSubtype = r.pred_subtype;
 
@@ -301,9 +304,9 @@ function Dashboard() {
   /* ── Unknowns: drill-down from TypeHealthGrid using client-side filtered data ── */
   const handleViewRecordsForUnknowns = useCallback((trueType, trueSubtype, predSubtype) => {
     setUnknownsGridFilter({
-      trueType: trueType || null,
-      trueSubtype: trueSubtype || null,
-      predSubtype: predSubtype || null,
+      trueType: trueType ?? null,
+      trueSubtype: trueSubtype === undefined ? null : trueSubtype,
+      predSubtype: predSubtype ?? null,
     });
   }, []);
 

@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 /* ── helpers ─────────────────────────────────────────────── */
 function pct(n) { return (n * 100).toFixed(0) + '%'; }
 function pctNum(n) { return (n * 100).toFixed(1); }
+function subtypeLabel(name) {
+  return String(name || '').trim() === '' ? 'Not retagged' : name;
+}
 
 function severityClass(f1, crossTypeRate) {
   if (crossTypeRate > 0.3) return 'severity-critical';
@@ -21,6 +24,7 @@ function DeltaBadge({ delta }) {
 
 /* ── SubtypeBadge ────────────────────────────────────────── */
 function SubtypeBadge({ st, delta, isActive, isDimmed, onViewRecords }) {
+  const subtypeName = subtypeLabel(st.subtype);
   const correctPct  = (st.correct / st.total) * 100;
   const crossPct    = (st.cross_type / st.total) * 100;
   const samePct     = Math.max(0, 100 - correctPct - crossPct);
@@ -29,10 +33,10 @@ function SubtypeBadge({ st, delta, isActive, isDimmed, onViewRecords }) {
     <button
       className={`subtype-badge ${isActive ? 'subtype-badge-active' : ''} ${isDimmed ? 'subtype-badge-dimmed' : ''}`}
       onClick={() => onViewRecords(st.subtype)}
-      title={`${st.subtype} · ${st.total} records · F1: ${pctNum(st.f1)}%`}
+      title={`${subtypeName} · ${st.total} records · F1: ${pctNum(st.f1)}%`}
     >
       <div className="sbadge-top">
-        <span className="sbadge-name">{st.subtype}</span>
+        <span className="sbadge-name">{subtypeName}</span>
         <span className="sbadge-acc">{pctNum(st.f1)}%</span>
         {delta !== undefined && <DeltaBadge delta={delta} />}
       </div>
@@ -115,9 +119,9 @@ function StaticSubtypeConfusionMatrix({ typeData, onViewRecords }) {
                 <th
                   key={c.subtype}
                   className={`scm-col-head ${c.isCrossType ? 'scm-col-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
-                  title={c.isCrossType ? `${c.subtype} (${c.pred_type})` : c.subtype}
+                  title={c.isCrossType ? `${subtypeLabel(c.subtype)} (${c.pred_type})` : subtypeLabel(c.subtype)}
                 >
-                  {c.subtype}
+                  {subtypeLabel(c.subtype)}
                 </th>
               ))}
             </tr>
@@ -125,9 +129,9 @@ function StaticSubtypeConfusionMatrix({ typeData, onViewRecords }) {
           <tbody>
             {rows.map(row => (
               <tr key={row.true_subtype}>
-                <td className="scm-row-head" title={row.true_subtype}>
+                <td className="scm-row-head" title={subtypeLabel(row.true_subtype)}>
                   <button className="scm-row-label" onClick={() => onViewRecords(row.true_subtype, null, null, null)}>
-                    {row.true_subtype}
+                    {subtypeLabel(row.true_subtype)}
                   </button>
                 </td>
                 {columns.map((col, i) => {
@@ -147,7 +151,7 @@ function StaticSubtypeConfusionMatrix({ typeData, onViewRecords }) {
                       key={col.subtype}
                       className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err' : ''} ${count > 0 ? 'scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
                       style={count > 0 ? { background: bgColor } : {}}
-                      title={count > 0 ? `${row.true_subtype} → ${col.subtype}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count}` : ''}
+                      title={count > 0 ? `${subtypeLabel(row.true_subtype)} → ${subtypeLabel(col.subtype)}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count}` : ''}
                       onClick={count > 0 ? () => onViewRecords(row.true_subtype, isDiag ? null : col.subtype, null, null) : undefined}
                     >
                       {display}
@@ -211,9 +215,9 @@ function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewReco
                 <th
                   key={c.subtype}
                   className={`scm-col-head ${c.isCrossType ? 'scm-col-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
-                  title={c.isCrossType ? `${c.subtype} (${c.pred_type})` : c.subtype}
+                  title={c.isCrossType ? `${subtypeLabel(c.subtype)} (${c.pred_type})` : subtypeLabel(c.subtype)}
                 >
-                  {c.subtype}
+                  {subtypeLabel(c.subtype)}
                 </th>
               ))}
             </tr>
@@ -221,9 +225,9 @@ function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewReco
           <tbody>
             {rows.map(row => (
               <tr key={row.true_subtype}>
-                <td className="scm-row-head" title={row.true_subtype}>
+                <td className="scm-row-head" title={subtypeLabel(row.true_subtype)}>
                   <button className="scm-row-label" onClick={() => onViewRecords(row.true_subtype, null, null, null)}>
-                    {row.true_subtype}
+                    {subtypeLabel(row.true_subtype)}
                   </button>
                 </td>
                 {columns.map((col, i) => {
@@ -243,7 +247,7 @@ function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewReco
                       key={col.subtype}
                       className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err' : ''} ${count > 0 ? 'scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
                       style={count > 0 ? { background: bgColor } : {}}
-                      title={count > 0 ? `${row.true_subtype} → ${col.subtype}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count} — click to view` : ''}
+                      title={count > 0 ? `${subtypeLabel(row.true_subtype)} → ${subtypeLabel(col.subtype)}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count} — click to view` : ''}
                       onClick={count > 0 ? () => onViewRecords(row.true_subtype, isDiag ? null : col.subtype, null, null) : undefined}
                     >
                       {display}
@@ -430,8 +434,8 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                   <span className="stm-run2-label">{run2Name || 'Run 2'} →</span>
                 </th>
                 {columns.filter(c => rows.some(row => offDiagTotal(row, c.subtype) >= minCount)).map(c => (
-                  <th key={c.subtype} className="scm-col-head stm-col-head" title={c.subtype}>
-                    {c.subtype}
+                  <th key={c.subtype} className="scm-col-head stm-col-head" title={subtypeLabel(c.subtype)}>
+                    {subtypeLabel(c.subtype)}
                   </th>
                 ))}
               </tr>
@@ -442,9 +446,9 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                 if (!rowHasVisible) return null;
                 return (
                   <tr key={row.run1_pred}>
-                    <td className="scm-row-head" title={row.run1_pred}>
+                    <td className="scm-row-head" title={subtypeLabel(row.run1_pred)}>
                       <button className="scm-row-label" onClick={() => onViewRecords(row.run1_pred, null)}>
-                        {row.run1_pred}
+                        {subtypeLabel(row.run1_pred)}
                       </button>
                     </td>
                     {columns.filter(c => rows.some(r => offDiagTotal(r, c.subtype) >= minCount)).map(col => {
@@ -471,7 +475,7 @@ function SubtypeTransitionMatrix({ runId1, runId2, trueType, compareFilter, run1
                       }
 
                       // Build tooltip with correctness breakdown
-                      let tooltip = `${run1Name || 'Run 1'}: ${row.run1_pred} → ${run2Name || 'Run 2'}: ${col.subtype}: ${count}`;
+                      let tooltip = `${run1Name || 'Run 1'}: ${subtypeLabel(row.run1_pred)} → ${run2Name || 'Run 2'}: ${subtypeLabel(col.subtype)}: ${count}`;
                       if (r1c > 0 || r2c > 0) {
                         tooltip += `\n${run1Name || 'Run 1'} correct: ${r1c}, ${run2Name || 'Run 2'} correct: ${r2c}`;
                       }
@@ -556,7 +560,7 @@ function SubtypeChangesList({ runId1, runId2, trueType, compareFilter, run1Name,
         onClick={() => onViewRecords(ch.from, ch.to)}
         title={`${ch.from} → ${ch.to}: ${ch.total} records\n${run1Name || 'Run 1'} correct: ${ch.run1Correct}, ${run2Name || 'Run 2'} correct: ${ch.run2Correct}`}
       >
-        <span className="stcl-label">{ch.from} <span className="stcl-arrow">→</span> {ch.to}</span>
+        <span className="stcl-label">{subtypeLabel(ch.from)} <span className="stcl-arrow">→</span> {subtypeLabel(ch.to)}</span>
         <span className="stcl-count">{ch.total}</span>
         <span className="stcl-bar-track">
           <span className="stcl-bar" style={{ width: `${barPct}%` }} />
@@ -729,12 +733,13 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
             <div className="th-subtype-list">
               {typeData.subtypes.map(st => {
                 const stF1 = st.f1 ?? st.accuracy;
+                const stName = subtypeLabel(st.subtype);
                 const stCorrectPct = (st.correct / st.total) * 100;
                 const stCrossPct   = (st.cross_type / st.total) * 100;
                 const stSameWrong  = st.total - st.correct - st.cross_type;
                 const stSamePct    = Math.max(0, (stSameWrong / st.total) * 100);
                 const stBarScale   = (st.total / maxSubtypeTotal) * 100;
-                const stTip = `${st.subtype} · ${st.total.toLocaleString()} records\nCorrect: ${st.correct.toLocaleString()} (${stCorrectPct.toFixed(1)}%)\nSame-type wrong: ${stSameWrong.toLocaleString()} (${stSamePct.toFixed(1)}%)\nCross-type: ${st.cross_type.toLocaleString()} (${stCrossPct.toFixed(1)}%)`;
+                const stTip = `${stName} · ${st.total.toLocaleString()} records\nCorrect: ${st.correct.toLocaleString()} (${stCorrectPct.toFixed(1)}%)\nSame-type wrong: ${stSameWrong.toLocaleString()} (${stSamePct.toFixed(1)}%)\nCross-type: ${st.cross_type.toLocaleString()} (${stCrossPct.toFixed(1)}%)`;
                 const isActive = activeSubtype === st.subtype;
                 const dim = badgeMatchesFilter ? !badgeMatchesFilter(st) : false;
                 return (
@@ -744,7 +749,7 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
                     onClick={() => onViewRecords(typeData.type, st.subtype, null, null, null)}
                     title={stTip}
                   >
-                    <span className="th-subrow-name">{st.subtype}</span>
+                    <span className="th-subrow-name">{stName}</span>
                     <span className="th-subrow-f1">{pctNum(stF1)}%</span>
                     <span className="th-subrow-count">{st.total.toLocaleString()}</span>
                     <div className="th-subrow-bar-track">

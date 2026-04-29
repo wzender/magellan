@@ -94,6 +94,7 @@ const VERDICTS = [
 ];
 
 const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_verdict: '', gpt_reasoning: '' };
+const NOT_RETAGGED_LABEL = 'Not retagged';
 
 function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict }) {
   const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
@@ -154,10 +155,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   }
 
   const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
-  const hasGridFilter = Boolean(gridFilter && (gridFilter.trueType || gridFilter.trueSubtype || gridFilter.predSubtype));
+  const hasGridFilter = Boolean(
+    gridFilter &&
+    (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)
+  );
   const gridFilterParts = [];
   if (gridFilter?.trueType) gridFilterParts.push(`Type: ${gridFilter.trueType}`);
-  if (gridFilter?.trueSubtype) gridFilterParts.push(`Subtype: ${gridFilter.trueSubtype}`);
+  if (gridFilter?.trueSubtype !== null && gridFilter?.trueSubtype !== undefined) {
+    gridFilterParts.push(`Subtype: ${gridFilter.trueSubtype === '' ? NOT_RETAGGED_LABEL : gridFilter.trueSubtype}`);
+  }
   if (gridFilter?.predSubtype === '__cross_type__') {
     gridFilterParts.push('Pred: Cross-type');
   } else if (gridFilter?.predSubtype) {
@@ -167,14 +173,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   /* ── filtering ── */
   let filtered = records;
-  if (gridFilter && (gridFilter.trueType || gridFilter.trueSubtype || gridFilter.predSubtype)) {
+  if (gridFilter && (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)) {
     filtered = filtered.filter(r => {
-      const trueSubtype = verdicts[r.request_id] || '';
-      if (!trueSubtype) return false;
-      const trueType = subtypeToType[trueSubtype] || '';
+      const trueSubtype = verdicts[r.request_id] ?? '';
+      const trueType = trueSubtype === '' ? NOT_RETAGGED_LABEL : (subtypeToType[trueSubtype] || '');
 
-      if (gridFilter.trueType && trueType !== gridFilter.trueType) return false;
-      if (gridFilter.trueSubtype && trueSubtype !== gridFilter.trueSubtype) return false;
+      if (gridFilter.trueType !== null && gridFilter.trueType !== undefined && trueType !== gridFilter.trueType) return false;
+      if (gridFilter.trueSubtype !== null && gridFilter.trueSubtype !== undefined && trueSubtype !== gridFilter.trueSubtype) return false;
       if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
       if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
       return true;
@@ -561,7 +566,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
               const effectiveSubtypeOptions = countrySubtypes;
 
-              const trueType = isRetag ? (countrySubtypes.find(o => o.subtype === verdict)?.type || '') : '';
+              const trueType = isRetag
+                ? (verdict === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === verdict)?.type || ''))
+                : '';
               return (
                 <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
                   {!isRetag && (
