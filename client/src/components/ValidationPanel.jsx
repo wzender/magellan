@@ -178,6 +178,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         const bSub = verdicts[b.request_id] || '';
         aVal = countrySubtypes.find(o => o.subtype === aSub)?.type || '';
         bVal = countrySubtypes.find(o => o.subtype === bSub)?.type || '';
+      } else if (sortConfig.key === 'missing_subtype') {
+        aVal = a.missing_subtype || '';
+        bVal = b.missing_subtype || '';
       } else if (sortConfig.key === 'gpt_verdict') {
         aVal = gptResults[a.request_id]?.verdict || '';
         bVal = gptResults[b.request_id]?.verdict || '';
@@ -319,13 +322,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── export ── */
   const doExport = (kind) => {
     const headers = isRetag
-      ? ['request_id', 'pred_type', 'pred_subtype', 'true_subtype', 'true_type', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata']
+      ? ['request_id', 'pred_type', 'pred_subtype', 'missing_subtype', 'true_subtype', 'true_type', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata']
       : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
       const trueSubtype = verdicts[r.request_id] || '';
       const trueType = isRetag ? (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || '') : '';
       return isRetag
-        ? [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, trueType, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        ? [r.request_id, r.pred_type, r.pred_subtype, r.missing_subtype || '', trueSubtype, trueType, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
         : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
@@ -451,6 +454,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   Pred Type{sortIndicator('pred_type')}
                 </th>
               )}
+              {isRetag && (
+                <th style={{ width: 150, cursor: 'pointer' }} onClick={() => handleSort('missing_subtype')}>
+                  Missing Subtype{sortIndicator('missing_subtype')}
+                </th>
+              )}
               <th style={{ width: 250 }}>
                 <div className="header-cell">
                   Attributes
@@ -496,6 +504,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
               {isRetag && <th />}
+              {isRetag && <th />}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
               <th />
@@ -523,6 +532,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   <td className="cell-request-id">{r.request_id}</td>
                   <td><strong>{r.pred_subtype}</strong></td>
                   {isRetag && <td>{r.pred_type || ''}</td>}
+                  {isRetag && (
+                    <td className="cell-missing-subtype">
+                      {r.missing_subtype || ''}
+                    </td>
+                  )}
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
                   {isRetag ? (

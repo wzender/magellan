@@ -6,11 +6,30 @@
 const fs   = require('fs');
 const path = require('path');
 const csv  = require('csv-parse/sync');
+const XLSX = require('xlsx');
 
 const DATA_DIR                    = path.join(__dirname, '../data');
 const RUNS_DIR                    = path.join(DATA_DIR, 'runs');
 const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
 const METADATA_TRANSLATIONS_FILE  = path.join(DATA_DIR, 'metadata-translations.json');
+const SUBTYPES_FILE               = path.join(DATA_DIR, 'Subtypes.xlsx');
+
+// Builds { all: Set<string>, byCountry: { Country: Set<string> } } from Subtypes.xlsx
+function loadSubtypeVocabs() {
+  if (!fs.existsSync(SUBTYPES_FILE)) return { all: new Set(), byCountry: {} };
+  const wb = XLSX.readFile(SUBTYPES_FILE);
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  const all = new Set();
+  const byCountry = {};
+  for (const row of rows) {
+    all.add(row.Subtype);
+    for (const country of String(row.Countries || '').split(',').map(c => c.trim()).filter(Boolean)) {
+      if (!byCountry[country]) byCountry[country] = new Set();
+      byCountry[country].add(row.Subtype);
+    }
+  }
+  return { all, byCountry };
+}
 
 let dataCache = null;
 
@@ -90,6 +109,18 @@ function loadData() {
     });
   });
 
+  // Pre-compute missing subtypes for Unknowns benchmark runs
+  const { all: allSubtypes, byCountry: subtypesByCountry } = loadSubtypeVocabs();
+  const unknownsBenchmarkId = benchmarks.find(b => b.name === 'Unknowns')?.id;
+  const missingSubtypesByRun = {};
+  if (unknownsBenchmarkId) {
+    runs.filter(r => r.benchmark_id === unknownsBenchmarkId).forEach(run => {
+      const country = run.run_name.charAt(0).toUpperCase() + run.run_name.slice(1);
+      const countryVocab = subtypesByCountry[country] || new Set();
+      missingSubtypesByRun[run.id] = Array.from(allSubtypes).filter(s => !countryVocab.has(s)).sort();
+    });
+  }
+
   const run_results = [];
   runs.forEach(run => {
     const fname = runFileName(run.benchmark_id, run.run_name);
@@ -104,20 +135,22 @@ function loadData() {
     if (lbEntry) lbEntry.benchmark_length = records.length;
 
     records.forEach((r, idx) => {
+      const missingList = missingSubtypesByRun[run.id];
       run_results.push({
-        id:           run.id * 100000 + idx,
-        run_id:       run.id,
-        request_id:    r.request_id,
-        true_type:    r.true_type,
-        true_subtype: r.true_subtype,
-        pred_type:    r.pred_type,
-        pred_subtype: r.pred_subtype,
-        attributes:    tryParseJson(r.attributes),
-        en_attributes: tryParseJson(r.en_attributes),
-        metadata:      tryParseJson(r.metadata),
-        en_metadata:   tryParseJson(r.en_metadata),
-        gpt_verdict:   r.gpt_verdict   || null,
-        gpt_reasoning: r.gpt_reasoning || null,
+        id:              run.id * 100000 + idx,
+        run_id:          run.id,
+        request_id:      r.request_id,
+        true_type:       r.true_type,
+        true_subtype:    r.true_subtype,
+        pred_type:       r.pred_type,
+        pred_subtype:    r.pred_subtype,
+        missing_subtype: missingList ? missingList[idx % missingList.length] : null,
+        attributes:      tryParseJson(r.attributes),
+        en_attributes:   tryParseJson(r.en_attributes),
+        metadata:        tryParseJson(r.metadata),
+        en_metadata:     tryParseJson(r.en_metadata),
+        gpt_verdict:     r.gpt_verdict   || null,
+        gpt_reasoning:   r.gpt_reasoning || null,
       });
     });
   });

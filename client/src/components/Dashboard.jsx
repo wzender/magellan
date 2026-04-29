@@ -189,7 +189,7 @@ function Dashboard() {
           fetch(`/api/records?run_id=${runId}&limit=999999`),
           fetch(`/api/validation?run_id=${runId}`),
         ]);
-        const recData = await recRes.json();
+        const recData  = await recRes.json();
         const verdData = await verdRes.json();
         setValidationRecords(recData.data || []);
         setValidationVerdicts(verdData || {});

@@ -2602,6 +2602,13 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* ── SubtypeCombobox ─────────────────────────────────────────────────────── */
 .cell-retag { min-width: 200px; }
 
+.cell-missing-subtype {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary-dark);
+  background: var(--primary-light);
+}
+
 .subtype-combobox {
   position: relative;
   font-size: 0.82rem;
