@@ -11,6 +11,65 @@ const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
 /* ── helpers ─────────────────────────────────────────────── */
 function pctNum(n) { return (n * 100).toFixed(1); }
 
+/* ── Unknowns type-health (client-side, mirrors csv-loader getTypeHealthSummary) ── */
+function computeUnknownsTypeHealth(records, verdicts, countrySubtypes) {
+  const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
+  const typeMap = {};
+
+  records.forEach(r => {
+    const trueSubtype = verdicts[r.request_id];
+    if (!trueSubtype) return;
+    const trueType   = subtypeToType[trueSubtype] || 'Unknown';
+    const predType   = r.pred_type;
+    const predSubtype = r.pred_subtype;
+
+    if (!typeMap[trueType]) typeMap[trueType] = { type: trueType, total: 0, correct: 0, cross_type_wrong: 0, same_type_wrong: 0, subtypeMap: {}, confusionMap: {} };
+    const t = typeMap[trueType];
+    t.total++;
+
+    const isCorrect   = predSubtype === trueSubtype;
+    const isCrossType = predType    !== trueType;
+
+    if      (isCorrect)   t.correct++;
+    else if (isCrossType) t.cross_type_wrong++;
+    else                  t.same_type_wrong++;
+
+    if (!t.subtypeMap[trueSubtype]) t.subtypeMap[trueSubtype] = { subtype: trueSubtype, total: 0, correct: 0, cross_type: 0, confusionMap: {} };
+    const st = t.subtypeMap[trueSubtype];
+    st.total++;
+    if (isCorrect) { st.correct++; } else {
+      if (isCrossType) st.cross_type++;
+      const k = `${predSubtype}|||${predType}`;
+      st.confusionMap[k] = (st.confusionMap[k] || 0) + 1;
+    }
+    if (!isCorrect) {
+      const k = `${predSubtype}|||${predType}`;
+      t.confusionMap[k] = (t.confusionMap[k] || 0) + 1;
+    }
+  });
+
+  return Object.values(typeMap).map(t => {
+    const fmt = obj => Object.entries(obj)
+      .map(([k, count]) => { const [pred_subtype, pred_type] = k.split('|||'); return { pred_subtype, pred_type, count }; })
+      .sort((a, b) => b.count - a.count);
+
+    const subtypes = Object.values(t.subtypeMap).map(st => ({
+      subtype: st.subtype, total: st.total, correct: st.correct, cross_type: st.cross_type,
+      accuracy: st.correct / st.total,
+      top_confused_to: fmt(st.confusionMap).slice(0, 3),
+    })).sort((a, b) => a.accuracy - b.accuracy);
+
+    return {
+      type: t.type, total: t.total, correct: t.correct,
+      cross_type_wrong: t.cross_type_wrong, same_type_wrong: t.same_type_wrong,
+      accuracy: t.correct / t.total,
+      cross_type_rate: t.cross_type_wrong / t.total,
+      top_confused_to: fmt(t.confusionMap).slice(0, 5),
+      subtypes,
+    };
+  }).sort((a, b) => a.accuracy - b.accuracy);
+}
+
 /* ── SummaryBar ──────────────────────────────────────────── */
 function SummaryBar({ typeHealth, typeHealth2, run1Name, run2Name }) {
   if (!typeHealth || typeHealth.length === 0) return null;
@@ -234,6 +293,24 @@ function Dashboard() {
     });
   }, [selectedRunIds]);
 
+  /* ── Unknowns: drill-down from TypeHealthGrid using client-side filtered data ── */
+  const handleViewRecordsForUnknowns = useCallback((trueType, trueSubtype, predSubtype) => {
+    const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
+    let rows = validationRecords.map(r => {
+      const ts = validationVerdicts[r.request_id] || '';
+      return { ...r, true_subtype: ts, true_type: subtypeToType[ts] || '' };
+    }).filter(r => r.true_subtype);
+
+    if (trueType)    rows = rows.filter(r => r.true_type === trueType);
+    if (trueSubtype) rows = rows.filter(r => r.true_subtype === trueSubtype);
+    if (predSubtype === '__cross_type__') rows = rows.filter(r => r.pred_type !== r.true_type);
+    else if (predSubtype)                rows = rows.filter(r => r.pred_subtype === predSubtype);
+
+    setRecordQuery({ runId: selectedRunIds[0], runId2: null, trueType, trueSubtype, predSubtype, run1PredSubtype: null, run2PredSubtype: null });
+    setRecordsData({ data: rows.slice(0, 50), pagination: { total: rows.length, limit: 50, offset: 0, pages: Math.ceil(rows.length / 50) } });
+    setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  }, [validationRecords, validationVerdicts, countrySubtypes, selectedRunIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
     if (selectedRunIds.length < 2) {
@@ -411,6 +488,11 @@ function Dashboard() {
   const run1Name  = run1Entry?.run_name ?? '';
   const run2Name  = run2Entry?.run_name ?? '';
 
+  /* derived: for Unknowns, compute live from verdicts; for others use API-fetched state */
+  const displayTypeHealth = isUnknownsBenchmark
+    ? computeUnknownsTypeHealth(validationRecords, validationVerdicts, countrySubtypes)
+    : typeHealth;
+
   const recordsRef = useRef(null);
   const recordsHeaderRef = useRef(null);
 
@@ -489,6 +571,28 @@ function Dashboard() {
             onRunToggle={isUnknownsBenchmark ? undefined : handleRunToggle}
           />
 
+          {displayTypeHealth.length > 0 && (
+            <TypeHealthGrid
+              typeHealth={displayTypeHealth}
+              typeHealth2={typeHealth2}
+              compareTypeHealth={compareTypeHealth}
+              runId={selectedRunIds[0]}
+              runId2={selectedRunIds[1] ?? null}
+              run1Name={run1Name}
+              run2Name={run2Name}
+              onViewRecords={isUnknownsBenchmark ? handleViewRecordsForUnknowns : handleViewRecords}
+              activeSubtype={recordQuery?.trueSubtype ?? null}
+              correctnessFilter={correctnessFilter}
+              onCorrectnessFilter={v => setCorrectnessFilter(prev => {
+                const next = new Set(prev);
+                if (next.has(v)) next.delete(v); else next.add(v);
+                return next;
+              })}
+              compareFilter={compareFilter}
+              onCompareFilter={v => setCompareFilter(prev => prev === v ? null : v)}
+            />
+          )}
+
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (
             <div className="validation-section">
               <h3 className="validation-section-title">
@@ -510,47 +614,25 @@ function Dashboard() {
             </div>
           )}
 
-          {!isUnknownsBenchmark && typeHealth.length > 0 && (
-            <TypeHealthGrid
-              typeHealth={typeHealth}
-              typeHealth2={typeHealth2}
-              compareTypeHealth={compareTypeHealth}
-              runId={selectedRunIds[0]}
-              runId2={selectedRunIds[1] ?? null}
-              run1Name={run1Name}
-              run2Name={run2Name}
-              onViewRecords={handleViewRecords}
-              activeSubtype={recordQuery?.trueSubtype ?? null}
-              correctnessFilter={correctnessFilter}
-              onCorrectnessFilter={v => setCorrectnessFilter(prev => {
-                const next = new Set(prev);
-                if (next.has(v)) next.delete(v); else next.add(v);
-                return next;
-              })}
-              compareFilter={compareFilter}
-              onCompareFilter={v => setCompareFilter(prev => prev === v ? null : v)}
-            />
-          )}
-
-          {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
+          {(recordQuery || recordsLoading) && (
             <div className="records-section" ref={recordsRef}>
               <div className="records-section-header" ref={recordsHeaderRef}>
                 <div className="records-section-title">
                   <span>{recordsTitle}</span>
                   <span className="records-section-desc">Individual classified records — expand a row to see full attributes and metadata</span>
                 </div>
-                <button className="btn-close-viewer" onClick={async () => {
-                  const runId1 = selectedRunIds[0];
-                  const runId2 = selectedRunIds[1] ?? null;
+                <button className="btn-close-viewer" onClick={() => {
                   setCorrectnessFilter(new Set());
-                  setRecordQuery({ runId: runId1, runId2, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
-                  setRecordsLoading(true);
+                  setRecordQuery(null);
                   setRecordsData(null);
-                  try {
-                    const data = await fetchRecords(runId1, null, null, 50, null, runId2);
-                    setRecordsData(data);
-                  } finally {
-                    setRecordsLoading(false);
+                  if (!isUnknownsBenchmark) {
+                    const runId1 = selectedRunIds[0];
+                    const runId2 = selectedRunIds[1] ?? null;
+                    setRecordQuery({ runId: runId1, runId2, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
+                    setRecordsLoading(true);
+                    fetchRecords(runId1, null, null, 50, null, runId2)
+                      .then(data => setRecordsData(data))
+                      .finally(() => setRecordsLoading(false));
                   }
                 }}>
                   ↺ Show All
