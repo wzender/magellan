@@ -52,6 +52,117 @@ function cellIntensity(count, rowTotal) {
   return count / rowTotal;
 }
 
+/* ── StaticSubtypeConfusionMatrix (client-side, for Unknowns) ── */
+function StaticSubtypeConfusionMatrix({ typeData, onViewRecords }) {
+  const [showPct, setShowPct] = useState(false);
+  const subtypes = typeData.subtypes || [];
+
+  if (subtypes.length === 0) return <div className="matrix-empty">No data</div>;
+
+  // Build column set: true subtypes (diagonal) + all predicted subtypes from confused_to
+  const colMap = {};
+  subtypes.forEach(st => {
+    colMap[st.subtype] = { subtype: st.subtype, pred_type: typeData.type, isCrossType: false };
+  });
+  subtypes.forEach(st => {
+    (st.confused_to || []).forEach(c => {
+      if (!colMap[c.pred_subtype]) {
+        colMap[c.pred_subtype] = { subtype: c.pred_subtype, pred_type: c.pred_type, isCrossType: c.pred_type !== typeData.type };
+      }
+    });
+  });
+
+  // Sort: diagonal (true subtypes) first, then same-type, then cross-type
+  const trueSubtypeSet = new Set(subtypes.map(s => s.subtype));
+  const columns = Object.values(colMap).sort((a, b) => {
+    const ai = trueSubtypeSet.has(a.subtype) ? 0 : a.isCrossType ? 2 : 1;
+    const bi = trueSubtypeSet.has(b.subtype) ? 0 : b.isCrossType ? 2 : 1;
+    if (ai !== bi) return ai - bi;
+    return a.subtype.localeCompare(b.subtype);
+  });
+
+  const firstCrossIdx = columns.findIndex(c => c.isCrossType);
+
+  const rows = subtypes.map(st => {
+    const preds = {};
+    if (st.correct > 0) preds[st.subtype] = st.correct;
+    (st.confused_to || []).forEach(c => { preds[c.pred_subtype] = c.count; });
+    return { true_subtype: st.subtype, total: st.total, preds };
+  });
+
+  return (
+    <div className="subtype-confusion-wrap">
+      <div className="subtype-confusion-toolbar">
+        <button
+          className={`scm-toggle ${showPct ? 'active' : ''}`}
+          onClick={() => setShowPct(p => !p)}
+        >
+          {showPct ? '% of row' : '# count'}
+        </button>
+        {firstCrossIdx > -1 && (
+          <span className="scm-legend">
+            <span className="scm-legend-swatch scm-swatch-same" /> same-type
+            <span className="scm-legend-swatch scm-swatch-cross" /> cross-type
+          </span>
+        )}
+      </div>
+      <div className="subtype-confusion-scroll">
+        <table className="subtype-confusion-table">
+          <thead>
+            <tr>
+              <th className="scm-corner">True ↓ / Pred →</th>
+              {columns.map((c, i) => (
+                <th
+                  key={c.subtype}
+                  className={`scm-col-head ${c.isCrossType ? 'scm-col-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
+                  title={c.isCrossType ? `${c.subtype} (${c.pred_type})` : c.subtype}
+                >
+                  {c.subtype}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.true_subtype}>
+                <td className="scm-row-head" title={row.true_subtype}>
+                  <button className="scm-row-label" onClick={() => onViewRecords(row.true_subtype, null, null, null)}>
+                    {row.true_subtype}
+                  </button>
+                </td>
+                {columns.map((col, i) => {
+                  const count = row.preds[col.subtype] || 0;
+                  const isDiag = col.subtype === row.true_subtype;
+                  const intensity = cellIntensity(count, row.total);
+                  const display = showPct
+                    ? (count ? (intensity * 100).toFixed(0) + '%' : '')
+                    : (count || '');
+                  const bgColor = isDiag
+                    ? `rgba(34,197,94,${0.15 + intensity * 0.7})`
+                    : col.isCrossType
+                      ? `rgba(239,68,68,${0.15 + intensity * 0.75})`
+                      : `rgba(245,158,11,${0.15 + intensity * 0.75})`;
+                  return (
+                    <td
+                      key={col.subtype}
+                      className={`scm-cell ${isDiag ? 'scm-diag' : count > 0 ? 'scm-err' : ''} ${count > 0 ? 'scm-cell-clickable' : ''} ${col.isCrossType ? 'scm-cell-cross' : ''} ${i === firstCrossIdx ? 'scm-col-first-cross' : ''}`}
+                      style={count > 0 ? { background: bgColor } : {}}
+                      title={count > 0 ? `${row.true_subtype} → ${col.subtype}${col.isCrossType ? ` (${col.pred_type})` : ''}: ${count}` : ''}
+                      onClick={count > 0 ? () => onViewRecords(row.true_subtype, isDiag ? null : col.subtype, null, null) : undefined}
+                    >
+                      {display}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SubtypeConfusionMatrix({ runId, trueType, correctnessFilter, onViewRecords }) {
   const [matrix, setMatrix] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -567,7 +678,7 @@ function TypeDetailPanel({ typeData, typeData2, runId, runId2, run1Name, run2Nam
 }
 
 /* ── TypeHealthRow (single mode — bar layout) ────────────── */
-function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFilter, onToggle, onViewRecords, runId, activeSubtype, badgeMatchesFilter }) {
+function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFilter, onToggle, onViewRecords, runId, activeSubtype, badgeMatchesFilter, isUnknowns }) {
   const { accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
   const f1 = typeData.f1 ?? accuracy;
   const sev = severityClass(f1, cross_type_rate);
@@ -650,12 +761,17 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
           )}
 
           {view === 'matrix' && (
-            <SubtypeConfusionMatrix
-              runId={runId}
-              trueType={typeData.type}
-              correctnessFilter={correctnessFilter}
-              onViewRecords={(subtype, predSubtype) => onViewRecords(typeData.type, subtype, predSubtype, null, null)}
-            />
+            isUnknowns
+              ? <StaticSubtypeConfusionMatrix
+                  typeData={typeData}
+                  onViewRecords={(subtype, predSubtype) => onViewRecords(typeData.type, subtype, predSubtype, null, null)}
+                />
+              : <SubtypeConfusionMatrix
+                  runId={runId}
+                  trueType={typeData.type}
+                  correctnessFilter={correctnessFilter}
+                  onViewRecords={(subtype, predSubtype) => onViewRecords(typeData.type, subtype, predSubtype, null, null)}
+                />
           )}
         </div>
       )}
@@ -826,6 +942,7 @@ function TypeHealthGrid({
   onViewRecords, activeSubtype,
   correctnessFilter, onCorrectnessFilter,
   compareFilter, onCompareFilter,
+  isUnknowns,
 }) {
   const [expandedType, setExpandedType] = useState(null);
   const [transitionView, setTransitionView] = useState('type-transition');
@@ -1038,6 +1155,7 @@ function TypeHealthGrid({
               runId={runId}
               activeSubtype={activeSubtype}
               badgeMatchesFilter={badgeMatchesFilter}
+              isUnknowns={isUnknowns}
             />
           );
         })}

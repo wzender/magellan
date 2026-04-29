@@ -14,6 +14,29 @@ const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
 const METADATA_TRANSLATIONS_FILE  = path.join(DATA_DIR, 'metadata-translations.json');
 const SUBTYPES_FILE               = path.join(DATA_DIR, 'Subtypes.xlsx');
 
+function parseCountries(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(c => String(c).trim()).filter(Boolean);
+
+  const raw = String(value).trim();
+  if (!raw) return [];
+
+  // New format support: "['Spain', 'Italy']" (and valid JSON arrays).
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(raw.replace(/'/g, '"'));
+      if (Array.isArray(parsed)) {
+        return parsed.map(c => String(c).trim()).filter(Boolean);
+      }
+    } catch {
+      // Fallback to legacy parser below.
+    }
+  }
+
+  // Legacy format support: "Spain, Italy"
+  return raw.split(',').map(c => c.trim()).filter(Boolean);
+}
+
 // Builds { all: Set<string>, byCountry: { Country: Set<string> } } from Subtypes.xlsx
 function loadSubtypeVocabs() {
   if (!fs.existsSync(SUBTYPES_FILE)) return { all: new Set(), byCountry: {} };
@@ -23,7 +46,7 @@ function loadSubtypeVocabs() {
   const byCountry = {};
   for (const row of rows) {
     all.add(row.Subtype);
-    for (const country of String(row.Countries || '').split(',').map(c => c.trim()).filter(Boolean)) {
+    for (const country of parseCountries(row.Countries)) {
       if (!byCountry[country]) byCountry[country] = new Set();
       byCountry[country].add(row.Subtype);
     }

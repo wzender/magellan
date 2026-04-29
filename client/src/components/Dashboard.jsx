@@ -7,6 +7,7 @@ import RowLevelTable from './RowLevelTable';
 import ValidationPanel from './ValidationPanel';
 
 const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
+const EMPTY_UNKNOWNS_GRID_FILTER = { trueType: null, trueSubtype: null, predSubtype: null };
 
 /* ── helpers ─────────────────────────────────────────────── */
 function pctNum(n) { return (n * 100).toFixed(1); }
@@ -56,6 +57,7 @@ function computeUnknownsTypeHealth(records, verdicts, countrySubtypes) {
     const subtypes = Object.values(t.subtypeMap).map(st => ({
       subtype: st.subtype, total: st.total, correct: st.correct, cross_type: st.cross_type,
       accuracy: st.correct / st.total,
+      confused_to: fmt(st.confusionMap),
       top_confused_to: fmt(st.confusionMap).slice(0, 3),
     })).sort((a, b) => a.accuracy - b.accuracy);
 
@@ -159,6 +161,7 @@ function Dashboard() {
   const [validationVerdicts, setValidationVerdicts] = useState({});
   const [validationLoading, setValidationLoading] = useState(false);
   const [countrySubtypes, setCountrySubtypes] = useState([]);
+  const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
 
@@ -203,6 +206,7 @@ function Dashboard() {
     setRecordsData(null);
     setValidationRecords([]);
     setValidationVerdicts({});
+    setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
     setScreen('benchmark');
     if (champion) {
       setSelectedRunIds([champion.run_id]);
@@ -241,6 +245,7 @@ function Dashboard() {
   useEffect(() => {
     if (!isUnknownsBenchmark || selectedRunIds.length === 0) return;
     const runId = selectedRunIds[0];
+    setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
     const load = async () => {
       setValidationLoading(true);
       try {
@@ -295,21 +300,12 @@ function Dashboard() {
 
   /* ── Unknowns: drill-down from TypeHealthGrid using client-side filtered data ── */
   const handleViewRecordsForUnknowns = useCallback((trueType, trueSubtype, predSubtype) => {
-    const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
-    let rows = validationRecords.map(r => {
-      const ts = validationVerdicts[r.request_id] || '';
-      return { ...r, true_subtype: ts, true_type: subtypeToType[ts] || '' };
-    }).filter(r => r.true_subtype);
-
-    if (trueType)    rows = rows.filter(r => r.true_type === trueType);
-    if (trueSubtype) rows = rows.filter(r => r.true_subtype === trueSubtype);
-    if (predSubtype === '__cross_type__') rows = rows.filter(r => r.pred_type !== r.true_type);
-    else if (predSubtype)                rows = rows.filter(r => r.pred_subtype === predSubtype);
-
-    setRecordQuery({ runId: selectedRunIds[0], runId2: null, trueType, trueSubtype, predSubtype, run1PredSubtype: null, run2PredSubtype: null });
-    setRecordsData({ data: rows.slice(0, 50), pagination: { total: rows.length, limit: 50, offset: 0, pages: Math.ceil(rows.length / 50) } });
-    setTimeout(() => recordsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-  }, [validationRecords, validationVerdicts, countrySubtypes, selectedRunIds]); // eslint-disable-line react-hooks/exhaustive-deps
+    setUnknownsGridFilter({
+      trueType: trueType || null,
+      trueSubtype: trueSubtype || null,
+      predSubtype: predSubtype || null,
+    });
+  }, []);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
@@ -337,6 +333,7 @@ function Dashboard() {
     setTypeHealth2(null);
     setRecordQuery(null);
     setRecordsData(null);
+    setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
   };
 
   /* ── compare checkbox toggle (up to 2 runs) ── */
@@ -351,6 +348,7 @@ function Dashboard() {
     });
     setRecordQuery(null);
     setRecordsData(null);
+    setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
   };
 
   /* ── auto-show all records when a single run is selected (skip for Unknowns) ── */
@@ -581,7 +579,7 @@ function Dashboard() {
               run1Name={run1Name}
               run2Name={run2Name}
               onViewRecords={isUnknownsBenchmark ? handleViewRecordsForUnknowns : handleViewRecords}
-              activeSubtype={recordQuery?.trueSubtype ?? null}
+              activeSubtype={isUnknownsBenchmark ? unknownsGridFilter.trueSubtype : (recordQuery?.trueSubtype ?? null)}
               correctnessFilter={correctnessFilter}
               onCorrectnessFilter={v => setCorrectnessFilter(prev => {
                 const next = new Set(prev);
@@ -590,6 +588,7 @@ function Dashboard() {
               })}
               compareFilter={compareFilter}
               onCompareFilter={v => setCompareFilter(prev => prev === v ? null : v)}
+              isUnknowns={isUnknownsBenchmark}
             />
           )}
 
@@ -607,6 +606,8 @@ function Dashboard() {
                   countrySubtypes={countrySubtypes}
                   records={validationRecords}
                   verdicts={validationVerdicts}
+                  gridFilter={unknownsGridFilter}
+                  onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
                   onSetVerdict={handleSetVerdict}
                   onBulkVerdict={handleBulkVerdict}
                 />
@@ -614,7 +615,7 @@ function Dashboard() {
             </div>
           )}
 
-          {(recordQuery || recordsLoading) && (
+          {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
             <div className="records-section" ref={recordsRef}>
               <div className="records-section-header" ref={recordsHeaderRef}>
                 <div className="records-section-title">

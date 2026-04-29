@@ -95,7 +95,7 @@ const VERDICTS = [
 
 const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_verdict: '', gpt_reasoning: '' };
 
-function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, onSetVerdict, onBulkVerdict }) {
+function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict }) {
   const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
@@ -153,8 +153,33 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     return <div className="validation-empty">No records for this run.</div>;
   }
 
+  const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
+  const hasGridFilter = Boolean(gridFilter && (gridFilter.trueType || gridFilter.trueSubtype || gridFilter.predSubtype));
+  const gridFilterParts = [];
+  if (gridFilter?.trueType) gridFilterParts.push(`Type: ${gridFilter.trueType}`);
+  if (gridFilter?.trueSubtype) gridFilterParts.push(`Subtype: ${gridFilter.trueSubtype}`);
+  if (gridFilter?.predSubtype === '__cross_type__') {
+    gridFilterParts.push('Pred: Cross-type');
+  } else if (gridFilter?.predSubtype) {
+    gridFilterParts.push(`Pred: ${gridFilter.predSubtype}`);
+  }
+  const gridFilterLabel = gridFilterParts.join(' | ');
+
   /* ── filtering ── */
   let filtered = records;
+  if (gridFilter && (gridFilter.trueType || gridFilter.trueSubtype || gridFilter.predSubtype)) {
+    filtered = filtered.filter(r => {
+      const trueSubtype = verdicts[r.request_id] || '';
+      if (!trueSubtype) return false;
+      const trueType = subtypeToType[trueSubtype] || '';
+
+      if (gridFilter.trueType && trueType !== gridFilter.trueType) return false;
+      if (gridFilter.trueSubtype && trueSubtype !== gridFilter.trueSubtype) return false;
+      if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
+      if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
+      return true;
+    });
+  }
   if (colFilters.request_id)   filtered = filtered.filter(r => r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase()));
   if (colFilters.pred_subtype) filtered = filtered.filter(r => (r.pred_subtype || '').toLowerCase().includes(colFilters.pred_subtype.toLowerCase()));
   if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
@@ -176,8 +201,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'true_type') {
         const aSub = verdicts[a.request_id] || '';
         const bSub = verdicts[b.request_id] || '';
-        aVal = countrySubtypes.find(o => o.subtype === aSub)?.type || '';
-        bVal = countrySubtypes.find(o => o.subtype === bSub)?.type || '';
+        aVal = subtypeToType[aSub] || '';
+        bVal = subtypeToType[bSub] || '';
       } else if (sortConfig.key === 'missing_subtype') {
         aVal = a.missing_subtype || '';
         bVal = b.missing_subtype || '';
@@ -378,6 +403,21 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             </>
           )}
         </div>
+
+        {hasGridFilter && (
+          <div className="validation-grid-filter">
+            <span className="validation-grid-filter-badge" title={gridFilterLabel}>
+              Active grid filter: {gridFilterLabel}
+            </span>
+            <button
+              className="validation-grid-filter-clear"
+              onClick={onClearGridFilter}
+              title="Clear Type Health filter"
+            >
+              Clear
+            </button>
+          </div>
+        )}
 
         {/* Filter */}
         <div className="validation-filters">

@@ -115,7 +115,8 @@ for row_idx, (subtype, type_name, countries) in enumerate(rows, 2):
 
     c1 = ws.cell(row=row_idx, column=1, value=subtype)
     c2 = ws.cell(row=row_idx, column=2, value=type_name)
-    c3 = ws.cell(row=row_idx, column=3, value=', '.join(countries))
+    countries_str = '[' + ', '.join(f"'{c}'" for c in countries) + ']'
+    c3 = ws.cell(row=row_idx, column=3, value=countries_str)
 
     for c in (c1, c2, c3):
         c.font = cell_font

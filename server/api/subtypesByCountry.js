@@ -7,6 +7,29 @@ const FILE = path.join(__dirname, '../../data/Subtypes.xlsx');
 
 let cache = null;
 
+function parseCountries(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(c => String(c).trim()).filter(Boolean);
+
+  const raw = String(value).trim();
+  if (!raw) return [];
+
+  // New format support: "['Spain', 'Italy']" (and valid JSON arrays).
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(raw.replace(/'/g, '"'));
+      if (Array.isArray(parsed)) {
+        return parsed.map(c => String(c).trim()).filter(Boolean);
+      }
+    } catch {
+      // Fallback to legacy parser below.
+    }
+  }
+
+  // Legacy format support: "Spain, Italy"
+  return raw.split(',').map(c => c.trim()).filter(Boolean);
+}
+
 function load() {
   if (cache) return cache;
   const wb = XLSX.readFile(FILE);
@@ -15,7 +38,7 @@ function load() {
 
   const byCountry = {};
   for (const row of rows) {
-    const countries = String(row.Countries || '').split(',').map(c => c.trim()).filter(Boolean);
+    const countries = parseCountries(row.Countries);
     for (const country of countries) {
       if (!byCountry[country]) byCountry[country] = [];
       byCountry[country].push({ subtype: row.Subtype, type: row.Type });
