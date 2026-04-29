@@ -159,6 +159,7 @@ function loadData() {
 
     records.forEach((r, idx) => {
       const missingList = missingSubtypesByRun[run.id];
+      const parsedConfidence = parseFloat(r.confidence);
       run_results.push({
         id:              run.id * 100000 + idx,
         run_id:          run.id,
@@ -174,6 +175,7 @@ function loadData() {
         en_metadata:     tryParseJson(r.en_metadata),
         gpt_verdict:     r.gpt_verdict   || null,
         gpt_reasoning:   r.gpt_reasoning || null,
+        confidence:      Number.isFinite(parsedConfidence) ? Math.max(0, Math.min(1, parsedConfidence)) : null,
       });
     });
   });
@@ -524,6 +526,97 @@ function getTypeHealthSummary(runId) {
   }).sort((a, b) => a.accuracy - b.accuracy);
 }
 
+function getConfidenceQuality(runId, bins = 10) {
+  const data = loadData();
+  const validBins = Number.isFinite(bins) ? Math.max(2, Math.min(20, Math.floor(bins))) : 10;
+  const results = data.run_results.filter(r =>
+    r.run_id === runId && typeof r.confidence === 'number' && Number.isFinite(r.confidence)
+  );
+
+  if (results.length === 0) return null;
+
+  const total = results.length;
+  const bucket = Array.from({ length: validBins }, (_, i) => ({
+    index: i,
+    start: i / validBins,
+    end: (i + 1) / validBins,
+    count: 0,
+    confSum: 0,
+    correctSum: 0,
+  }));
+
+  let confSum = 0;
+  let correctSum = 0;
+  let brierSum = 0;
+
+  results.forEach(r => {
+    const conf = Math.max(0, Math.min(1, r.confidence));
+    const y = r.pred_subtype === r.true_subtype ? 1 : 0;
+    const idx = Math.min(validBins - 1, Math.floor(conf * validBins));
+    const b = bucket[idx];
+    b.count++;
+    b.confSum += conf;
+    b.correctSum += y;
+
+    confSum += conf;
+    correctSum += y;
+    brierSum += (conf - y) * (conf - y);
+  });
+
+  let ece = 0;
+  let maxGap = 0;
+  let worstBin = null;
+  let overMass = 0;
+  let underMass = 0;
+
+  const binsOut = bucket.filter(b => b.count > 0).map(b => {
+    const avgConfidence = b.confSum / b.count;
+    const accuracy = b.correctSum / b.count;
+    const gap = Math.abs(accuracy - avgConfidence);
+    const weight = b.count / total;
+    ece += weight * gap;
+
+    if (gap > maxGap) {
+      maxGap = gap;
+      worstBin = b;
+    }
+    if (avgConfidence > accuracy) overMass += weight;
+    if (avgConfidence < accuracy) underMass += weight;
+
+    return {
+      index: b.index,
+      start: b.start,
+      end: b.end,
+      count: b.count,
+      avg_confidence: avgConfidence,
+      accuracy,
+      gap,
+    };
+  });
+
+  const worstRange = worstBin
+    ? `${worstBin.start.toFixed(1)}-${worstBin.end.toFixed(1)}`
+    : null;
+
+  let status = 'moderate';
+  if (ece < 0.03) status = 'good';
+  else if (ece >= 0.07) status = 'poor';
+
+  return {
+    n: total,
+    avg_confidence: confSum / total,
+    accuracy: correctSum / total,
+    ece,
+    brier: brierSum / total,
+    max_gap: maxGap,
+    worst_bin: worstRange,
+    overconfident_mass: overMass,
+    underconfident_mass: underMass,
+    status,
+    bins: binsOut,
+  };
+}
+
 /* ── Compare type health (4-outcome per type) ──────────── */
 function getCompareTypeHealth(runId1, runId2) {
   const data = loadData();
@@ -731,6 +824,7 @@ module.exports = {
   updateTranslation,
   updateMetadataTranslation,
   getTypeHealthSummary,
+  getConfidenceQuality,
   getCompareTypeHealth,
   getSubtypeConfusionMatrix,
   getSubtypeTransitionMatrix,

@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 /* ── helpers ─────────────────────────────────────────────── */
 function pct(n) { return (n * 100).toFixed(0) + '%'; }
 function pctNum(n) { return (n * 100).toFixed(1); }
+function pctMetric(n, digits = 1) {
+  return `${(n * 100).toFixed(digits)}%`;
+}
 function subtypeLabel(name) {
   return String(name || '').trim() === '' ? 'Not retagged' : name;
 }
@@ -20,6 +23,21 @@ function DeltaBadge({ delta }) {
   if (Math.abs(delta) < 0.005) return <span className="delta delta-flat">= no change</span>;
   if (delta > 0) return <span className="delta delta-up">▲ +{d}%</span>;
   return <span className="delta delta-down">▼ {d}%</span>;
+}
+
+function CollapsibleSection({ title, subtitle, expanded, onToggle, children, extraClassName = '' }) {
+  return (
+    <section className={`collapsible-section ${expanded ? 'is-open' : 'is-closed'} ${extraClassName}`.trim()}>
+      <button className="collapsible-section-header" onClick={onToggle}>
+        <span className="collapsible-section-titlewrap">
+          <span className="collapsible-section-title">{title}</span>
+          {subtitle && <span className="collapsible-section-subtitle">{subtitle}</span>}
+        </span>
+        <span className="collapsible-section-icon" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && <div className="collapsible-section-body">{children}</div>}
+    </section>
+  );
 }
 
 /* ── SubtypeBadge ────────────────────────────────────────── */
@@ -940,9 +958,182 @@ function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Nam
   );
 }
 
+/* ── ConfidenceScoreboard (single run) ───────────────────── */
+function ConfidenceScoreboard({ confidenceQuality }) {
+  if (!confidenceQuality || !confidenceQuality.n) return null;
+
+  const ece = confidenceQuality.ece ?? 0;
+  const brier = confidenceQuality.brier ?? 0;
+  const avgConfidence = confidenceQuality.avg_confidence ?? 0;
+  const maxGap = confidenceQuality.max_gap ?? 0;
+  const worstBin = confidenceQuality.worst_bin || 'n/a';
+  const n = confidenceQuality.n || 0;
+
+  const status = confidenceQuality.status || (ece < 0.03 ? 'good' : ece >= 0.07 ? 'poor' : 'moderate');
+  const dir = status === 'good' ? 'up' : status === 'poor' ? 'down' : 'flat';
+  const statusLabel = status === 'good' ? 'Calibrated' : status === 'poor' ? 'Needs calibration' : 'Moderate calibration';
+  const eceTooltip = 'Expected Calibration Error. Compares average confidence to observed accuracy across confidence bins. Lower is better.';
+  const brierTooltip = 'Brier score. Mean squared error between confidence and actual correctness for each record. Lower is better.';
+
+  return (
+    <div className="cmp-scoreboard confq-scoreboard">
+      <div className="cmp-score-card confq-score-card" title={eceTooltip}>
+        <span className="cmp-score-label">ECE</span>
+        <span className="cmp-score-value">{pctMetric(ece)}</span>
+      </div>
+      <div className={`cmp-score-delta cmp-score-delta-${dir}`}>
+        <span className="cmp-score-delta-arrow">{dir === 'up' ? '▲' : dir === 'down' ? '▼' : '='}</span>
+        <span className="cmp-score-delta-num">{statusLabel}</span>
+        <span className="cmp-score-delta-label">max gap {pctMetric(maxGap)} · bin {worstBin}</span>
+      </div>
+      <div className="cmp-score-card confq-score-card" title={brierTooltip}>
+        <span className="cmp-score-label">Brier</span>
+        <span className="cmp-score-value">{pctMetric(brier)}</span>
+      </div>
+      <div className="cmp-score-divider" />
+      <div className="cmp-score-stats">
+        <span className="cmp-stat confq-stat" title="Records with confidence score">
+          <span className="cmp-stat-num">{n.toLocaleString()}</span>
+          <span className="cmp-stat-label">scored</span>
+        </span>
+        <span className="cmp-stat confq-stat" title="Average confidence across scored records">
+          <span className="cmp-stat-num">{(avgConfidence * 100).toFixed(1)}%</span>
+          <span className="cmp-stat-label">avg conf</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ReliabilityPlot({ bins }) {
+  const chartBins = Array.isArray(bins) ? bins : [];
+  if (chartBins.length === 0) return <div className="matrix-empty">No confidence bins</div>;
+
+  const width = 420;
+  const height = 220;
+  const padX = 34;
+  const padY = 18;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+
+  const x = (v) => padX + v * innerW;
+  const y = (v) => height - padY - v * innerH;
+
+  return (
+    <div className="confq-card">
+      <div className="confq-card-header">
+        <span className="confq-card-title">Reliability</span>
+        <span className="confq-card-subtitle">Below diagonal = overconfident</span>
+      </div>
+      <div className="confq-plot-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} className="confq-plot" role="img" aria-label="Confidence reliability plot">
+          <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)} className="confq-diagonal" />
+          {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
+            <g key={tick}>
+              <line x1={x(0)} y1={y(tick)} x2={x(1)} y2={y(tick)} className="confq-gridline" />
+              <text x={padX - 8} y={y(tick) + 4} className="confq-axis-label">{Math.round(tick * 100)}</text>
+              <text x={x(tick)} y={height - 2} textAnchor="middle" className="confq-axis-label">{Math.round(tick * 100)}</text>
+            </g>
+          ))}
+          {chartBins.map((bin) => {
+            const barX = x(bin.start);
+            const barW = Math.max(8, (bin.end - bin.start) * innerW - 4);
+            const barY = y(bin.accuracy);
+            const centerX = x(bin.avg_confidence);
+            const centerY = y(bin.accuracy);
+            return (
+              <g key={`${bin.start}-${bin.end}`}>
+                <rect
+                  x={barX + 2}
+                  y={barY}
+                  width={barW}
+                  height={height - padY - barY}
+                  className="confq-bin-bar"
+                  rx="4"
+                >
+                  <title>{`${bin.start.toFixed(1)}-${bin.end.toFixed(1)} | n=${bin.count} | conf ${(bin.avg_confidence * 100).toFixed(1)}% | acc ${(bin.accuracy * 100).toFixed(1)}%`}</title>
+                </rect>
+                <circle cx={centerX} cy={centerY} r="4.5" className="confq-bin-dot">
+                  <title>{`${bin.start.toFixed(1)}-${bin.end.toFixed(1)} | n=${bin.count} | conf ${(bin.avg_confidence * 100).toFixed(1)}% | acc ${(bin.accuracy * 100).toFixed(1)}%`}</title>
+                </circle>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceThresholdTable({ confidenceQuality }) {
+  const bins = Array.isArray(confidenceQuality?.bins) ? confidenceQuality.bins : [];
+  if (bins.length === 0) return <div className="matrix-empty">No threshold data</div>;
+
+  const total = confidenceQuality.n || bins.reduce((sum, bin) => sum + bin.count, 0);
+  const thresholds = [0.3, 0.5, 0.7, 0.9];
+  const rows = thresholds.map((threshold) => {
+    const coveredBins = bins.filter((bin) => bin.avg_confidence >= threshold);
+    const coveredCount = coveredBins.reduce((sum, bin) => sum + bin.count, 0);
+    const weightedAcc = coveredCount > 0
+      ? coveredBins.reduce((sum, bin) => sum + bin.accuracy * bin.count, 0) / coveredCount
+      : 0;
+    return {
+      threshold,
+      coverage: total > 0 ? coveredCount / total : 0,
+      accuracy: weightedAcc,
+      errorRate: coveredCount > 0 ? 1 - weightedAcc : 0,
+      manualLoad: total > 0 ? 1 - (coveredCount / total) : 0,
+    };
+  });
+
+  return (
+    <div className="confq-card">
+      <div className="confq-card-header">
+        <span className="confq-card-title">Thresholds</span>
+        <span className="confq-card-subtitle">Coverage and quality above confidence cutoff</span>
+      </div>
+      <div className="confq-table-wrap">
+        <table className="confq-table">
+          <thead>
+            <tr>
+              <th>Threshold</th>
+              <th>Coverage</th>
+              <th>Accuracy</th>
+              <th>Error</th>
+              <th>Manual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.threshold}>
+                <td>{row.threshold.toFixed(1)}</td>
+                <td>{(row.coverage * 100).toFixed(1)}%</td>
+                <td>{(row.accuracy * 100).toFixed(1)}%</td>
+                <td>{(row.errorRate * 100).toFixed(1)}%</td>
+                <td>{(row.manualLoad * 100).toFixed(1)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ConfidenceQualityPanel({ confidenceQuality }) {
+  if (!confidenceQuality || !confidenceQuality.n) return null;
+
+  return (
+    <div className="confq-panel">
+      <ReliabilityPlot bins={confidenceQuality.bins} />
+      <ConfidenceThresholdTable confidenceQuality={confidenceQuality} />
+    </div>
+  );
+}
+
 /* ── TypeHealthGrid ──────────────────────────────────────── */
 function TypeHealthGrid({
-  typeHealth, typeHealth2, compareTypeHealth,
+  typeHealth, confidenceQuality, typeHealth2, compareTypeHealth,
   runId, runId2, run1Name, run2Name,
   onViewRecords, activeSubtype,
   correctnessFilter, onCorrectnessFilter,
@@ -951,6 +1142,8 @@ function TypeHealthGrid({
 }) {
   const [expandedType, setExpandedType] = useState(null);
   const [transitionView, setTransitionView] = useState('type-transition');
+  const [confidenceExpanded, setConfidenceExpanded] = useState(true);
+  const [typeSectionExpanded, setTypeSectionExpanded] = useState(true);
   const isCompare = !!runId2;
 
   useEffect(() => {
@@ -1027,6 +1220,19 @@ function TypeHealthGrid({
 
   return (
     <div className="type-health-section">
+      {!isCompare && (
+        <CollapsibleSection
+          title="Confidence Quality"
+          subtitle="Calibration summary, reliability curve, and threshold coverage"
+          expanded={confidenceExpanded}
+          onToggle={() => setConfidenceExpanded(prev => !prev)}
+          extraClassName="confq-section"
+        >
+          <ConfidenceScoreboard confidenceQuality={confidenceQuality} />
+          <ConfidenceQualityPanel confidenceQuality={confidenceQuality} />
+        </CollapsibleSection>
+      )}
+
       {isCompare && (
         <CompareScoreboard
           typeHealth={typeHealth}
@@ -1040,133 +1246,140 @@ function TypeHealthGrid({
         />
       )}
 
-      {isCompare && (
-        <div className="type-transition-toggle">
-          <div className="view-toggle">
-            <button
-              className={`view-toggle-btn ${transitionView === 'type-transition' ? 'active' : ''}`}
-              onClick={() => setTransitionView('type-transition')}
-            >Type Transition</button>
-            <button
-              className={`view-toggle-btn ${transitionView === 'breakdown' ? 'active' : ''}`}
-              onClick={() => setTransitionView('breakdown')}
-            >Breakdown</button>
+      <CollapsibleSection
+        title={isCompare ? 'Type Comparison' : 'Type Accuracy'}
+        subtitle={isCompare ? 'Compare type-level outcomes across runs' : 'Explore per-type accuracy, confusion, and subtype detail'}
+        expanded={typeSectionExpanded}
+        onToggle={() => setTypeSectionExpanded(prev => !prev)}
+        extraClassName="type-main-section"
+      >
+        {isCompare && (
+          <div className="type-transition-toggle">
+            <div className="view-toggle">
+              <button
+                className={`view-toggle-btn ${transitionView === 'type-transition' ? 'active' : ''}`}
+                onClick={() => setTransitionView('type-transition')}
+              >Type Transition</button>
+              <button
+                className={`view-toggle-btn ${transitionView === 'breakdown' ? 'active' : ''}`}
+                onClick={() => setTransitionView('breakdown')}
+              >Breakdown</button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {isCompare && transitionView === 'type-transition' && (
-        <TypeTransitionMatrix
-          runId1={runId}
-          runId2={runId2}
-          run1Name={run1Name}
-          run2Name={run2Name}
-          onCellClick={(r1Type, r2Type) => onViewRecords(null, null, null, null, null, r1Type, r2Type)}
-        />
-      )}
+        {isCompare && transitionView === 'type-transition' && (
+          <TypeTransitionMatrix
+            runId1={runId}
+            runId2={runId2}
+            run1Name={run1Name}
+            run2Name={run2Name}
+            onCellClick={(r1Type, r2Type) => onViewRecords(null, null, null, null, null, r1Type, r2Type)}
+          />
+        )}
 
-      {(!isCompare || transitionView === 'breakdown') && (
-      <>
-      <div className="th-sticky-header">
-        <div className="type-section-header">
-          <div className="type-section-title-block">
-            <span className="type-section-label">
-              {isCompare ? 'Type Comparison' : 'Type Accuracy'}
-            </span>
-            <span className="type-section-desc">
-              {isCompare
-                ? 'Side-by-side breakdown per type — see where each run improved or regressed'
-                : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
-            </span>
-          </div>
-          <div className="type-grid-legend">
-            {isCompare
-              ? LEGEND_COMPARE.map(l => (
-                  <button
-                    key={l.key}
-                    className={`legend-btn ${compareFilter === l.key ? 'legend-btn-active' : ''}`}
-                    onClick={() => onCompareFilter(l.key)}
-                  >
-                    <span className={`legend-swatch ${l.cls}`} />
-                    {l.label}
-                  </button>
-                ))
-              : LEGEND_SINGLE.map(l => (
-                  <button
-                    key={l.key}
-                    className={`legend-btn ${correctnessFilter && correctnessFilter.has(l.key) ? 'legend-btn-active' : ''}`}
-                    onClick={() => onCorrectnessFilter(l.key)}
-                  >
-                    <span className={`legend-swatch ${l.cls}`} />
-                    {l.label}
-                  </button>
-                ))
-            }
-          </div>
-        </div>
+        {(!isCompare || transitionView === 'breakdown') && (
+          <>
+            <div className="th-sticky-header">
+              <div className="type-section-header">
+                <div className="type-section-title-block">
+                  <span className="type-section-label">
+                    {isCompare ? 'Type Comparison' : 'Type Accuracy'}
+                  </span>
+                  <span className="type-section-desc">
+                    {isCompare
+                      ? 'Side-by-side breakdown per type — see where each run improved or regressed'
+                      : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
+                  </span>
+                </div>
+                <div className="type-grid-legend">
+                  {isCompare
+                    ? LEGEND_COMPARE.map(l => (
+                        <button
+                          key={l.key}
+                          className={`legend-btn ${compareFilter === l.key ? 'legend-btn-active' : ''}`}
+                          onClick={() => onCompareFilter(l.key)}
+                        >
+                          <span className={`legend-swatch ${l.cls}`} />
+                          {l.label}
+                        </button>
+                      ))
+                    : LEGEND_SINGLE.map(l => (
+                        <button
+                          key={l.key}
+                          className={`legend-btn ${correctnessFilter && correctnessFilter.has(l.key) ? 'legend-btn-active' : ''}`}
+                          onClick={() => onCorrectnessFilter(l.key)}
+                        >
+                          <span className={`legend-swatch ${l.cls}`} />
+                          {l.label}
+                        </button>
+                      ))}
+                </div>
+              </div>
 
-        <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
-          <span className="th-col-expand" />
-          <span className="th-col-label">True Type</span>
-          {isCompare ? (
-            <>
-              <span className="th-col-f1">F1</span>
-              <span className="th-col-changes">Changes</span>
-              <span className="th-col-count">#</span>
-            </>
-          ) : (
-            <>
-              <span className="th-col-f1">F1</span>
-              <span className="th-col-count">#</span>
-            </>
-          )}
-          <span className="th-col-bar">Breakdown</span>
-        </div>
-      </div>
+              <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
+                <span className="th-col-expand" />
+                <span className="th-col-label">True Type</span>
+                {isCompare ? (
+                  <>
+                    <span className="th-col-f1">F1</span>
+                    <span className="th-col-changes">Changes</span>
+                    <span className="th-col-count">#</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="th-col-f1">F1</span>
+                    <span className="th-col-count">#</span>
+                  </>
+                )}
+                <span className="th-col-bar">Breakdown</span>
+              </div>
+            </div>
 
-      <div className="th-list">
-        {typeHealth.map(t => {
-          if (isCompare) {
-            const cd = compareMap[t.type];
-            return (
-              <TypeHealthRowCompare
-                key={t.type}
-                typeData={t}
-                typeData2={typeMap2[t.type] || null}
-                compareData={cd || null}
-                maxTotal={maxTotal}
-                isExpanded={expandedType === t.type}
-                isDimmed={!cardMatchesCompareFilter(t)}
-                compareFilter={compareFilter}
-                onToggle={() => handleCardClick(t.type)}
-                onViewRecords={onViewRecords}
-                runId={runId}
-                runId2={runId2}
-                run1Name={run1Name}
-                run2Name={run2Name}
-              />
-            );
-          }
-          return (
-            <TypeHealthRow
-              key={t.type}
-              typeData={t}
-              maxTotal={maxTotal}
-              isExpanded={expandedType === t.type}
-              isDimmed={!cardMatchesFilter(t)}
-              correctnessFilter={correctnessFilter}
-              onToggle={() => handleCardClick(t.type)}
-              onViewRecords={onViewRecords}
-              runId={runId}
-              activeSubtype={activeSubtype}
-              badgeMatchesFilter={badgeMatchesFilter}
-              isUnknowns={isUnknowns}
-            />
-          );
-        })}
-      </div>
-      </>
-      )}
+            <div className="th-list">
+              {typeHealth.map(t => {
+                if (isCompare) {
+                  const cd = compareMap[t.type];
+                  return (
+                    <TypeHealthRowCompare
+                      key={t.type}
+                      typeData={t}
+                      typeData2={typeMap2[t.type] || null}
+                      compareData={cd || null}
+                      maxTotal={maxTotal}
+                      isExpanded={expandedType === t.type}
+                      isDimmed={!cardMatchesCompareFilter(t)}
+                      compareFilter={compareFilter}
+                      onToggle={() => handleCardClick(t.type)}
+                      onViewRecords={onViewRecords}
+                      runId={runId}
+                      runId2={runId2}
+                      run1Name={run1Name}
+                      run2Name={run2Name}
+                    />
+                  );
+                }
+                return (
+                  <TypeHealthRow
+                    key={t.type}
+                    typeData={t}
+                    maxTotal={maxTotal}
+                    isExpanded={expandedType === t.type}
+                    isDimmed={!cardMatchesFilter(t)}
+                    correctnessFilter={correctnessFilter}
+                    onToggle={() => handleCardClick(t.type)}
+                    onViewRecords={onViewRecords}
+                    runId={runId}
+                    activeSubtype={activeSubtype}
+                    badgeMatchesFilter={badgeMatchesFilter}
+                    isUnknowns={isUnknowns}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+      </CollapsibleSection>
     </div>
   );
 }

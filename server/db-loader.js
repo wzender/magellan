@@ -778,6 +778,115 @@ async function getSubtypeConfusionMatrix(runId, trueType, filter = null) {
   return { trueType, columns, rows };
 }
 
+async function getConfidenceQuality(runId, bins = 10) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return null;
+
+  const tbl = run.run_name;
+  const validBins = Number.isFinite(bins) ? Math.max(2, Math.min(20, Math.floor(bins))) : 10;
+
+  let rows;
+  try {
+    const result = await query(
+      `SELECT true_subtype, pred_subtype, confidence
+       FROM "${tbl}"
+       WHERE confidence IS NOT NULL`,
+      []
+    );
+    rows = result.rows;
+  } catch (err) {
+    // confidence column may not exist in older schemas
+    if (err.code === '42703' || isTableMissing(err)) return null;
+    throw err;
+  }
+
+  if (!rows || rows.length === 0) return null;
+
+  const total = rows.length;
+  const bucket = Array.from({ length: validBins }, (_, i) => ({
+    index: i,
+    start: i / validBins,
+    end: (i + 1) / validBins,
+    count: 0,
+    confSum: 0,
+    correctSum: 0,
+  }));
+
+  let confSum = 0;
+  let correctSum = 0;
+  let brierSum = 0;
+
+  rows.forEach(r => {
+    const raw = parseFloat(r.confidence);
+    if (!Number.isFinite(raw)) return;
+    const conf = Math.max(0, Math.min(1, raw));
+    const y = r.pred_subtype === r.true_subtype ? 1 : 0;
+    const idx = Math.min(validBins - 1, Math.floor(conf * validBins));
+    const b = bucket[idx];
+    b.count++;
+    b.confSum += conf;
+    b.correctSum += y;
+    confSum += conf;
+    correctSum += y;
+    brierSum += (conf - y) * (conf - y);
+  });
+
+  const effectiveTotal = bucket.reduce((s, b) => s + b.count, 0);
+  if (effectiveTotal === 0) return null;
+
+  let ece = 0;
+  let maxGap = 0;
+  let worstBin = null;
+  let overMass = 0;
+  let underMass = 0;
+
+  const binsOut = bucket.filter(b => b.count > 0).map(b => {
+    const avgConfidence = b.confSum / b.count;
+    const accuracy = b.correctSum / b.count;
+    const gap = Math.abs(accuracy - avgConfidence);
+    const weight = b.count / effectiveTotal;
+    ece += weight * gap;
+    if (gap > maxGap) {
+      maxGap = gap;
+      worstBin = b;
+    }
+    if (avgConfidence > accuracy) overMass += weight;
+    if (avgConfidence < accuracy) underMass += weight;
+    return {
+      index: b.index,
+      start: b.start,
+      end: b.end,
+      count: b.count,
+      avg_confidence: avgConfidence,
+      accuracy,
+      gap,
+    };
+  });
+
+  const worstRange = worstBin
+    ? `${worstBin.start.toFixed(1)}-${worstBin.end.toFixed(1)}`
+    : null;
+
+  let status = 'moderate';
+  if (ece < 0.03) status = 'good';
+  else if (ece >= 0.07) status = 'poor';
+
+  return {
+    n: effectiveTotal,
+    avg_confidence: confSum / effectiveTotal,
+    accuracy: correctSum / effectiveTotal,
+    ece,
+    brier: brierSum / effectiveTotal,
+    max_gap: maxGap,
+    worst_bin: worstRange,
+    overconfident_mass: overMass,
+    underconfident_mass: underMass,
+    status,
+    bins: binsOut,
+  };
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -794,4 +903,5 @@ module.exports = {
   getSubtypeConfusionMatrix,
   getCompareTypeHealth,
   getSubtypeTransitionMatrix,
+  getConfidenceQuality,
 };

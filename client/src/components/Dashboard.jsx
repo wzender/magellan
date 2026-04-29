@@ -150,12 +150,14 @@ function Dashboard() {
   const [leaderboard, setLeaderboard]   = useState([]);
   const [selectedRunIds, setSelectedRunIds] = useState([]);
   const [typeHealth, setTypeHealth]     = useState([]);
+  const [confidenceQuality, setConfidenceQuality] = useState(null);
   const [typeHealth2, setTypeHealth2]   = useState(null);
   const [compareTypeHealth, setCompareTypeHealth] = useState(null); // compare mode: per-type 4-outcome counts
   const [compareFilter, setCompareFilter] = useState(null); // null|'both_correct'|'run1_only'|'run2_only'|'both_wrong'
   const [recordQuery, setRecordQuery]     = useState(null);
   const [recordsData, setRecordsData]     = useState(null); // { data, pagination }
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsExpanded, setRecordsExpanded] = useState(true);
   const [loading, setLoading]           = useState(false);
   const [correctnessFilter, setCorrectnessFilter] = useState(new Set()); // Set of 'correct' | 'same_type' | 'cross_type'
 
@@ -204,9 +206,11 @@ function Dashboard() {
     setLeaderboard(lb);
     const champion = lb[0];
     setTypeHealth([]);
+    setConfidenceQuality(null);
     setTypeHealth2(null);
     setRecordQuery(null);
     setRecordsData(null);
+    setRecordsExpanded(true);
     setValidationRecords([]);
     setValidationVerdicts({});
     setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
@@ -330,12 +334,29 @@ function Dashboard() {
     load();
   }, [selectedRunIds[0], selectedRunIds[1]]);
 
+  /* ── confidence quality (single-run only) ── */
+  useEffect(() => {
+    if (selectedRunIds.length !== 1 || !selectedRunIds[0]) {
+      setConfidenceQuality(null);
+      return;
+    }
+    const runId = selectedRunIds[0];
+    fetch(`/api/confidence-quality?run_id=${runId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && !data.error) setConfidenceQuality(data);
+        else setConfidenceQuality(null);
+      })
+      .catch(() => setConfidenceQuality(null));
+  }, [selectedRunIds[0], selectedRunIds[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── row click: switch to this run as the only selected run ── */
   const handleRunSelect = (runId) => {
     setSelectedRunIds(prev => prev[0] === runId ? prev : [runId]);
     setTypeHealth2(null);
     setRecordQuery(null);
     setRecordsData(null);
+    setRecordsExpanded(true);
     setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
   };
 
@@ -351,6 +372,7 @@ function Dashboard() {
     });
     setRecordQuery(null);
     setRecordsData(null);
+    setRecordsExpanded(true);
     setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER);
   };
 
@@ -405,6 +427,7 @@ function Dashboard() {
     const isCompare = !!runId2;
     const isTypeLookup = !!(run1PredType || run2PredType);
     setRecordQuery({ runId: runId1, runId2, trueType, trueSubtype, predSubtype, run1PredSubtype, run2PredSubtype, run1PredType, run2PredType });
+    setRecordsExpanded(true);
     setRecordsLoading(true);
     setRecordsData(null);
     try {
@@ -575,6 +598,7 @@ function Dashboard() {
           {displayTypeHealth.length > 0 && (
             <TypeHealthGrid
               typeHealth={displayTypeHealth}
+              confidenceQuality={confidenceQuality}
               typeHealth2={typeHealth2}
               compareTypeHealth={compareTypeHealth}
               runId={selectedRunIds[0]}
@@ -619,40 +643,56 @@ function Dashboard() {
           )}
 
           {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
-            <div className="records-section" ref={recordsRef}>
-              <div className="records-section-header" ref={recordsHeaderRef}>
-                <div className="records-section-title">
-                  <span>{recordsTitle}</span>
-                  <span className="records-section-desc">Individual classified records — expand a row to see full attributes and metadata</span>
+            <section className={`collapsible-section records-section ${recordsExpanded ? 'is-open' : 'is-closed'}`} ref={recordsRef}>
+              <button
+                className="collapsible-section-header records-section-collapse-header"
+                ref={recordsHeaderRef}
+                onClick={() => setRecordsExpanded(prev => !prev)}
+                aria-expanded={recordsExpanded}
+              >
+                <span className="collapsible-section-titlewrap">
+                  <span className="collapsible-section-title">Record Details</span>
+                  <span className="collapsible-section-subtitle">Individual classified records — expand a row to see full attributes and metadata</span>
+                </span>
+                <span className="collapsible-section-icon" aria-hidden="true">{recordsExpanded ? '▾' : '▸'}</span>
+              </button>
+              {recordsExpanded && (
+                <div className="collapsible-section-body records-section-body">
+                  <div className="records-section-toolbar">
+                    <div className="records-section-titleblock">
+                      <span className="records-section-kicker">{recordsTitle}</span>
+                    </div>
+                    <button className="btn-close-viewer" onClick={() => {
+                      setCorrectnessFilter(new Set());
+                      setRecordQuery(null);
+                      setRecordsData(null);
+                      setRecordsExpanded(true);
+                      if (!isUnknownsBenchmark) {
+                        const runId1 = selectedRunIds[0];
+                        const runId2 = selectedRunIds[1] ?? null;
+                        setRecordQuery({ runId: runId1, runId2, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
+                        setRecordsLoading(true);
+                        fetchRecords(runId1, null, null, 50, null, runId2)
+                          .then(data => setRecordsData(data))
+                          .finally(() => setRecordsLoading(false));
+                      }
+                    }}>
+                      ↺ Show All
+                    </button>
+                  </div>
+                  {recordsLoading && <div className="viewer-loading">Loading records…</div>}
+                  {!recordsLoading && recordsData && (
+                    <RowLevelTable
+                      data={recordsData}
+                      run1Name={run1Name}
+                      run2Name={run2Name}
+                      showRun2Columns={!!recordQuery?.runId2}
+                      onExport={handleExportRecords}
+                    />
+                  )}
                 </div>
-                <button className="btn-close-viewer" onClick={() => {
-                  setCorrectnessFilter(new Set());
-                  setRecordQuery(null);
-                  setRecordsData(null);
-                  if (!isUnknownsBenchmark) {
-                    const runId1 = selectedRunIds[0];
-                    const runId2 = selectedRunIds[1] ?? null;
-                    setRecordQuery({ runId: runId1, runId2, trueType: null, trueSubtype: null, predSubtype: null, run1PredSubtype: null, run2PredSubtype: null });
-                    setRecordsLoading(true);
-                    fetchRecords(runId1, null, null, 50, null, runId2)
-                      .then(data => setRecordsData(data))
-                      .finally(() => setRecordsLoading(false));
-                  }
-                }}>
-                  ↺ Show All
-                </button>
-              </div>
-              {recordsLoading && <div className="viewer-loading">Loading records…</div>}
-              {!recordsLoading && recordsData && (
-                <RowLevelTable
-                  data={recordsData}
-                  run1Name={run1Name}
-                  run2Name={run2Name}
-                  showRun2Columns={!!recordQuery?.runId2}
-                  onExport={handleExportRecords}
-                />
               )}
-            </div>
+            </section>
           )}
         </div>
       )}

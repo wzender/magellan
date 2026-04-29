@@ -35,6 +35,22 @@ router.get('/compare-type-health', async (req, res) => {
 });
 
 /**
+ * GET /confidence-quality?run_id=...&bins=10
+ * Returns confidence calibration KPIs for one run.
+ */
+router.get('/confidence-quality', async (req, res) => {
+  try {
+    const { run_id, bins } = req.query;
+    if (!run_id) return res.status(400).json({ error: 'run_id is required' });
+    const data = await dbLoader.getConfidenceQuality(parseInt(run_id), bins ? parseInt(bins) : 10);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching confidence quality:', error);
+    res.status(500).json({ error: 'Failed to fetch confidence quality' });
+  }
+});
+
+/**
  * GET /subtype-transition?run_id1=...&run_id2=...&true_type=...&compare_filter=...
  * Returns subtype transition matrix for a run pair scoped to one type.
  */
