@@ -2,6 +2,7 @@
   "10": {
     "UNK-A001": "Admin",
     "UNK-A005": "Bank Transfer",
-    "UNK-A004": "Bank Transfer"
+    "UNK-A004": "Bank Transfer",
+    "UNK-A002": "Bulk"
   }
 }

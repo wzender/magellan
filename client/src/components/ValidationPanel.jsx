@@ -173,6 +173,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       if (sortConfig.key === 'verdict') {
         aVal = verdicts[a.request_id] || '';
         bVal = verdicts[b.request_id] || '';
+      } else if (sortConfig.key === 'true_type') {
+        const aSub = verdicts[a.request_id] || '';
+        const bSub = verdicts[b.request_id] || '';
+        aVal = countrySubtypes.find(o => o.subtype === aSub)?.type || '';
+        bVal = countrySubtypes.find(o => o.subtype === bSub)?.type || '';
       } else if (sortConfig.key === 'gpt_verdict') {
         aVal = gptResults[a.request_id]?.verdict || '';
         bVal = gptResults[b.request_id]?.verdict || '';
@@ -313,17 +318,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   /* ── export ── */
   const doExport = (kind) => {
-    const headers = ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata'];
-    const rows = filtered.map(r => [
-      r.request_id,
-      r.pred_type,
-      r.pred_subtype,
-      verdicts[r.request_id] || '',
-      gptResults[r.request_id]?.verdict || '',
-      gptResults[r.request_id]?.reasoning || '',
-      JSON.stringify(r.attributes ?? ''),
-      JSON.stringify(r.metadata ?? ''),
-    ]);
+    const headers = isRetag
+      ? ['request_id', 'pred_type', 'pred_subtype', 'true_subtype', 'true_type', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata']
+      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata'];
+    const rows = filtered.map(r => {
+      const trueSubtype = verdicts[r.request_id] || '';
+      const trueType = isRetag ? (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || '') : '';
+      return isRetag
+        ? [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, trueType, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
+    });
 
     if (kind === 'csv') {
       const csv = [headers.join(','), ...rows.map(r =>
@@ -440,8 +444,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 Request ID{sortIndicator('request_id')}
               </th>
               <th style={{ width: 150, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype')}>
-                Suggested Subtype{sortIndicator('pred_subtype')}
+                Pred Subtype{sortIndicator('pred_subtype')}
               </th>
+              {isRetag && (
+                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('pred_type')}>
+                  Pred Type{sortIndicator('pred_type')}
+                </th>
+              )}
               <th style={{ width: 250 }}>
                 <div className="header-cell">
                   Attributes
@@ -462,11 +471,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               </th>
               {isRetag ? (
                 <th style={{ width: 200, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                  Retag{sortIndicator('verdict')}
+                  True Subtype{sortIndicator('verdict')}
                 </th>
               ) : (
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                   Verdict{sortIndicator('verdict')}
+                </th>
+              )}
+              {isRetag && (
+                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('true_type')}>
+                  True Type{sortIndicator('true_type')}
                 </th>
               )}
               <th style={{ width: 80, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
@@ -481,9 +495,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               {!isRetag && <th />}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
+              {isRetag && <th />}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
               <th />
+              {isRetag && <th />}
               <th><input className="col-filter-input" placeholder="yes/no" value={colFilters.gpt_verdict} onChange={e => setColFilter('gpt_verdict', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.gpt_reasoning} onChange={e => setColFilter('gpt_reasoning', e.target.value)} /></th>
             </tr>
@@ -496,6 +512,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
               const effectiveSubtypeOptions = countrySubtypes;
 
+              const trueType = isRetag ? (countrySubtypes.find(o => o.subtype === verdict)?.type || '') : '';
               return (
                 <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
                   {!isRetag && (
@@ -505,6 +522,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   )}
                   <td className="cell-request-id">{r.request_id}</td>
                   <td><strong>{r.pred_subtype}</strong></td>
+                  {isRetag && <td>{r.pred_type || ''}</td>}
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
                   {isRetag ? (
@@ -531,6 +549,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       </div>
                     </td>
                   )}
+                  {isRetag && <td className="cell-true-type">{trueType}</td>}
                   <td className={`cell-gpt-verdict${gpt ? ` gpt-verdict-${gpt.verdict}` : ''}`}>
                     {gpt ? gpt.verdict : ''}
                   </td>

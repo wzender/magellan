@@ -5,7 +5,7 @@
  */
 require('dotenv').config();
 
-const wantsPostgres = (process.env.DATA_SOURCE || 'postgres').toLowerCase() === 'postgres';
+const wantsPostgres = (process.env.DATA_SOURCE || 'csv').toLowerCase() === 'postgres';
 const hasDbUrl      = !!process.env.DATABASE_URL;
 
 if (wantsPostgres && hasDbUrl) {
