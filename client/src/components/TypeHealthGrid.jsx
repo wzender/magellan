@@ -1048,7 +1048,7 @@ function ConfidenceScoreboard({ confidenceQuality }) {
   );
 }
 
-function ReliabilityPlot({ bins }) {
+function ReliabilityPlot({ bins, activeHint }) {
   const chartBins = Array.isArray(bins) ? bins : [];
   if (chartBins.length === 0) return <div className="matrix-empty">No confidence bins</div>;
 
@@ -1068,6 +1068,33 @@ function ReliabilityPlot({ bins }) {
     .map((bin, i) => `${i === 0 ? 'M' : 'L'} ${x(bin.avg_confidence).toFixed(2)} ${y(bin.accuracy).toFixed(2)}`)
     .join(' ');
 
+  const maxCount = Math.max(...chartBins.map(b => b.count), 1);
+  const totalCount = Math.max(chartBins.reduce((s, b) => s + b.count, 0), 1);
+  const ece = chartBins.reduce((s, b) => s + (b.count / totalCount) * Math.abs(b.accuracy - b.avg_confidence), 0);
+  const worstBin = chartBins.reduce((w, b) =>
+    Math.abs(b.accuracy - b.avg_confidence) > Math.abs(w.accuracy - w.avg_confidence) ? b : w
+  , chartBins[0]);
+  const weightedBias = chartBins.reduce((s, b) => s + (b.count / totalCount) * (b.avg_confidence - b.accuracy), 0);
+  const maxAbsGap = Math.max(...chartBins.map(b => Math.abs(b.accuracy - b.avg_confidence)), 0.0001);
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const biasIsNeutral = Math.abs(weightedBias) < 0.005;
+  const biasIsOver = weightedBias > 0.005;
+  const bandSteps = 40;
+  const eceBandTop = [];
+  const eceBandBottom = [];
+  for (let i = 0; i <= bandSteps; i += 1) {
+    const v = i / bandSteps;
+    eceBandTop.push(`${x(v).toFixed(2)} ${y(clamp01(v + ece)).toFixed(2)}`);
+    eceBandBottom.push(`${x(v).toFixed(2)} ${y(clamp01(v - ece)).toFixed(2)}`);
+  }
+  const eceBandPath = `M ${eceBandTop.join(' L ')} L ${eceBandBottom.reverse().join(' L ')} Z`;
+  const bottomLeft = `${x(0).toFixed(2)} ${y(0).toFixed(2)}`;
+  const topLeft = `${x(0).toFixed(2)} ${y(1).toFixed(2)}`;
+  const topRight = `${x(1).toFixed(2)} ${y(1).toFixed(2)}`;
+  const bottomRight = `${x(1).toFixed(2)} ${y(0).toFixed(2)}`;
+  const underBiasRegionPath = `M ${bottomLeft} L ${topLeft} L ${topRight} Z`;
+  const overBiasRegionPath = `M ${bottomLeft} L ${bottomRight} L ${topRight} Z`;
+
   return (
     <div className="confq-card confq-reliability-card">
       <div className="confq-card-header">
@@ -1076,6 +1103,24 @@ function ReliabilityPlot({ bins }) {
       </div>
       <div className="confq-plot-wrap">
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="confq-plot" role="img" aria-label="Confidence reliability plot">
+          {activeHint === 'bias' && (
+            <>
+              <path
+                d={underBiasRegionPath}
+                style={{
+                  fill: 'rgba(16,185,129,0.12)',
+                  opacity: weightedBias < -0.005 ? 0.9 : 0.35,
+                }}
+              />
+              <path
+                d={overBiasRegionPath}
+                style={{
+                  fill: 'rgba(239,68,68,0.12)',
+                  opacity: weightedBias > 0.005 ? 0.9 : 0.35,
+                }}
+              />
+            </>
+          )}
           <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)} className="confq-diagonal" />
           
           {/* Zone watermarks */}
@@ -1085,8 +1130,7 @@ function ReliabilityPlot({ bins }) {
             textAnchor="start"
             dominantBaseline="hanging"
             className="confq-zone-stamp confq-zone-stamp-info"
-            fontSize="0.04em"
-            opacity="0.35"
+            style={{ fontSize: '16px', opacity: 0.35 }}
           >Underconfident</text>
           <text
             x={width - padRight - 6}
@@ -1094,8 +1138,7 @@ function ReliabilityPlot({ bins }) {
             textAnchor="end"
             dominantBaseline="baseline"
             className="confq-zone-stamp confq-zone-stamp-warn"
-            fontSize="0.04em"
-            opacity="0.35"
+            style={{ fontSize: '16px', opacity: 0.35 }}
           >Overconfident</text>
           
           {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
@@ -1120,13 +1163,66 @@ function ReliabilityPlot({ bins }) {
           <text x={width / 2} y={height - 6} textAnchor="middle" className="confq-axis-title">
             Confidence (%)
           </text>
+
+          {activeHint === 'ece' && (
+            <path
+              d={eceBandPath}
+              style={{
+                fill: 'rgba(59,130,246,0.12)',
+                stroke: 'rgba(59,130,246,0.32)',
+                strokeWidth: 1,
+              }}
+            >
+              <title>{`Global ECE band: ±${(ece * 100).toFixed(1)}% around perfect calibration`}</title>
+            </path>
+          )}
           
           <path d={reliabilityPath} className="confq-reliability-line" />
           {chartBins.map((bin) => {
             const centerX = x(bin.avg_confidence);
             const centerY = y(bin.accuracy);
             const refY = y(bin.avg_confidence);
-            const gapCls = bin.accuracy < bin.avg_confidence ? 'confq-gap-over' : 'confq-gap-under';
+            const absGap = Math.abs(bin.accuracy - bin.avg_confidence);
+            const isOver = bin.accuracy < bin.avg_confidence;
+            const isWorst = !!worstBin && bin.start === worstBin.start;
+            let lineOpacity = 0.4;
+            let dotOpacity = 1;
+            let lineStroke = 'rgba(148,163,184,0.75)';
+            let lineStrokeWidth = activeHint === 'ece' ? 2.4 : 2;
+            let dotStyle = { opacity: dotOpacity };
+
+            if (activeHint === 'max') {
+              lineOpacity = isWorst ? 1 : 0.15;
+              dotOpacity = isWorst ? 1 : 0.2;
+            } else if (activeHint === 'bias') {
+              const targetIsOver = weightedBias >= 0;
+              const inBiasDirection = targetIsOver ? isOver : !isOver;
+              lineOpacity = inBiasDirection ? 1 : 0.18;
+              dotOpacity = inBiasDirection ? 1 : 0.25;
+            } else if (activeHint === 'std') {
+              const heatRatio = absGap / maxAbsGap;
+              const heatRed = Math.round(148 + (249 - 148) * heatRatio);
+              const heatGreen = Math.round(163 + (115 - 163) * heatRatio);
+              const heatBlue = Math.round(184 + (22 - 184) * heatRatio);
+              lineOpacity = 0.3 + 0.7 * heatRatio;
+              dotOpacity = 0.45 + 0.55 * heatRatio;
+              lineStroke = `rgba(${heatRed},${heatGreen},${heatBlue},0.95)`;
+              lineStrokeWidth = 1.6 + 2.4 * heatRatio;
+              dotStyle = {
+                opacity: dotOpacity,
+                fill: `rgba(${heatRed},${heatGreen},${heatBlue},0.95)`,
+                stroke: 'rgba(255,255,255,0.95)',
+                strokeWidth: 0.8 + 1.2 * heatRatio,
+              };
+            } else if (activeHint === 'ece') {
+              lineOpacity = 1;
+              dotOpacity = 0.9;
+            }
+
+            if (activeHint !== 'std') {
+              dotStyle = { opacity: dotOpacity };
+            }
+
             return (
               <g key={`${bin.start}-${bin.end}`}>
                 <line
@@ -1134,12 +1230,23 @@ function ReliabilityPlot({ bins }) {
                   y1={refY}
                   x2={centerX}
                   y2={centerY}
-                  className={gapCls}
+                  style={{
+                    opacity: lineOpacity,
+                    strokeWidth: lineStrokeWidth,
+                    stroke: lineStroke,
+                    strokeDasharray: '3 2',
+                  }}
                 >
                   <title>{`${bin.start.toFixed(1)}-${bin.end.toFixed(1)} | n=${bin.count} | conf ${(bin.avg_confidence * 100).toFixed(1)}% | acc ${(bin.accuracy * 100).toFixed(1)}%`}</title>
                 </line>
-                <circle cx={centerX} cy={centerY} r="4.5" className="confq-bin-dot">
-                  <title>{`${bin.start.toFixed(1)}-${bin.end.toFixed(1)} | n=${bin.count} | conf ${(bin.avg_confidence * 100).toFixed(1)}% | acc ${(bin.accuracy * 100).toFixed(1)}%`}</title>
+                <circle
+                  cx={centerX}
+                  cy={centerY}
+                  r={(Math.max(2.5, Math.min(8, 2.5 + (bin.count / maxCount) * 5.5))).toFixed(2)}
+                  className={`confq-bin-dot${activeHint === 'max' && worstBin && bin.start === worstBin.start ? ' confq-bin-dot-worst' : ''}`}
+                  style={dotStyle}
+                >
+                  <title>{`${bin.start.toFixed(1)}-${bin.end.toFixed(1)} | n=${bin.count} | conf ${(bin.avg_confidence * 100).toFixed(1)}% | acc ${(bin.accuracy * 100).toFixed(1)}%${activeHint === 'max' && worstBin && bin.start === worstBin.start ? ' ← worst bin' : ''}`}</title>
                 </circle>
               </g>
             );
@@ -1150,7 +1257,7 @@ function ReliabilityPlot({ bins }) {
   );
 }
 
-function ConfidenceCalibrationCard({ confidenceQuality }) {
+function ConfidenceCalibrationCard({ confidenceQuality, activeHint, onMetricHover, onMetricLeave }) {
   if (!confidenceQuality || !confidenceQuality.n) return null;
 
   const bins = Array.isArray(confidenceQuality?.bins) ? confidenceQuality.bins : [];
@@ -1242,22 +1349,46 @@ function ConfidenceCalibrationCard({ confidenceQuality }) {
         <span className="confq-card-subtitle">ECE, bias, dispersion, and worst gap</span>
       </div>
       <div className="confq-metrics-grid">
-        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={eceTip}>
+        <div
+          className="confq-metric-tile confq-has-tooltip"
+          data-tooltip={eceTip}
+          onMouseEnter={() => onMetricHover && onMetricHover('ece')}
+          onMouseLeave={() => onMetricLeave && onMetricLeave()}
+          style={activeHint === 'ece' ? { boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.5)' } : {}}
+        >
           <span className="confq-metric-tile-label">ECE</span>
           <span className="confq-metric-tile-value">{pctMetric(ece)}</span>
           <span className="confq-metric-tile-sub">{eceSub}</span>
         </div>
-        <div className={`confq-metric-tile confq-has-tooltip ${biasCls}`} data-tooltip={biasTip}>
+        <div
+          className={`confq-metric-tile confq-has-tooltip ${biasCls}`}
+          data-tooltip={biasTip}
+          onMouseEnter={() => onMetricHover && onMetricHover('bias')}
+          onMouseLeave={() => onMetricLeave && onMetricLeave()}
+          style={activeHint === 'bias' ? { boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.5)' } : {}}
+        >
           <span className="confq-metric-tile-label">Bias</span>
           <span className="confq-metric-tile-value">{biasSign}{pctMetric(bias)}</span>
           <span className="confq-metric-tile-sub">{biasSub}</span>
         </div>
-        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={stdTip}>
+        <div
+          className="confq-metric-tile confq-has-tooltip"
+          data-tooltip={stdTip}
+          onMouseEnter={() => onMetricHover && onMetricHover('std')}
+          onMouseLeave={() => onMetricLeave && onMetricLeave()}
+          style={activeHint === 'std' ? { boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.5)' } : {}}
+        >
           <span className="confq-metric-tile-label">StdGap</span>
           <span className="confq-metric-tile-value">{pctMetric(stdGap)}</span>
           <span className="confq-metric-tile-sub">{stdSub}</span>
         </div>
-        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={maxTip}>
+        <div
+          className="confq-metric-tile confq-has-tooltip"
+          data-tooltip={maxTip}
+          onMouseEnter={() => onMetricHover && onMetricHover('max')}
+          onMouseLeave={() => onMetricLeave && onMetricLeave()}
+          style={activeHint === 'max' ? { boxShadow: 'inset 0 0 0 2px rgba(59,130,246,0.5)' } : {}}
+        >
           <span className="confq-metric-tile-label">MaxGap</span>
           <span className="confq-metric-tile-value">{pctMetric(maxGap)}</span>
           <span className="confq-metric-tile-sub">{maxSub}</span>
@@ -1355,6 +1486,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-good"
+            style={{ fontSize: '16px', opacity: 0.35 }}
           >Optimal</text>
           <text
             x={(x(0) + x(0.65)) / 2}
@@ -1362,6 +1494,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-tradeoff"
+            style={{ fontSize: '16px', opacity: 0.35 }}
           >Tradeoff</text>
           <text
             x={(x(0.65) + x(1)) / 2}
@@ -1369,6 +1502,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-risk"
+            style={{ fontSize: '16px', opacity: 0.35 }}
           >Risk</text>
 
           {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
@@ -1471,13 +1605,20 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
 function ConfidenceQualityPanel({ confidenceQuality }) {
   if (!confidenceQuality || !confidenceQuality.n) return null;
 
+  const [activeHint, setActiveHint] = useState(null);
+
   return (
     <div className="confq-panel">
       <div className="confq-panel-row">
         <div className="confq-col confq-col-50">
           <div className="confq-left-col">
-            <ConfidenceCalibrationCard confidenceQuality={confidenceQuality} />
-            <ReliabilityPlot bins={confidenceQuality.bins} />
+            <ConfidenceCalibrationCard
+              confidenceQuality={confidenceQuality}
+              activeHint={activeHint}
+              onMetricHover={setActiveHint}
+              onMetricLeave={() => setActiveHint(null)}
+            />
+            <ReliabilityPlot bins={confidenceQuality.bins} activeHint={activeHint} />
           </div>
         </div>
         <div className="confq-col confq-col-50">

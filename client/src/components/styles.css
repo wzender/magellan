@@ -1052,6 +1052,19 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   stroke-width: 2;
 }
 
+.confq-bin-dot-worst {
+  fill: #f97316;
+  stroke: white;
+  stroke-width: 2;
+}
+
+.confq-bin-worst-label {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #f97316;
+  pointer-events: none;
+}
+
 .confq-zone-tradeoff {
   fill: rgba(245, 158, 11, 0.08);
 }
