@@ -887,6 +887,114 @@ async function getConfidenceQuality(runId, bins = 10) {
   };
 }
 
+async function getCalibrationPerType(runId, bins = 10) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return [];
+
+  const tbl = run.run_name;
+  const validBins = Number.isFinite(bins) ? Math.max(2, Math.min(20, Math.floor(bins))) : 10;
+
+  let rows;
+  try {
+    const result = await query(
+      `SELECT true_type, true_subtype, pred_subtype, confidence
+       FROM "${tbl}"
+       WHERE confidence IS NOT NULL`,
+      []
+    );
+    rows = result.rows;
+  } catch (err) {
+    // confidence column may not exist in older schemas
+    if (err.code === '42703' || isTableMissing(err)) return [];
+    throw err;
+  }
+
+  if (!rows || rows.length === 0) return [];
+
+  const typeMap = {};
+
+  rows.forEach(r => {
+    const raw = parseFloat(r.confidence);
+    if (!Number.isFinite(raw)) return;
+    const conf = Math.max(0, Math.min(1, raw));
+    if (!typeMap[r.true_type]) typeMap[r.true_type] = [];
+    typeMap[r.true_type].push({
+      confidence: conf,
+      isCorrect: r.pred_subtype === r.true_subtype,
+    });
+  });
+
+  return Object.entries(typeMap)
+    .map(([type, typeResults]) => {
+      const n = typeResults.length;
+      const correctCount = typeResults.filter(r => r.isCorrect).length;
+      const accuracy = correctCount / n;
+
+      const bucket = Array.from({ length: validBins }, (_, i) => ({
+        index: i,
+        start: i / validBins,
+        end: (i + 1) / validBins,
+        count: 0,
+        confSum: 0,
+        correctSum: 0,
+      }));
+
+      let confSum = 0;
+      let brierSum = 0;
+
+      typeResults.forEach(r => {
+        const conf = r.confidence;
+        const y = r.isCorrect ? 1 : 0;
+        const idx = Math.min(validBins - 1, Math.floor(conf * validBins));
+        const b = bucket[idx];
+        b.count++;
+        b.confSum += conf;
+        b.correctSum += y;
+
+        confSum += conf;
+        brierSum += (conf - y) * (conf - y);
+      });
+
+      let ece = 0;
+      let maxGap = 0;
+      let overconfidentMass = 0;
+      let underconfidentMass = 0;
+
+      bucket.forEach(b => {
+        if (b.count > 0) {
+          const avgConfidence = b.confSum / b.count;
+          const binAccuracy = b.correctSum / b.count;
+          const gap = Math.abs(binAccuracy - avgConfidence);
+          const weight = b.count / n;
+          ece += weight * gap;
+          maxGap = Math.max(maxGap, gap);
+
+          if (avgConfidence > binAccuracy) overconfidentMass += weight;
+          if (avgConfidence < binAccuracy) underconfidentMass += weight;
+        }
+      });
+
+      let status = 'moderate';
+      if (ece < 0.03) status = 'good';
+      else if (ece >= 0.07) status = 'poor';
+
+      return {
+        type,
+        n,
+        accuracy,
+        avg_confidence: confSum / n,
+        ece,
+        brier: brierSum / n,
+        max_gap: maxGap,
+        overconfident_mass: overconfidentMass,
+        underconfident_mass: underconfidentMass,
+        status,
+      };
+    })
+    .sort((a, b) => a.ece - b.ece);
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -904,4 +1012,5 @@ module.exports = {
   getCompareTypeHealth,
   getSubtypeTransitionMatrix,
   getConfidenceQuality,
+  getCalibrationPerType,
 };

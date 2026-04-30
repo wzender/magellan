@@ -691,6 +691,7 @@ function Dashboard() {
                   {!recordsLoading && recordsData && (
                     <RowLevelTable
                       data={recordsData}
+                      runId={recordQuery?.runId ?? null}
                       run1Name={run1Name}
                       run2Name={run2Name}
                       showRun2Columns={!!recordQuery?.runId2}

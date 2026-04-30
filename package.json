@@ -9,7 +9,8 @@
     "test": "jest --detectOpenHandles",
     "test:backend": "jest server/",
     "test:frontend": "jest client/",
-    "mock-seed": "node server/mock/seedDatabase.js"
+    "mock-seed": "node server/mock/seedDatabase.js",
+    "sync:csv:postgres": "node server/sync-csv-to-postgres.js"
   },
   "keywords": [
     "classification",

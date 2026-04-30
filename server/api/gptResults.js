@@ -18,6 +18,26 @@ const usePostgres = (process.env.DATA_SOURCE || 'postgres').toLowerCase() === 'p
 const { query }         = usePostgres ? require('../db') : {};
 const { getGptResults, updateGptResults } = usePostgres ? {} : require('../csv-loader');
 
+let postgresStoreReady = false;
+
+async function ensurePostgresStore() {
+  if (!usePostgres || postgresStoreReady) return;
+
+  // Create table/constraint once so behavior matches CSV persistence (works out of the box).
+  await query(`
+    CREATE TABLE IF NOT EXISTS gpt_results (
+      run_id INTEGER NOT NULL,
+      request_id TEXT NOT NULL,
+      verdict TEXT,
+      reasoning TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (run_id, request_id)
+    )
+  `);
+
+  postgresStoreReady = true;
+}
+
 /** GET /api/gpt-results?run_id=X — returns { request_id: { verdict, reasoning } } */
 router.get('/gpt-results', async (req, res) => {
   const run_id = parseInt(req.query.run_id, 10);
@@ -25,8 +45,9 @@ router.get('/gpt-results', async (req, res) => {
 
   try {
     if (usePostgres) {
+      await ensurePostgresStore();
       const result = await query(
-        'SELECT request_id, verdict, reasoning FROM gpt_results WHERE run_id = $1',
+        'SELECT request_id, verdict, reasoning FROM gpt_results WHERE run_id = $1 AND COALESCE(verdict, \'\') <> \'\'',
         [run_id]
       );
       const out = {};
@@ -50,6 +71,7 @@ router.put('/gpt-results', async (req, res) => {
 
   try {
     if (usePostgres) {
+      await ensurePostgresStore();
       for (const [request_id, { verdict, reasoning }] of Object.entries(results)) {
         await query(
           `INSERT INTO gpt_results (run_id, request_id, verdict, reasoning, updated_at)

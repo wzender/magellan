@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'en_attributes', 'metadata', 'en_metadata'];
+const NON_FILTER_SORT_KEYS = new Set(['ask_gpt']);
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, runId = null }) {
   const [currentPage, setCurrentPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
@@ -20,7 +21,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { label: 'Actual', colspan: 2, isGroup: true },
             { label: run1Label, colspan: 2, isGroup: true },
             { label: run2Label, colspan: 2, isGroup: true },
-            { label: 'Details', colspan: 2, isGroup: true }
+            { label: 'Details', colspan: 2, isGroup: true },
+            { label: 'LLM', colspan: 1, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
@@ -31,7 +33,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'run2_pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'run2_pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false },
+            { key: 'ask_gpt', label: 'Ask GPT', width: 260, isGroup: false }
           ]
         ],
         columns: [
@@ -43,7 +46,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'run2_pred_type', label: 'Predicted Type', width: 100 },
           { key: 'run2_pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'attributes', label: 'Attributes', width: '25vw' },
-          { key: 'metadata', label: 'Metadata', width: '25vw' }
+          { key: 'metadata', label: 'Metadata', width: '25vw' },
+          { key: 'ask_gpt', label: 'Ask GPT', width: 260 }
         ]
       };
     } else {
@@ -53,7 +57,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { label: '', colspan: 1, isGroup: false },
             { label: 'Actual', colspan: 2, isGroup: true },
             { label: 'Predicted', colspan: 2, isGroup: true },
-            { label: 'Details', colspan: 2, isGroup: true }
+            { label: 'Details', colspan: 2, isGroup: true },
+            { label: 'LLM', colspan: 1, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
@@ -62,7 +67,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false },
+            { key: 'ask_gpt', label: 'Ask GPT', width: 260, isGroup: false }
           ]
         ],
         columns: [
@@ -72,7 +78,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'pred_type', label: 'Predicted Type', width: 100 },
           { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'attributes', label: 'Attributes', width: '25vw' },
-          { key: 'metadata', label: 'Metadata', width: '25vw' }
+          { key: 'metadata', label: 'Metadata', width: '25vw' },
+          { key: 'ask_gpt', label: 'Ask GPT', width: 260 }
         ]
       };
     }
@@ -91,6 +98,28 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setColumnFilters({});
   }, [data]);
 
+  useEffect(() => {
+    if (!runId) {
+      setAskGptByRequest({});
+      return;
+    }
+    fetch(`/api/gpt-results?run_id=${runId}`)
+      .then(r => r.json())
+      .then(saved => {
+        const mapped = {};
+        Object.entries(saved || {}).forEach(([requestId, value]) => {
+          mapped[requestId] = {
+            text: '',
+            subtype: value?.verdict || null,
+            reason: value?.reasoning || null,
+            error: null,
+          };
+        });
+        setAskGptByRequest(mapped);
+      })
+      .catch(() => setAskGptByRequest({}));
+  }, [runId]);
+
   const [attrLang, setAttrLang] = useState('original');
   const [metaLang, setMetaLang] = useState('original');
   const [columnFilters, setColumnFilters] = useState({});
@@ -101,6 +130,8 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [copiedCell, setCopiedCell] = useState(null);
   const [exporting, setExporting] = useState(false); // 'csv' | 'excel' | false
   const [addingAllToRetag, setAddingAllToRetag] = useState(false);
+  const [askGptByRequest, setAskGptByRequest] = useState({});
+  const [askGptLoading, setAskGptLoading] = useState({});
   const tableRef = useRef(null);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
@@ -340,6 +371,71 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
   };
 
+  const getAskText = (requestId) => {
+    const v = askGptByRequest[requestId];
+    if (!v) return 'Prompt output will appear here';
+    if (v.error) return `Error: ${v.error}`;
+    if (v.subtype) {
+      const subtype = v.subtype ? `SUBTYPE: ${v.subtype}` : '';
+      const reason = v.reason ? `REASON: ${v.reason}` : '';
+      return [subtype, reason].filter(Boolean).join(' | ');
+    }
+    if (v.reason) return v.reason;
+    return v.text || 'No response text';
+  };
+
+  const handleAskGpt = async (record) => {
+    const requestId = record.request_id;
+    setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
+    try {
+      const res = await fetch('/api/ask-gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attributes: record.attributes,
+          metadata: record.metadata,
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok || payload.error) {
+        throw new Error(payload.error || `Request failed (${res.status})`);
+      }
+      setAskGptByRequest(prev => ({
+        ...prev,
+        [requestId]: {
+          text: payload.text || '',
+          subtype: payload.subtype || null,
+          reason: payload.reason || null,
+          error: null,
+        },
+      }));
+
+      if (runId) {
+        const persisted = {
+          verdict: payload.subtype || '',
+          reasoning: payload.reason || payload.text || '',
+        };
+        fetch('/api/gpt-results', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run_id: runId, results: { [requestId]: persisted } }),
+        }).catch(() => {});
+      }
+    } catch (err) {
+      setAskGptByRequest(prev => ({
+        ...prev,
+        [requestId]: {
+          text: '',
+          subtype: null,
+          reason: null,
+          error: err.message || 'Failed to ask GPT',
+        },
+      }));
+    } finally {
+      setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
+    }
+  };
+
   return (
     <div className="row-level-table-panel" ref={panelRef}>
       <div className="table-toolbar" ref={toolbarRef}>
@@ -403,7 +499,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                       onDragOver={!col.isGroup && rowIndex === columns.headerRows.length - 1 ? handleDragOver : undefined}
                       onDrop={event => !col.isGroup && rowIndex === columns.headerRows.length - 1 && handleDrop(actualIndex, event)}
                       onClick={() => {
-                        if (!col.isGroup && rowIndex === columns.headerRows.length - 1 && col.key && !JSON_KEYS.includes(col.key)) {
+                        if (!col.isGroup && rowIndex === columns.headerRows.length - 1 && col.key && !JSON_KEYS.includes(col.key) && !NON_FILTER_SORT_KEYS.has(col.key)) {
                           setSortConfig(prev => ({
                             key: col.key,
                             direction: prev.key === col.key && prev.direction === 'asc' ? 'desc' : 'asc'
@@ -444,7 +540,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             <tr className="column-filter-row">
               {columns.columns.map((col, i) => (
                 <th key={`filter-${i}`}>
-                  {col.key && !JSON_KEYS.includes(col.key) ? (
+                  {col.key && !JSON_KEYS.includes(col.key) && !NON_FILTER_SORT_KEYS.has(col.key) ? (
                     <input
                       className="column-filter-input"
                       type="text"
@@ -509,6 +605,26 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'metadata': {
                       const metaObj = metaLang === 'en' ? record.en_metadata : record.metadata;
                       return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(metaObj, `${record.id}-metadata`, 'Metadata')}</td>;
+                    }
+                    case 'ask_gpt': {
+                      const loading = !!askGptLoading[record.request_id];
+                      return (
+                        <td key={`${record.id}-ask_gpt`} className="ask-gpt-td">
+                          <div className="ask-gpt-cell">
+                            <div className="ask-gpt-placeholder">{getAskText(record.request_id)}</div>
+                            <button
+                              className="ask-gpt-row-btn"
+                              disabled={loading}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAskGpt(record);
+                              }}
+                            >
+                              {loading ? 'Asking…' : 'Ask GPT'}
+                            </button>
+                          </div>
+                        </td>
+                      );
                     }
                     default:
                       return <td key={`${record.id}-${col.key}`}>-</td>;

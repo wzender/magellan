@@ -1,21 +1,79 @@
 #!/usr/bin/env node
 /**
- * Sync CSV data into PostgreSQL.
- * 1. Updates subtype_accuracy + nof_items in "leaderboard-table" from leaderboard.csv
- * 2. Updates pred_type + pred_subtype in each per-run table from runs/*.csv
+ * Align PostgreSQL with CSV (CSV is source of truth).
+ * - Rebuilds/updates "leaderboard-table" rows from data/leaderboard.csv
+ * - Rebuilds per-run tables from data/runs/*.csv
+ * - Ensures confidence and other CSV columns are copied
+ * - Removes stale Postgres run tables not present in CSV leaderboard
  */
 
 require('dotenv').config();
 const fs   = require('fs');
 const path = require('path');
 const csv  = require('csv-parse/sync');
-const { query, pool } = require('./db');
+const { query, pool, getClient } = require('./db');
 
 const DATA_DIR = path.join(__dirname, '../data');
 const RUNS_DIR = path.join(DATA_DIR, 'runs');
 
 function sanitize(name) {
   return name.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function qident(id) {
+  return `"${String(id).replace(/"/g, '""')}"`;
+}
+
+function toJsonOrNull(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function toNumOrNull(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = parseFloat(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function ensureLeaderboardTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS "leaderboard-table" (
+      run_id           TEXT PRIMARY KEY,
+      nof_items        INTEGER,
+      subtype_accuracy NUMERIC(10, 6),
+      description      TEXT,
+      benchmark        TEXT
+    )
+  `);
+
+  // Ensure required columns exist for older installs.
+  await query(`ALTER TABLE "leaderboard-table" ADD COLUMN IF NOT EXISTS benchmark TEXT`);
+}
+
+async function recreateRunTable(tableName) {
+  const qt = qident(tableName);
+  await query(`DROP TABLE IF EXISTS ${qt}`);
+  await query(`
+    CREATE TABLE ${qt} (
+      request_id    TEXT,
+      true_type     TEXT,
+      true_subtype  TEXT,
+      pred_type     TEXT,
+      pred_subtype  TEXT,
+      attributes    JSONB,
+      en_attributes JSONB,
+      metadata      JSONB,
+      en_metadata   JSONB,
+      confidence    DOUBLE PRECISION,
+      gpt_verdict   TEXT,
+      gpt_reasoning TEXT
+    )
+  `);
 }
 
 async function main() {
@@ -32,99 +90,114 @@ async function main() {
     if (!seenBenchmarks[name]) seenBenchmarks[name] = Object.keys(seenBenchmarks).length + 1;
   });
 
-  // ── 2. Load current leaderboard-table from Postgres ───────────────────────
-  const pgLeaderboard = await query(
-    `SELECT run_id, description, benchmark FROM "leaderboard-table" ORDER BY run_id`
-  );
+  await ensureLeaderboardTable();
 
-  let lbUpdated = 0;
-  let rowsUpdated = 0;
+  const expectedTables = new Set();
+  let runTablesSynced = 0;
+  let totalRowsInserted = 0;
 
-  for (const pgRow of pgLeaderboard.rows) {
-    const pgTable      = pgRow.run_id;
-    const pgDesc       = pgRow.description;   // matches CSV run_name
-    const pgBenchmark  = pgRow.benchmark;
-
-    // Find matching CSV leaderboard row
-    const csvLb = lbRows.find(r =>
-      (r.benchmark || r.run_name) === pgBenchmark && r.run_name === pgDesc
-    );
-
-    if (!csvLb) {
-      console.log(`  ⚠ No CSV match for "${pgBenchmark}" / "${pgDesc}" — skipping`);
-      continue;
-    }
-
-    // ── 2a. Update leaderboard-table accuracy ──────────────────────────────
-    const newAccuracy = parseFloat(csvLb.subtype_accuracy);
-
-    // Find the run CSV file
-    const benchmarkId = seenBenchmarks[pgBenchmark];
+  for (const csvLb of lbRows) {
+    const benchmark = csvLb.benchmark || csvLb.run_name;
+    const benchmarkId = seenBenchmarks[benchmark];
     const runFileName = `${benchmarkId}_${sanitize(csvLb.run_name)}.csv`;
     const runFilePath = path.join(RUNS_DIR, runFileName);
 
-    let nofItems = null;
-    if (fs.existsSync(runFilePath)) {
-      const runRecords = csv.parse(
-        fs.readFileSync(runFilePath, 'utf-8'),
-        { columns: true, skip_empty_lines: true }
-      );
-      nofItems = runRecords.length;
-
-      // ── 2b. Update pred_type / pred_subtype in per-run PG table ───────────
-      // Check which id column exists
-      const colRes = await query(
-        `SELECT column_name FROM information_schema.columns
-         WHERE table_schema = current_schema() AND table_name = $1
-           AND column_name IN ('request_id','record_id')
-         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
-        [pgTable]
-      );
-
-      if (colRes.rows.length > 0) {
-        const idCol = colRes.rows[0].column_name;
-
-        // Batch updates in a single transaction
-        await pool.query('BEGIN');
-        try {
-          for (const rec of runRecords) {
-            const reqId = rec.request_id;
-            const res = await query(
-              `UPDATE "${pgTable}"
-               SET pred_type = $1, pred_subtype = $2
-               WHERE ${idCol} = $3
-                 AND (pred_type IS DISTINCT FROM $1 OR pred_subtype IS DISTINCT FROM $2)`,
-              [rec.pred_type, rec.pred_subtype, reqId]
-            );
-            rowsUpdated += res.rowCount;
-          }
-          await pool.query('COMMIT');
-          console.log(`  ✓ ${pgTable}: updated predictions (${rowsUpdated} rows changed so far)`);
-        } catch (err) {
-          await pool.query('ROLLBACK');
-          throw err;
-        }
-      } else {
-        console.log(`  ⚠ No id column found in "${pgTable}" — skipping row updates`);
-      }
-    } else {
-      console.log(`  ⚠ Run file not found: ${runFileName} — skipping row updates`);
+    if (!fs.existsSync(runFilePath)) {
+      console.log(`  ⚠ Run file not found: ${runFileName} — skipping`);
+      continue;
     }
 
-    // Update leaderboard accuracy + nof_items
-    const updateRes = await query(
-      `UPDATE "leaderboard-table"
-       SET subtype_accuracy = $1 ${nofItems !== null ? ', nof_items = $3' : ''}
-       WHERE run_id = $2`,
-      nofItems !== null ? [newAccuracy, pgTable, nofItems] : [newAccuracy, pgTable]
+    const runTable = runFileName.replace(/\.csv$/i, '');
+    expectedTables.add(runTable);
+
+    const runRecords = csv.parse(
+      fs.readFileSync(runFilePath, 'utf-8'),
+      { columns: true, skip_empty_lines: true }
     );
-    if (updateRes.rowCount > 0) {
-      console.log(`  ✓ leaderboard-table: "${pgTable}" accuracy → ${newAccuracy}${nofItems !== null ? `, nof_items → ${nofItems}` : ''}`);
-      lbUpdated++;
+
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      const qt = qident(runTable);
+      await client.query(`DROP TABLE IF EXISTS ${qt}`);
+      await client.query(`
+        CREATE TABLE ${qt} (
+          request_id    TEXT,
+          true_type     TEXT,
+          true_subtype  TEXT,
+          pred_type     TEXT,
+          pred_subtype  TEXT,
+          attributes    JSONB,
+          en_attributes JSONB,
+          metadata      JSONB,
+          en_metadata   JSONB,
+          confidence    DOUBLE PRECISION,
+          gpt_verdict   TEXT,
+          gpt_reasoning TEXT
+        )
+      `);
+
+      for (const rec of runRecords) {
+        await client.query(
+          `INSERT INTO ${qt}
+           (request_id, true_type, true_subtype, pred_type, pred_subtype, attributes, en_attributes, metadata, en_metadata, confidence, gpt_verdict, gpt_reasoning)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12)`,
+          [
+            rec.request_id || null,
+            rec.true_type || null,
+            rec.true_subtype || null,
+            rec.pred_type || null,
+            rec.pred_subtype || null,
+            JSON.stringify(toJsonOrNull(rec.attributes)),
+            JSON.stringify(toJsonOrNull(rec.en_attributes)),
+            JSON.stringify(toJsonOrNull(rec.metadata)),
+            JSON.stringify(toJsonOrNull(rec.en_metadata)),
+            toNumOrNull(rec.confidence),
+            rec.gpt_verdict || null,
+            rec.gpt_reasoning || null,
+          ]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_accuracy, description, benchmark)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (run_id) DO UPDATE
+           SET nof_items = EXCLUDED.nof_items,
+               subtype_accuracy = EXCLUDED.subtype_accuracy,
+               description = EXCLUDED.description,
+               benchmark = EXCLUDED.benchmark`,
+        [
+          runTable,
+          runRecords.length,
+          toNumOrNull(csvLb.subtype_accuracy),
+          csvLb.run_name,
+          benchmark,
+        ]
+      );
+
+      await client.query('COMMIT');
+      runTablesSynced++;
+      totalRowsInserted += runRecords.length;
+      console.log(`  ✓ ${runTable}: ${runRecords.length} rows synced (benchmark=${benchmark}, run=${csvLb.run_name})`);
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw err;
+    } finally {
+      client.release();
     }
   }
 
-  console.log(`\nDone. Leaderboard rows updated: ${lbUpdated}, prediction rows changed: ${rowsUpdated}`);
+  // Remove stale leaderboard rows/tables not present in CSV anymore.
+  const existing = await query(`SELECT run_id FROM "leaderboard-table"`);
+  for (const row of existing.rows) {
+    if (expectedTables.has(row.run_id)) continue;
+    await query(`DELETE FROM "leaderboard-table" WHERE run_id = $1`, [row.run_id]);
+    await query(`DROP TABLE IF EXISTS ${qident(row.run_id)}`);
+    console.log(`  ✓ Removed stale run/table: ${row.run_id}`);
+  }
+
+  console.log(`\nDone. Synced run tables: ${runTablesSynced}, rows inserted: ${totalRowsInserted}, benchmarks: ${Object.keys(seenBenchmarks).join(', ')}`);
   await pool.end();
 }
 
