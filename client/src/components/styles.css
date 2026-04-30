@@ -673,10 +673,38 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   flex: 0 0 60%;
 }
 
-.confq-col > .confq-card {
+.confq-col-50 {
+  flex: 0 0 50%;
+}
+
+.confq-left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.confq-col > .confq-card,
+.confq-left-col > .confq-card {
   display: flex;
   flex-direction: column;
   flex: 1;
+}
+
+.confq-col-50 > .confq-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.confq-calibration-card {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
 }
 
 .confq-calibration-card .confq-card-header {
@@ -689,7 +717,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   }
 
   .confq-col-40,
-  .confq-col-60 {
+  .confq-col-60,
+  .confq-col-50 {
     flex-basis: auto;
   }
 }
@@ -700,6 +729,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+}
+
+.confq-card.confq-calibration-card {
+  overflow: visible;
 }
 
 .confq-card-header {
@@ -723,6 +756,170 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+
+.confq-metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex: 1;
+  overflow: visible;
+}
+
+.confq-metric-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.1rem 0.75rem;
+  gap: 0.2rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.confq-metric-tile:nth-child(2n) {
+  border-right: none;
+}
+
+.confq-metric-tile:nth-last-child(-n+2) {
+  border-bottom: none;
+}
+
+.confq-metric-tile-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.confq-metric-tile-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.confq-metric-tile-sub {
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+/* Rich CSS tooltip via data-tooltip */
+.confq-has-tooltip {
+  position: relative;
+  cursor: default;
+}
+
+.confq-has-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+  width: 300px;
+  padding: 0.65rem 0.85rem;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-line;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  z-index: 999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  text-align: left;
+}
+
+.confq-has-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border-right: 1px solid rgba(148, 163, 184, 0.35);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  rotate: 45deg;
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.confq-has-tooltip:hover::after,
+.confq-has-tooltip:hover::before {
+  opacity: 1;
+}
+
+.confq-has-tooltip:hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Keep tooltips fully visible for edge tiles in the 2-column metrics grid */
+.confq-metrics-grid .confq-metric-tile:nth-child(odd).confq-has-tooltip::after {
+  left: 28px;
+  transform: translateX(0) translateY(2px);
+}
+
+.confq-metrics-grid .confq-metric-tile:nth-child(odd).confq-has-tooltip::before {
+  left: 42px;
+  transform: translateX(0);
+}
+
+.confq-metrics-grid .confq-metric-tile:nth-child(even).confq-has-tooltip::after {
+  left: auto;
+  right: 28px;
+  transform: translateX(0) translateY(2px);
+}
+
+.confq-metrics-grid .confq-metric-tile:nth-child(even).confq-has-tooltip::before {
+  left: auto;
+  right: 42px;
+  transform: translateX(0);
+}
+
+.confq-metrics-grid .confq-metric-tile:nth-child(odd).confq-has-tooltip:hover::after,
+.confq-metrics-grid .confq-metric-tile:nth-child(even).confq-has-tooltip:hover::after {
+  transform: translateX(0) translateY(0);
+}
+
+/* Scenario row */
+.confq-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 1rem;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.02);
+}
+
+.confq-scenario-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.confq-scenario-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.confq-scenario-good   .confq-scenario-label { color: #15803d; }
+.confq-scenario-info   .confq-scenario-label { color: #0284c7; }
+.confq-scenario-warn   .confq-scenario-label { color: #b45309; }
+.confq-scenario-danger .confq-scenario-label { color: #dc2626; }
+
+.confq-scenario-good   { border-left: 3px solid #15803d; }
+.confq-scenario-info   { border-left: 3px solid #0284c7; }
+.confq-scenario-warn   { border-left: 3px solid #b45309; }
+.confq-scenario-danger { border-left: 3px solid #dc2626; }
 
 .confq-inline-metric {
   display: flex;
@@ -774,6 +971,20 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   padding: 0.75rem 0.9rem 0.8rem;
 }
 
+.confq-plot-wrap-fill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.3rem 0.55rem 0.35rem;
+  min-height: 0;
+}
+
+.confq-plot-wrap-fill .confq-plot {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
 .confq-plot {
   width: 100%;
   height: auto;
@@ -805,7 +1016,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .confq-axis-label {
   fill: var(--text-faint);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -865,6 +1076,20 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .confq-zone-label-tradeoff { fill: #a16207; }
 .confq-zone-label-risk { fill: #b91c1c; }
 
+.confq-zone-stamp {
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.13;
+  pointer-events: none;
+  user-select: none;
+}
+
+.confq-zone-stamp-good     { fill: #15803d; }
+.confq-zone-stamp-tradeoff { fill: #a16207; }
+.confq-zone-stamp-risk     { fill: #b91c1c; }
+
 .confq-frontier-line {
   fill: none;
   stroke: rgba(249, 115, 22, 0.92);
@@ -892,14 +1117,14 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .confq-reco-label {
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.01em;
   fill: #047857;
 }
 
 .confq-frontier-label {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
   fill: var(--text-muted);
 }
@@ -911,7 +1136,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .confq-axis-title {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   fill: var(--text-faint);
   text-transform: uppercase;
@@ -927,6 +1152,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   font-size: 0.74rem;
   font-weight: 600;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .confq-frontier-legend span {

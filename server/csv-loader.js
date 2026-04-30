@@ -118,6 +118,8 @@ function loadData() {
       run_name:            row.run_name,
       model_version:       row.model_name,
       subtype_accuracy:    parseFloat(row.subtype_accuracy),
+      subtype_f1:          parseFloat(row.subtype_f1 ?? row.subtype_f1_weighted),
+      type_f1:             parseFloat(row.type_f1 ?? row.type_f1_weighted),
       subtype_f1_weighted: parseFloat(row.subtype_f1_weighted),
       benchmark_length:    0,
     });
@@ -845,6 +847,69 @@ function csvEscapeCell(v) {
     ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// Treat 'Unknown' (the CSV placeholder for untagged Unknowns records) as not yet tagged.
+const PLACEHOLDER_SUBTYPE = 'unknown';
+
+function isTagged(trueSubtype) {
+  const v = String(trueSubtype || '').trim();
+  return v !== '' && v.toLowerCase() !== PLACEHOLDER_SUBTYPE;
+}
+
+function getValidationValues(runId) {
+  const data = loadData();
+  const out = {};
+  data.run_results
+    .filter(r => r.run_id === runId && isTagged(r.true_subtype))
+    .forEach(r => { out[r.request_id] = r.true_subtype; });
+  return out;
+}
+
+function updateTrueSubtypes(runId, updates) {
+  const data = loadData();
+  const run = data.runs.find(r => r.id === runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const fname = runFileName(run.benchmark_id, run.run_name);
+  const fpath = path.join(RUNS_DIR, fname);
+  if (!fs.existsSync(fpath)) throw new Error(`Run file not found: ${fname}`);
+
+  const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
+  const baseHeaders = Object.keys(records[0] || {});
+  const headers = baseHeaders.includes('true_subtype')
+    ? baseHeaders
+    : [...baseHeaders, 'true_subtype'];
+
+  const normalizedUpdates = Object.fromEntries(
+    Object.entries(updates || {}).map(([requestId, value]) => [String(requestId), value || ''])
+  );
+
+  let changed = 0;
+  const updated = records.map(r => {
+    const requestId = String(r.request_id || '');
+    if (!Object.prototype.hasOwnProperty.call(normalizedUpdates, requestId)) return r;
+    const nextSubtype = normalizedUpdates[requestId];
+    if ((r.true_subtype || '') === nextSubtype) return r;
+    changed++;
+    return { ...r, true_subtype: nextSubtype };
+  });
+
+  if (changed > 0) {
+    const csvContent = [
+      headers.join(','),
+      ...updated.map(r => headers.map(h => csvEscapeCell(r[h])).join(',')),
+    ].join('\n') + '\n';
+    fs.writeFileSync(fpath, csvContent, 'utf-8');
+
+    data.run_results.forEach(r => {
+      if (r.run_id !== runId) return;
+      if (!Object.prototype.hasOwnProperty.call(normalizedUpdates, r.request_id)) return;
+      r.true_subtype = normalizedUpdates[r.request_id];
+    });
+  }
+
+  return changed;
+}
+
 /** Return { request_id: { verdict, reasoning } } for all records that have GPT results. */
 function getGptResults(runId) {
   const data = loadData();
@@ -918,6 +983,8 @@ module.exports = {
   getCompareTypeHealth,
   getSubtypeConfusionMatrix,
   getSubtypeTransitionMatrix,
+  getValidationValues,
+  updateTrueSubtypes,
   getGptResults,
   updateGptResults,
 };

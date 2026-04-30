@@ -6,6 +6,7 @@
  * ------
  * "leaderboard-table" columns:
  *   run_id (text, the actual run table name), nof_items, subtype_accuracy,
+ *   subtype_f1_weighted,
  *   description, benchmark (text, explicit benchmark name)
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
@@ -155,18 +156,26 @@ async function getIdColumn(tableName) {
 // of the app can use integer IDs without knowing about table names.
 
 async function getRunIndex() {
-
-  const [result, tablesResult] = await Promise.all([
-    query(
-      `SELECT run_id, nof_items, subtype_accuracy, description, benchmark
+  let result;
+  try {
+    result = await query(
+      `SELECT run_id, nof_items, subtype_accuracy, subtype_f1, type_f1, subtype_f1_weighted, description, benchmark
        FROM "leaderboard-table"
        ORDER BY run_id ASC`
-    ),
-    query(
-      `SELECT table_name FROM information_schema.tables
-       WHERE table_schema = current_schema()`
-    ),
-  ]);
+    );
+  } catch (err) {
+    if (err.code !== '42703') throw err;
+    result = await query(
+      `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, description, benchmark
+       FROM "leaderboard-table"
+       ORDER BY run_id ASC`
+    );
+  }
+
+  const tablesResult = await query(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_schema = current_schema()`
+  );
 
   const existingTables = new Set(tablesResult.rows.map(r => r.table_name));
 
@@ -203,7 +212,9 @@ async function getRunIndex() {
       run_name:            tableName,
       model_version:       row.description || '',
       subtype_accuracy:    parseFloat(row.subtype_accuracy) || 0,
-      subtype_f1_weighted: parseFloat(row.subtype_accuracy) || 0, // use accuracy as proxy
+      subtype_f1:          parseFloat(row.subtype_f1 ?? row.subtype_f1_weighted) || 0,
+      type_f1:             parseFloat(row.type_f1) || 0,
+      subtype_f1_weighted: parseFloat(row.subtype_f1_weighted) || 0,
       benchmark_length:    parseInt(row.nof_items) || 0,
       table_exists:        existingTables.has(tableName),
     });
@@ -664,6 +675,57 @@ async function updateMetadataTranslation(requestId, metaEn) {
   try {
     await pool.query(`UPDATE run_results SET en_metadata = $1 WHERE record_id = $2`, [json, requestId]);
   } catch { /* table may not exist in this schema */ }
+}
+
+async function getValidationValues(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const tbl = run.run_name;
+  const idCol = await getIdColumn(tbl);
+  const result = await query(`SELECT ${idCol} AS request_id, true_subtype FROM "${tbl}"`, []);
+
+  const out = {};
+  result.rows.forEach(r => {
+    const v = String(r.true_subtype || '').trim();
+    if (v !== '' && v.toLowerCase() !== 'unknown') {
+      out[String(r.request_id)] = r.true_subtype;
+    }
+  });
+  return out;
+}
+
+async function updateTrueSubtypes(runId, updates) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const entries = Object.entries(updates || {});
+  if (entries.length === 0) return 0;
+
+  const tbl = run.run_name;
+  const idCol = await getIdColumn(tbl);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let updated = 0;
+    for (const [requestId, trueSubtype] of entries) {
+      const result = await client.query(
+        `UPDATE "${tbl}" SET true_subtype = $1 WHERE ${idCol} = $2`,
+        [trueSubtype || '', requestId]
+      );
+      updated += result.rowCount || 0;
+    }
+    await client.query('COMMIT');
+    return updated;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getTypeHealthSummary(runId) {
@@ -1158,6 +1220,8 @@ module.exports = {
   getRecords,
   updateTranslation,
   updateMetadataTranslation,
+  getValidationValues,
+  updateTrueSubtypes,
   getTypeHealthSummary,
   getSubtypeConfusionMatrix,
   getCompareTypeHealth,

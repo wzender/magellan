@@ -27,18 +27,16 @@ function timeAgo(date) {
 function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }) {
   const [columns, setColumns] = useState([
     { key: 'select', label: 'Compare', width: 70 },
-    { key: 'rank', label: 'Rank', width: 70 },
     { key: 'run_name', label: 'Run', width: 220 },
     { key: 'model_version', label: 'Model Version', width: 180 },
-    { key: 'run_date', label: 'Date', width: 160 },
-    { key: 'subtype_accuracy', label: 'Detail Accuracy', width: 140 },
-    { key: 'subtype_f1_weighted', label: 'Detail Score', width: 160 },
+    { key: 'subtype_f1', label: 'Subtype F1', width: 120 },
+    { key: 'type_f1', label: 'Type F1', width: 120 },
     { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
   ]);
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
   const [resizeStartX, setResizeStartX] = useState(0);
-  const [sortConfig, setSortConfig] = useState({ key: 'rank', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'subtype_f1', direction: 'desc' });
 
   const rowData = Array.isArray(data)
     ? data
@@ -82,12 +80,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
     if (!sortConfig.key) return [...rowData];
 
     return [...rowData].sort((a, b) => {
-      const aValue = sortConfig.key === 'rank'
-        ? rowData.indexOf(a) + 1
-        : a[sortConfig.key] ?? '';
-      const bValue = sortConfig.key === 'rank'
-        ? rowData.indexOf(b) + 1
-        : b[sortConfig.key] ?? '';
+      const aValue = a[sortConfig.key] ?? '';
+      const bValue = b[sortConfig.key] ?? '';
 
       const aNum = Number(aValue);
       const bNum = Number(bValue);
@@ -190,7 +184,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
           </tr>
         </thead>
         <tbody>
-          {sortedData.map((row, idx) => (
+          {sortedData.map((row) => (
             <tr
               key={row.run_id}
               onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
@@ -228,28 +222,14 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
                       </td>
                     );
                   }
-                  case 'rank':
-                    return <td key={`${row.run_id}-${col.key}`}>{idx + 1}</td>;
                   case 'run_name':
                     return <td key={`${row.run_id}-${col.key}`}>{row.run_name}</td>;
                   case 'model_version':
                     return <td key={`${row.run_id}-${col.key}`}>{row.model_version || '-'}</td>;
-                  case 'run_date': {
-                    const d = parseRunDate(row.run_name);
-                    if (!d) return <td key={`${row.run_id}-${col.key}`} className="run-date-cell">—</td>;
-                    const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
-                    const relative = timeAgo(d);
-                    return (
-                      <td key={`${row.run_id}-${col.key}`} className="run-date-cell" title={d.toISOString()}>
-                        <span className="run-date-abs">{formatted}</span>
-                        <span className="run-date-rel">{relative}</span>
-                      </td>
-                    );
-                  }
-                  case 'subtype_accuracy':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_accuracy) * 100).toFixed(1)}%</td>;
-                  case 'subtype_f1_weighted':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_f1_weighted) * 100).toFixed(1)}%</td>;
+                  case 'subtype_f1':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_f1 ?? row.subtype_f1_weighted) * 100).toFixed(1)}%</td>;
+                  case 'type_f1':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_f1 ?? row.type_f1_weighted ?? 0) * 100).toFixed(1)}%</td>;
                   case 'type_f1_weighted':
                     return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_f1_weighted) * 100).toFixed(1)}%</td>;
                   case 'benchmark_length':

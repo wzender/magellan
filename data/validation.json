@@ -5,7 +5,12 @@
     "UNK-A002": "Admin",
     "UNK-A001": "Guide",
     "UNK-A003": "Bank Transfer",
-    "UNK-B001": "Alert"
+    "UNK-B001": "Alert",
+    "UNK-B002": "Admin",
+    "UNK-B003": "Conversion",
+    "UNK-B004": "Admin",
+    "UNK-B005": "Archive",
+    "UNK-B006": "Alert"
   },
   "11": {
     "UNK-B002": "Contract",

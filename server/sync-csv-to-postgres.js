@@ -46,6 +46,9 @@ async function ensureLeaderboardTable() {
       run_id           TEXT PRIMARY KEY,
       nof_items        INTEGER,
       subtype_accuracy NUMERIC(10, 6),
+      subtype_f1       NUMERIC(10, 6),
+      type_f1          NUMERIC(10, 6),
+      subtype_f1_weighted NUMERIC(10, 6),
       description      TEXT,
       benchmark        TEXT
     )
@@ -53,6 +56,9 @@ async function ensureLeaderboardTable() {
 
   // Ensure required columns exist for older installs.
   await query(`ALTER TABLE "leaderboard-table" ADD COLUMN IF NOT EXISTS benchmark TEXT`);
+  await query(`ALTER TABLE "leaderboard-table" ADD COLUMN IF NOT EXISTS subtype_f1 NUMERIC(10, 6)`);
+  await query(`ALTER TABLE "leaderboard-table" ADD COLUMN IF NOT EXISTS type_f1 NUMERIC(10, 6)`);
+  await query(`ALTER TABLE "leaderboard-table" ADD COLUMN IF NOT EXISTS subtype_f1_weighted NUMERIC(10, 6)`);
 }
 
 async function recreateRunTable(tableName) {
@@ -160,17 +166,23 @@ async function main() {
       }
 
       await client.query(
-        `INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_accuracy, description, benchmark)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_accuracy, subtype_f1, type_f1, subtype_f1_weighted, description, benchmark)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (run_id) DO UPDATE
            SET nof_items = EXCLUDED.nof_items,
                subtype_accuracy = EXCLUDED.subtype_accuracy,
+               subtype_f1 = EXCLUDED.subtype_f1,
+               type_f1 = EXCLUDED.type_f1,
+               subtype_f1_weighted = EXCLUDED.subtype_f1_weighted,
                description = EXCLUDED.description,
                benchmark = EXCLUDED.benchmark`,
         [
           runTable,
           runRecords.length,
           toNumOrNull(csvLb.subtype_accuracy),
+          toNumOrNull(csvLb.subtype_f1 ?? csvLb.subtype_f1_weighted),
+          toNumOrNull(csvLb.type_f1 ?? csvLb.type_f1_weighted),
+          toNumOrNull(csvLb.subtype_f1_weighted),
           csvLb.run_name,
           benchmark,
         ]

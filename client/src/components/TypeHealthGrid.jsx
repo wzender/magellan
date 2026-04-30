@@ -1052,15 +1052,17 @@ function ReliabilityPlot({ bins }) {
   const chartBins = Array.isArray(bins) ? bins : [];
   if (chartBins.length === 0) return <div className="matrix-empty">No confidence bins</div>;
 
-  const width = 420;
-  const height = 220;
-  const padX = 34;
-  const padY = 18;
-  const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
+  const width = 500;
+  const height = 250;
+  const padLeft = 66;
+  const padRight = 22;
+  const padTop = 14;
+  const padBottom = 52;
+  const innerW = width - padLeft - padRight;
+  const innerH = height - padTop - padBottom;
 
-  const x = (v) => padX + v * innerW;
-  const y = (v) => height - padY - v * innerH;
+  const x = (v) => padLeft + v * innerW;
+  const y = (v) => padTop + (1 - v) * innerH;
   const sortedBins = [...chartBins].sort((a, b) => a.avg_confidence - b.avg_confidence);
   const reliabilityPath = sortedBins
     .map((bin, i) => `${i === 0 ? 'M' : 'L'} ${x(bin.avg_confidence).toFixed(2)} ${y(bin.accuracy).toFixed(2)}`)
@@ -1070,18 +1072,55 @@ function ReliabilityPlot({ bins }) {
     <div className="confq-card confq-reliability-card">
       <div className="confq-card-header">
         <span className="confq-card-title">Reliability</span>
-        <span className="confq-card-subtitle">Below diagonal = overconfident</span>
+        <span className="confq-card-subtitle">Each dot = a confidence bin (x: avg confidence, y: actual accuracy). On the diagonal = perfect calibration; below = overconfident; above = underconfident.</span>
       </div>
       <div className="confq-plot-wrap">
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="confq-plot" role="img" aria-label="Confidence reliability plot">
           <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)} className="confq-diagonal" />
+          
+          {/* Zone watermarks */}
+          <text
+            x={padLeft + 6}
+            y={padTop + 12}
+            textAnchor="start"
+            dominantBaseline="hanging"
+            className="confq-zone-stamp confq-zone-stamp-info"
+            fontSize="0.04em"
+            opacity="0.35"
+          >Underconfident</text>
+          <text
+            x={width - padRight - 6}
+            y={height - padBottom - 6}
+            textAnchor="end"
+            dominantBaseline="baseline"
+            className="confq-zone-stamp confq-zone-stamp-warn"
+            fontSize="0.04em"
+            opacity="0.35"
+          >Overconfident</text>
+          
           {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
             <g key={tick}>
               <line x1={x(0)} y1={y(tick)} x2={x(1)} y2={y(tick)} className="confq-gridline" />
-              <text x={padX - 8} y={y(tick) + 4} className="confq-axis-label">{Math.round(tick * 100)}</text>
-              <text x={x(tick)} y={height - 2} textAnchor="middle" className="confq-axis-label">{Math.round(tick * 100)}</text>
+              <text x={padLeft - 8} y={y(tick) + 4} textAnchor="end" className="confq-axis-label">{Math.round(tick * 100)}%</text>
+              <text
+                x={tick === 0 ? x(tick) + 2 : tick === 1 ? x(tick) - 2 : x(tick)}
+                y={height - padBottom + 16}
+                textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}
+                className="confq-axis-label"
+              >
+                {Math.round(tick * 100)}%
+              </text>
             </g>
           ))}
+          
+          {/* Axis titles */}
+          <text x={10} y={(padTop + height - padBottom) / 2} textAnchor="middle" className="confq-axis-title" transform={`rotate(-90 10 ${(padTop + height - padBottom) / 2})`}>
+            Accuracy (%)
+          </text>
+          <text x={width / 2} y={height - 6} textAnchor="middle" className="confq-axis-title">
+            Confidence (%)
+          </text>
+          
           <path d={reliabilityPath} className="confq-reliability-line" />
           {chartBins.map((bin) => {
             const centerX = x(bin.avg_confidence);
@@ -1123,7 +1162,6 @@ function ConfidenceCalibrationCard({ confidenceQuality }) {
   const bias = avgConfidence - accuracy;
   const status = confidenceQuality.status || (ece < 0.03 ? 'good' : ece >= 0.07 ? 'poor' : 'moderate');
   const statusLabel = { good: 'Calibrated', moderate: 'Moderate', poor: 'Needs calibration' }[status] ?? '';
-  const biasLabel = Math.abs(bias) < 0.005 ? 'neutral' : bias > 0 ? 'overconfident' : 'underconfident';
   const biasCls = Math.abs(bias) < 0.005 ? '' : bias > 0 ? 'confq-metric-over' : 'confq-metric-under';
   const biasSign = bias > 0.005 ? '+' : '';
 
@@ -1139,36 +1177,95 @@ function ConfidenceCalibrationCard({ confidenceQuality }) {
     }
   }
 
+  // Dynamic sub-labels
+  const eceSub = ece < 0.03 ? 'Well calibrated' : ece < 0.07 ? 'Moderate drift' : 'Poorly calibrated';
+  const biasSub = Math.abs(bias) < 0.005 ? 'Neutral' : bias > 0 ? 'Overconfident' : 'Underconfident';
+  const stdSub = stdGap < 0.04 ? 'Consistent' : stdGap < 0.08 ? 'Uneven' : 'Highly uneven';
+  const maxSub = `Worst bin: ${worstBin}`;
+
+  // Scenario detection
+  const eceHigh = ece >= 0.07;
+  const eceMod = ece >= 0.03 && ece < 0.07;
+  const eceLow = ece < 0.03;
+  const biasPos = bias > 0.02;
+  const biasNeg = bias < -0.02;
+  const stdHigh = stdGap >= 0.06;
+  const maxHigh = maxGap >= 0.1;
+
+  let scenario, scenarioCls, scenarioDesc;
+  if (eceLow && !biasPos && !biasNeg && !stdHigh && !maxHigh) {
+    scenario = 'Well calibrated';
+    scenarioCls = 'confq-scenario-good';
+    scenarioDesc = 'Confidence closely tracks accuracy across all ranges. Safe to use thresholds for auto-approval.';
+  } else if ((eceHigh || eceMod) && biasPos && !stdHigh) {
+    scenario = 'Uniformly overconfident';
+    scenarioCls = 'confq-scenario-warn';
+    scenarioDesc = 'Model is systematically too confident. Errors will slip through if you rely on its confidence score.';
+  } else if ((eceHigh || eceMod) && biasNeg && !stdHigh) {
+    scenario = 'Uniformly underconfident';
+    scenarioCls = 'confq-scenario-warn';
+    scenarioDesc = 'Model is systematically too conservative with confidence. You\'re rejecting items you should accept.';
+  } else if (!eceHigh && stdHigh && maxHigh) {
+    scenario = 'Locally broken';
+    scenarioCls = 'confq-scenario-warn';
+    scenarioDesc = 'ECE looks acceptable, but one confidence range is badly miscalibrated. Check the Reliability chart.';
+  } else if (biasPos && stdHigh && maxHigh) {
+    scenario = 'Overconfident in high range';
+    scenarioCls = 'confq-scenario-danger';
+    scenarioDesc = 'High-confidence predictions are the least reliable — the most dangerous pattern for auto-approval.';
+  } else if (biasNeg && stdHigh) {
+    scenario = 'Underconfident in low range';
+    scenarioCls = 'confq-scenario-info';
+    scenarioDesc = 'Low-confidence bins are overly pessimistic; raising the threshold would recover coverage safely.';
+  } else if (eceHigh && stdHigh) {
+    scenario = 'Broadly miscalibrated';
+    scenarioCls = 'confq-scenario-danger';
+    scenarioDesc = 'Both global error and variance are high. Confidence is unreliable as a routing signal.';
+  } else {
+    scenario = 'Mixed calibration';
+    scenarioCls = 'confq-scenario-info';
+    scenarioDesc = 'Some metrics are within range, but the combination suggests caution before relying on confidence thresholds.';
+  }
+
+  const eceTip = `ECE — Expected Calibration Error\nWeighted average gap between confidence and actual accuracy across all bins.\n\nGood (< 3%): Safe to set auto-approval thresholds.\nModerate (3–7%): Use thresholds cautiously.\nPoor (> 7%): Confidence is unreliable as a routing signal.`;
+  const biasTip = `Bias = avg confidence − accuracy\nDirection of systematic miscalibration.\n\nPositive → Overconfident: model says 80%, gets 60% right.\nNegative → Underconfident: model says 50%, gets 70% right.\n~0 → Neutral: no systematic direction.`;
+  const stdTip = `StdGap — Standard deviation of per-bin calibration gaps\nMeasures consistency of calibration across confidence ranges.\n\nLow: Error is uniform — predictable behaviour.\nHigh: Some ranges badly off while others are fine.\nInsidious: ECE can look OK while one slice is wildly overconfident.`;
+  const maxTip = `MaxGap — Largest single-bin calibration error\nThe worst confidence bucket (${worstBin}).\n\nEven if ECE looks fine, a high MaxGap means one band is a blind spot.\nCheck the Reliability chart at this range to understand who is affected.`;
+
   return (
     <div className="confq-card confq-calibration-card">
       <div className="confq-card-header">
         <div className="confq-card-title-row">
           <span className="confq-card-title">Calibration Summary</span>
-          <span className="confq-card-subtitle">ECE, bias, dispersion, and worst gap</span>
+          <span className={`confq-inline-tag confq-tag-${status}`}>{statusLabel}</span>
         </div>
-        <div className="confq-inline-strip">
-          <span className="confq-inline-metric" title="Expected Calibration Error">
-            <span className="confq-inline-label">ECE</span>
-            <span className="confq-inline-value">{pctMetric(ece)}</span>
-            <span className={`confq-inline-tag confq-tag-${status}`}>{statusLabel}</span>
-          </span>
-          <span className="confq-inline-divider" />
-          <span className={`confq-inline-metric ${biasCls}`} title="Bias = avg confidence − accuracy">
-            <span className="confq-inline-label">Bias</span>
-            <span className="confq-inline-value">{biasSign}{pctMetric(bias)}</span>
-            <span className="confq-inline-tag">{biasLabel}</span>
-          </span>
-          <span className="confq-inline-divider" />
-          <span className="confq-inline-metric" title="StdGap — std deviation of per-bin calibration gaps">
-            <span className="confq-inline-label">StdGap</span>
-            <span className="confq-inline-value">{pctMetric(stdGap)}</span>
-          </span>
-          <span className="confq-inline-divider" />
-          <span className="confq-inline-metric" title={`MaxGap — worst single-bin error (bin ${worstBin})`}>
-            <span className="confq-inline-label">MaxGap</span>
-            <span className="confq-inline-value">{pctMetric(maxGap)}</span>
-          </span>
+        <span className="confq-card-subtitle">ECE, bias, dispersion, and worst gap</span>
+      </div>
+      <div className="confq-metrics-grid">
+        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={eceTip}>
+          <span className="confq-metric-tile-label">ECE</span>
+          <span className="confq-metric-tile-value">{pctMetric(ece)}</span>
+          <span className="confq-metric-tile-sub">{eceSub}</span>
         </div>
+        <div className={`confq-metric-tile confq-has-tooltip ${biasCls}`} data-tooltip={biasTip}>
+          <span className="confq-metric-tile-label">Bias</span>
+          <span className="confq-metric-tile-value">{biasSign}{pctMetric(bias)}</span>
+          <span className="confq-metric-tile-sub">{biasSub}</span>
+        </div>
+        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={stdTip}>
+          <span className="confq-metric-tile-label">StdGap</span>
+          <span className="confq-metric-tile-value">{pctMetric(stdGap)}</span>
+          <span className="confq-metric-tile-sub">{stdSub}</span>
+        </div>
+        <div className="confq-metric-tile confq-has-tooltip" data-tooltip={maxTip}>
+          <span className="confq-metric-tile-label">MaxGap</span>
+          <span className="confq-metric-tile-value">{pctMetric(maxGap)}</span>
+          <span className="confq-metric-tile-sub">{maxSub}</span>
+        </div>
+      </div>
+      <div className={`confq-scenario ${scenarioCls}`}>
+        <span className="confq-scenario-label">{scenario}</span>
+        <span className="confq-scenario-desc">{scenarioDesc}</span>
       </div>
     </div>
   );
@@ -1198,15 +1295,16 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
     };
   });
 
-  const width = 420;
-  const height = 255;
-  const padX = 44;
-  const padTop = 20;
-  const padBottom = 55;
-  const innerW = width - padX * 2;
+  const width = 620;
+  const height = 480;
+  const padLeft = 56;
+  const padRight = 22;
+  const padTop = 30;
+  const padBottom = 44;
+  const innerW = width - padLeft - padRight;
   const innerH = height - padTop - padBottom;
 
-  const x = (v) => padX + v * innerW;
+  const x = (v) => padLeft + v * innerW;
   const y = (v) => height - padBottom - v * innerH;
 
   const pathD = points
@@ -1223,18 +1321,16 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
   return (
     <div className="confq-card">
       <div className="confq-card-header">
-        <div className="confq-card-title-row">
-          <span className="confq-card-title">Decision Frontier</span>
-          <span className="confq-card-subtitle">What percentage of records need human review vs what percentage of errors slip through — per confidence threshold</span>
-        </div>
+        <span className="confq-card-title">Decision Frontier</span>
+        <span className="confq-card-subtitle">Human review % vs error slip-through — per confidence threshold</span>
       </div>
-      <div className="confq-plot-wrap">
-        <svg viewBox={`0 0 ${width} ${height}`} className="confq-plot" role="img" aria-label="Threshold decision frontier chart">
+      <div className="confq-plot-wrap confq-plot-wrap-fill">
+        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="confq-plot" role="img" aria-label="Threshold decision frontier chart">
           <rect
             x={x(0)}
-            y={y(0.3)}
+            y={y(0.35)}
             width={x(0.65) - x(0)}
-            height={y(0) - y(0.3)}
+            height={y(0) - y(0.35)}
             className="confq-zone-tradeoff"
           />
           <rect
@@ -1252,16 +1348,42 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
             className="confq-zone-risk"
           />
 
-          <text x={x(0.03)} y={y(0.01)} className="confq-zone-label confq-zone-label-good">Optimal</text>
-          <text x={x(0.62)} y={y(0.27)} textAnchor="end" className="confq-zone-label confq-zone-label-tradeoff">Tradeoff</text>
-          <text x={x(0.97)} y={y(0.93)} textAnchor="end" className="confq-zone-label confq-zone-label-risk">Risk</text>
+          {/* Zone stamp labels — centered in each region */}
+          <text
+            x={(x(0) + x(0.4)) / 2}
+            y={(y(0) + y(0.15)) / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="confq-zone-stamp confq-zone-stamp-good"
+          >Optimal</text>
+          <text
+            x={(x(0) + x(0.65)) / 2}
+            y={y(0.35) + 28}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="confq-zone-stamp confq-zone-stamp-tradeoff"
+          >Tradeoff</text>
+          <text
+            x={(x(0.65) + x(1)) / 2}
+            y={(y(0.3) + y(1)) / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="confq-zone-stamp confq-zone-stamp-risk"
+          >Risk</text>
 
           {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
             <g key={tick}>
               <line x1={x(0)} y1={y(tick)} x2={x(1)} y2={y(tick)} className="confq-gridline" />
               <line x1={x(tick)} y1={y(0)} x2={x(tick)} y2={y(1)} className="confq-gridline" />
-              <text x={padX - 8} y={y(tick) + 4} className="confq-axis-label">{Math.round(tick * 100)}</text>
-              <text x={x(tick)} y={y(0) + 24} textAnchor="middle" className="confq-axis-label">{Math.round(tick * 100)}</text>
+              <text x={padLeft - 8} y={y(tick) + 4} textAnchor="end" className="confq-axis-label">{Math.round(tick * 100)}%</text>
+              <text
+                x={tick === 0 ? x(tick) + 2 : tick === 1 ? x(tick) - 2 : x(tick)}
+                y={y(0) + 24}
+                textAnchor={tick === 0 ? 'start' : tick === 1 ? 'end' : 'middle'}
+                className="confq-axis-label"
+              >
+                {Math.round(tick * 100)}%
+              </text>
             </g>
           ))}
 
@@ -1299,27 +1421,26 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
               <g key={p.threshold}>
                 <line
                   x1={x(p.manualLoad)}
-                  y1={y(p.errorRate)}
+                  y1={padTop}
                   x2={x(p.manualLoad)}
                   y2={y(0)}
                   className="confq-drop-line"
                   strokeDasharray="3 2"
                 />
+                <text
+                  x={x(p.manualLoad)}
+                  y={padTop - 6}
+                  textAnchor="middle"
+                  className="confq-frontier-label"
+                >
+                  t={Math.round(p.threshold * 100)}%
+                </text>
                 <circle
                   cx={x(p.manualLoad)}
                   cy={y(p.errorRate)}
                   r={isRecommended ? '6.5' : '5'}
                   className={isRecommended ? 'confq-frontier-dot confq-frontier-dot-recommended' : 'confq-frontier-dot'}
                 />
-                <text
-                  x={x(p.manualLoad)}
-                  y={y(0) + 12}
-                  textAnchor="middle"
-                  className="confq-frontier-label"
-                  style={{ fontSize: '10px', fill: '#555' }}
-                >
-                  t={Math.round(p.threshold * 100)}%
-                </text>
                 <title>{`Threshold ${p.threshold.toFixed(1)} | coverage ${(p.coverage * 100).toFixed(1)}% | human review ${(p.manualLoad * 100).toFixed(1)}% | accuracy ${(p.accuracy * 100).toFixed(1)}% | error ${(p.errorRate * 100).toFixed(1)}% | n=${p.coveredCount}`}</title>
               </g>
             );
@@ -1352,12 +1473,14 @@ function ConfidenceQualityPanel({ confidenceQuality }) {
 
   return (
     <div className="confq-panel">
-      <ConfidenceCalibrationCard confidenceQuality={confidenceQuality} />
       <div className="confq-panel-row">
-        <div className="confq-col confq-col-40">
-          <ReliabilityPlot bins={confidenceQuality.bins} />
+        <div className="confq-col confq-col-50">
+          <div className="confq-left-col">
+            <ConfidenceCalibrationCard confidenceQuality={confidenceQuality} />
+            <ReliabilityPlot bins={confidenceQuality.bins} />
+          </div>
         </div>
-        <div className="confq-col confq-col-60">
+        <div className="confq-col confq-col-50">
           <ConfidenceDecisionFrontier confidenceQuality={confidenceQuality} />
         </div>
       </div>
