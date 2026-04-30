@@ -998,6 +998,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .th-col-expand { /* spacer for the expand arrow column */ }
 
+.th-col-sortable:hover {
+  color: var(--accent);
+  text-decoration: underline dotted;
+}
+
 .th-col-label,
 .th-col-f1,
 .th-col-ece,

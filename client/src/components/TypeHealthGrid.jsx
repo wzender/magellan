@@ -1303,7 +1303,15 @@ function TypeHealthGrid({
   const [transitionView, setTransitionView] = useState('type-transition');
   const [confidenceExpanded, setConfidenceExpanded] = useState(true);
   const [typeSectionExpanded, setTypeSectionExpanded] = useState(true);
+  const [sortCol, setSortCol] = useState('f1');
+  const [sortDir, setSortDir] = useState('asc');
   const isCompare = !!runId2;
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
+  const sortArrow = (col) => sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   // Build calibration map: type -> { ece, status }
   const calibrationMap = {};
@@ -1360,6 +1368,14 @@ function TypeHealthGrid({
     if (correctnessFilter.has('cross_type') && st.cross_type > 0) return true;
     return false;
   }
+
+  const sortedTypeHealth = [...typeHealth].sort((a, b) => {
+    let av, bv;
+    if (sortCol === 'type') { av = a.type || ''; bv = b.type || ''; return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av); }
+    if (sortCol === 'f1')  { av = a.f1 ?? a.accuracy ?? -1; bv = b.f1 ?? b.accuracy ?? -1; }
+    if (sortCol === 'ece') { av = calibrationMap[a.type]?.ece ?? 999; bv = calibrationMap[b.type]?.ece ?? 999; }
+    return sortDir === 'asc' ? av - bv : bv - av;
+  });
 
   const maxTotal = Math.max(...typeHealth.map(t => {
     if (isCompare) {
@@ -1447,16 +1463,6 @@ function TypeHealthGrid({
           <>
             <div className="th-sticky-header">
               <div className="type-section-header">
-                <div className="type-section-title-block">
-                  <span className="type-section-label">
-                    {isCompare ? 'Type Comparison' : 'Type Accuracy'}
-                  </span>
-                  <span className="type-section-desc">
-                    {isCompare
-                      ? 'Side-by-side breakdown per type — see where each run improved or regressed'
-                      : 'F1 score per classification type. Click a type to explore subtypes and confusion patterns.'}
-                  </span>
-                </div>
                 <div className="type-grid-legend">
                   {isCompare
                     ? LEGEND_COMPARE.map(l => (
@@ -1484,7 +1490,9 @@ function TypeHealthGrid({
 
               <div className={`th-col-header${isCompare ? ' th-col-header-cmp' : ''}`}>
                 <span className="th-col-expand" />
-                <span className="th-col-label">True Type</span>
+                <span className="th-col-label th-col-sortable" onClick={() => !isCompare && handleSort('type')} style={!isCompare ? { cursor: 'pointer' } : {}}>
+                  True Type{!isCompare && sortArrow('type')}
+                </span>
                 {isCompare ? (
                   <>
                     <span className="th-col-f1">F1</span>
@@ -1493,8 +1501,12 @@ function TypeHealthGrid({
                   </>
                 ) : (
                   <>
-                    <span className="th-col-f1">F1</span>
-                    <span className="th-col-ece" title="Expected Calibration Error — lower is better">ECE</span>
+                    <span className="th-col-f1 th-col-sortable" onClick={() => handleSort('f1')} style={{ cursor: 'pointer' }} title="Sort by F1">
+                      F1{sortArrow('f1')}
+                    </span>
+                    <span className="th-col-ece th-col-sortable" onClick={() => handleSort('ece')} style={{ cursor: 'pointer' }} title="Expected Calibration Error — lower is better">
+                      ECE{sortArrow('ece')}
+                    </span>
                     <span className="th-col-count">#</span>
                   </>
                 )}
@@ -1503,7 +1515,7 @@ function TypeHealthGrid({
             </div>
 
             <div className="th-list">
-              {typeHealth.map(t => {
+              {sortedTypeHealth.map(t => {
                 if (isCompare) {
                   const cd = compareMap[t.type];
                   return (
