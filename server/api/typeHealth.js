@@ -51,6 +51,22 @@ router.get('/confidence-quality', async (req, res) => {
 });
 
 /**
+ * GET /calibration-per-type?run_id=...&bins=10
+ * Returns per-type calibration metrics (ECE, Brier, etc.) for one run.
+ */
+router.get('/calibration-per-type', async (req, res) => {
+  try {
+    const { run_id, bins } = req.query;
+    if (!run_id) return res.status(400).json({ error: 'run_id is required' });
+    const data = await dbLoader.getCalibrationPerType(parseInt(run_id), bins ? parseInt(bins) : 10);
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching calibration per type:', error);
+    res.status(500).json({ error: 'Failed to fetch calibration per type' });
+  }
+});
+
+/**
  * GET /subtype-transition?run_id1=...&run_id2=...&true_type=...&compare_filter=...
  * Returns subtype transition matrix for a run pair scoped to one type.
  */

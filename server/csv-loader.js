@@ -617,6 +617,100 @@ function getConfidenceQuality(runId, bins = 10) {
   };
 }
 
+/* ── Calibration per type ──────────── */
+function getCalibrationPerType(runId, bins = 10) {
+  const data = loadData();
+  const validBins = Number.isFinite(bins) ? Math.max(2, Math.min(20, Math.floor(bins))) : 10;
+  const results = data.run_results.filter(r =>
+    r.run_id === runId && typeof r.confidence === 'number' && Number.isFinite(r.confidence)
+  );
+
+  if (results.length === 0) return [];
+
+  const typeMap = {};
+
+  // Group results by true_type
+  results.forEach(r => {
+    if (!typeMap[r.true_type]) {
+      typeMap[r.true_type] = [];
+    }
+    typeMap[r.true_type].push({
+      confidence: Math.max(0, Math.min(1, r.confidence)),
+      isCorrect: r.pred_subtype === r.true_subtype,
+    });
+  });
+
+  // Calculate calibration metrics for each type
+  return Object.entries(typeMap)
+    .map(([type, typeResults]) => {
+      const n = typeResults.length;
+      const correctCount = typeResults.filter(r => r.isCorrect).length;
+      const accuracy = correctCount / n;
+
+      const bucket = Array.from({ length: validBins }, (_, i) => ({
+        index: i,
+        start: i / validBins,
+        end: (i + 1) / validBins,
+        count: 0,
+        confSum: 0,
+        correctSum: 0,
+      }));
+
+      let confSum = 0;
+      let brierSum = 0;
+
+      typeResults.forEach(r => {
+        const conf = r.confidence;
+        const y = r.isCorrect ? 1 : 0;
+        const idx = Math.min(validBins - 1, Math.floor(conf * validBins));
+        const b = bucket[idx];
+        b.count++;
+        b.confSum += conf;
+        b.correctSum += y;
+
+        confSum += conf;
+        brierSum += (conf - y) * (conf - y);
+      });
+
+      let ece = 0;
+      let maxGap = 0;
+      let overconfidentMass = 0;
+      let underconfidentMass = 0;
+
+      bucket.forEach(b => {
+        if (b.count > 0) {
+          const avgConfidence = b.confSum / b.count;
+          const binAccuracy = b.correctSum / b.count;
+          const gap = Math.abs(binAccuracy - avgConfidence);
+          const weight = b.count / n;
+          ece += weight * gap;
+          maxGap = Math.max(maxGap, gap);
+
+          if (avgConfidence > binAccuracy) overconfidentMass += weight;
+          if (avgConfidence < binAccuracy) underconfidentMass += weight;
+        }
+      });
+
+      let status = 'moderate';
+      if (ece < 0.03) status = 'good';
+      else if (ece >= 0.07) status = 'poor';
+
+      return {
+        type,
+        n,
+        accuracy,
+        avg_confidence: confSum / n,
+        ece,
+        brier: brierSum / n,
+        max_gap: maxGap,
+        overconfident_mass: overconfidentMass,
+        underconfident_mass: underconfidentMass,
+        status,
+      };
+    })
+    .sort((a, b) => a.ece - b.ece);
+}
+
 /* ── Compare type health (4-outcome per type) ──────────── */
 function getCompareTypeHealth(runId1, runId2) {
   const data = loadData();
@@ -825,6 +919,7 @@ module.exports = {
   updateMetadataTranslation,
   getTypeHealthSummary,
   getConfidenceQuality,
+  getCalibrationPerType,
   getCompareTypeHealth,
   getSubtypeConfusionMatrix,
   getSubtypeTransitionMatrix,

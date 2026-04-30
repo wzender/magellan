@@ -5,6 +5,7 @@ import RunSelector from './RunSelector';
 import LeaderboardWidget from './LeaderboardWidget';
 import ConfusionMatrixPanel from './ConfusionMatrixPanel';
 import TransitionMatrixPanel from './TransitionMatrixPanel';
+import CalibrationPerTypePanel from './CalibrationPerTypePanel';
 import RowLevelTable from './RowLevelTable';
 
 /**
@@ -23,6 +24,7 @@ function Dashboard() {
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [confusionMatrixData, setConfusionMatrixData] = useState(null);
   const [transitionMatrixData, setTransitionMatrixData] = useState(null);
+  const [calibrationPerTypeData, setCalibrationPerTypeData] = useState([]);
   const [recordsData, setRecordsData] = useState(null);
   const [minCount, setMinCount] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -111,6 +113,22 @@ function Dashboard() {
     };
     fetchConfusionMatrix();
   }, [selectedRun, filter]);
+
+  // Load calibration per type when run changes
+  useEffect(() => {
+    if (!selectedRun) return;
+
+    const fetchCalibrationPerType = async () => {
+      try {
+        const response = await fetch(`/api/calibration-per-type?run_id=${selectedRun}`);
+        const data = await response.json();
+        setCalibrationPerTypeData(data);
+      } catch (err) {
+        console.error('Error loading calibration per type:', err);
+      }
+    };
+    fetchCalibrationPerType();
+  }, [selectedRun]);
 
   // Load transition matrix when runs change
   useEffect(() => {
@@ -226,6 +244,13 @@ function Dashboard() {
       {error && <div className="error-message">{error}</div>}
 
       <LeaderboardWidget data={leaderboardData} />
+
+      {calibrationPerTypeData.length > 0 && (
+        <CalibrationPerTypePanel
+          data={calibrationPerTypeData}
+          runName={selectedRun ? runs.find(r => r.id === selectedRun)?.run_name : ''}
+        />
+      )}
 
       <div className="main-content">
         <div className="visualization-panel">

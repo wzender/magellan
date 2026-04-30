@@ -523,6 +523,117 @@ input[type='range']:focus {
   margin-bottom: 1rem;
 }
 
+/* Calibration Per Type Panel */
+.calibration-panel {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  background: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.calibration-header {
+  margin-bottom: 1.5rem;
+}
+
+.calibration-header h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+}
+
+.calibration-subtitle {
+  margin: 0;
+  color: var(--neutral-color);
+  font-size: 0.9rem;
+}
+
+.calibration-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.calibration-table thead {
+  background: var(--secondary-color);
+}
+
+.calibration-table th {
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.calibration-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.calibration-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.05);
+}
+
+.calibration-table .type-name {
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.calibration-table .metric {
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+  text-align: right;
+}
+
+.calibration-table .metric-ece {
+  color: var(--primary-color);
+}
+
+.calibration-table .status-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.calibration-table .status-good {
+  background: rgba(76, 175, 80, 0.05);
+}
+
+.calibration-table .status-moderate {
+  background: rgba(255, 152, 0, 0.05);
+}
+
+.calibration-table .status-poor {
+  background: rgba(244, 67, 54, 0.05);
+}
+
+.calibration-legend {
+  display: flex;
+  gap: 2rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .dashboard-header {
