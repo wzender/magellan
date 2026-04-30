@@ -2,7 +2,7 @@
 
 ## Overview
 
-Build a two-stage LLM classification pipeline using **command-r** via **vLLM** with prefix caching. Given a record's `attributes` (product JSON) and `metadata` (source/status JSON), classify it into one of the allowed subtypes for its country — or flag it as `unknown` / a missing subtype.
+Build a two-stage LLM classification pipeline using **command-r** via **vLLM** with prefix caching. Given a record's `attributes` (product JSON) and `metadata` (source/status JSON), classify it into one of the injected allowed subtypes — or flag it as `unknown` / a missing subtype.
 
 ---
 
@@ -17,8 +17,8 @@ The system evaluates classification quality across benchmarks per country. Each 
 
 ## Goals
 
-1. **Accuracy**: Predict the correct subtype from the country's allowed list.
-2. **Prefix cache efficiency**: Maximise the cacheable prefix (system prompts are static per country; only the user turn changes per record).
+1. **Accuracy**: Predict the correct subtype from the injected allowed subtype list.
+2. **Prefix cache efficiency**: Maximise the cacheable prefix (system prompts are static per subtype set; only the user turn changes per record).
 3. **Graceful degradation**: Output `unknown` on weak signals; flag missing subtypes when evidence is strong but no allowed label fits.
 4. **Portability**: Swapping to a new domain requires editing only the *Domain Instructions* section of each prompt.
 
@@ -30,7 +30,7 @@ The system evaluates classification quality across benchmarks per country. Each 
 
 **Purpose**: Let the model reason freely and produce a candidate subtype label plus brief rationale, without being constrained to the allowed list yet.
 
-**Prefix-cache strategy**: The system prompt is identical for all records in the same country. Batch all records for the same country together so vLLM can reuse the KV cache for the system turn.
+**Prefix-cache strategy**: The system prompt is identical for all records in the same domain/few-shot setting. Batch records by the same rendered Stage 1 system prompt so vLLM can reuse the KV cache.
 
 #### Stage 1 — System Prompt
 
@@ -43,13 +43,15 @@ You are a classification assistant specialized in {domain_name}.
 
 ## Task
 Given a record's attributes and metadata, determine the most appropriate subtype category.
-Respond with exactly two lines:
+Respond with exactly two lines and nothing else:
 1. SUBTYPE: <your candidate label>
 2. REASON: <one sentence, max 50 tokens>
 
 If the input provides no clear signal, respond:
 SUBTYPE: unknown
 REASON: Insufficient signal to classify.
+
+Do not output any text before SUBTYPE: or after the REASON: line. No markdown formatting, no preamble, no explanation.
 """.strip()
 ```
 
@@ -73,8 +75,6 @@ Attributes:
 
 Metadata:
 {metadata}
-
-Country: {country}
 """.strip()
 ```
 
@@ -84,7 +84,6 @@ Country: {country}
 | `{few_shot_block}` | Rendered few-shot examples block (see §Few-shot Template); empty string `""` if no examples provided |
 | `{attributes}` | JSON string of the record's `attributes` field |
 | `{metadata}` | JSON string of the record's `metadata` field |
-| `{country}` | Country name, e.g. `"Spain"` |
 
 ---
 
@@ -115,9 +114,9 @@ If no examples: `few_shot_block = ""`.
 
 ### Stage 2 — Semantic Grounding to Allowed List
 
-**Purpose**: Map the Stage 1 candidate label (and its reasoning) onto the nearest allowed subtype for the country. This call is cheap — the candidate + allowed list is the only variable content.
+**Purpose**: Map the Stage 1 candidate label (and its reasoning) onto the nearest allowed subtype from the injected list. This call is cheap — the candidate + allowed list is the only variable content.
 
-**Prefix-cache strategy**: The system prompt is identical for all records in the same country (it embeds the full allowed subtype list). Only the user turn changes per record.
+**Prefix-cache strategy**: The system prompt is identical for all records sharing the same allowed subtype list (it embeds the full list). Only the user turn changes per record.
 
 #### Stage 2 — System Prompt
 
@@ -128,7 +127,7 @@ You are a label-grounding assistant specialized in {domain_name}.
 ## Domain Instructions
 {domain_instructions}
 
-## Allowed Subtypes for {country}
+## Allowed Subtypes
 {allowed_subtypes_list}
 
 ## Task
@@ -136,13 +135,13 @@ You are given a candidate subtype label and a brief reason produced by a classif
 Your job is to select the semantically closest label from the allowed list above.
 
 Rules:
-- You MUST output one of the labels from the allowed list, OR output "unknown", OR output "MISSING: <label>" (see below).
+- You MUST output exactly one subtype label string, OR output "unknown".
 - Output "unknown" if the candidate is "unknown" or if neither it nor any allowed label is a reasonable match.
-- Output "MISSING: <label>" ONLY if the candidate label has a strong, unambiguous semantic meaning that is absent from the allowed list and cannot be reasonably mapped to any existing label.
-- Do NOT invent labels; use the exact string from the allowed list when grounding succeeds.
+- If there is a strong, unambiguous semantic meaning that is absent from the allowed list and cannot be reasonably mapped to any existing label, output that missing label directly as plain text (no prefix).
+- Use the exact string from the allowed list when grounding succeeds.
 
-Respond with exactly one line:
-RESULT: <chosen label | unknown | MISSING: <label>>
+Output only the single line below and nothing else. No markdown, no preamble, no explanation.
+RESULT: <chosen label | unknown>
 """.strip()
 ```
 
@@ -151,7 +150,6 @@ RESULT: <chosen label | unknown | MISSING: <label>>
 |---|---|
 | `{domain_name}` | Same as Stage 1 |
 | `{domain_instructions}` | Same domain instructions block |
-| `{country}` | Country name |
 | `{allowed_subtypes_list}` | Newline-separated list of allowed subtypes, e.g. `"- Admin\n- Billing\n..."` |
 
 ---
@@ -204,20 +202,20 @@ To adapt to a new domain, replace this block. No other prompt changes are needed
 | Condition | Stage 1 output | Stage 2 output | Final result |
 |---|---|---|---|
 | Clear match | Valid candidate | Allowed label | The label |
-| Candidate found, no list match | Valid candidate | `MISSING: <label>` | `MISSING: <label>` |
+| Strong candidate, no list match | Valid candidate | Missing label (plain text) | Missing label (application flags as missing) |
 | Weak / no signal | `unknown` | `unknown` | `unknown` |
 | Forced grounding failure | Any | `unknown` (fallback) | `unknown` |
 
 **Weak signal definition**: Stage 1 outputs `unknown` OR Stage 2 outputs `unknown`. No confidence score is required; the model's explicit `unknown` declaration is the sole weak-signal gate.
 
-**Missing subtype definition**: Stage 2 outputs `MISSING:` prefix. This surfaces novel categories for taxonomy review rather than forcing an incorrect label.
+**Missing subtype definition**: Stage 2 outputs a non-`unknown` label that is not present in `allowed_subtypes`. The application should flag this label as a missing subtype for taxonomy review.
 
 ---
 
 ## Prompt Rendering Helper (pseudocode)
 
 ```python
-def render_stage1(domain_name, domain_instructions, few_shots, attributes, metadata, country):
+def render_stage1(domain_name, domain_instructions, few_shots, attributes, metadata):
     few_shot_block = ""
     if few_shots:
         examples = [
@@ -234,19 +232,17 @@ def render_stage1(domain_name, domain_instructions, few_shots, attributes, metad
         few_shot_block=few_shot_block,
         attributes=attributes,
         metadata=metadata,
-        country=country,
     )
     return [{"role": "system", "content": system},
             {"role": "user",   "content": user}]
 
 
-def render_stage2(domain_name, domain_instructions, country, allowed_subtypes,
+def render_stage2(domain_name, domain_instructions, allowed_subtypes,
                   candidate_subtype, candidate_reason):
     allowed_subtypes_list = "\n".join(f"- {s}" for s in allowed_subtypes)
     system = STAGE2_SYSTEM.format(
         domain_name=domain_name,
         domain_instructions=domain_instructions,
-        country=country,
         allowed_subtypes_list=allowed_subtypes_list,
     )
     user = STAGE2_USER.format(
@@ -261,9 +257,9 @@ def render_stage2(domain_name, domain_instructions, country, allowed_subtypes,
 
 ## vLLM Prefix Caching Notes
 
-- **Batching**: Group records by `(country, few_shot_fingerprint)` before sending to vLLM. Records sharing the same system prompt will hit the prefix cache on the second+ call in the batch.
+- **Batching**: Group records by `(allowed_subtypes_fingerprint, few_shot_fingerprint)` before sending to vLLM. Records sharing the same rendered system prompt will hit the prefix cache on the second+ call in the batch.
 - **Stage 1 cache key**: `hash(STAGE1_SYSTEM.format(domain_name, domain_instructions) + few_shot_block)`
-- **Stage 2 cache key**: `hash(STAGE2_SYSTEM.format(domain_name, domain_instructions, country, allowed_subtypes_list))`
+- **Stage 2 cache key**: `hash(STAGE2_SYSTEM.format(domain_name, domain_instructions, allowed_subtypes_list))`
 - command-r context window is large enough to hold the full allowed list + instructions in the system prompt without truncation risk.
 
 ---
@@ -293,11 +289,7 @@ def parse_stage2(response_text, allowed_subtypes):
     result = result_match.group(1).strip()
     if result == "unknown":
         return "unknown"
-    if result.startswith("MISSING:"):
-        return result  # pass through for taxonomy review
-    if result in allowed_subtypes:
-        return result
-    return "unknown"  # safety fallback: model output not in list and not a special token
+    return result  # app layer decides whether this is allowed or a missing subtype
 ```
 
 ---
@@ -305,20 +297,21 @@ def parse_stage2(response_text, allowed_subtypes):
 ## Full Pipeline
 
 ```python
-def classify(record, country, allowed_subtypes, few_shots,
+def classify(record, allowed_subtypes, few_shots,
              domain_name, domain_instructions, llm_client):
     # Stage 1
     messages1 = render_stage1(domain_name, domain_instructions,
                                few_shots, record["attributes"],
-                               record["metadata"], country)
-    resp1 = llm_client.chat(messages1, max_new_tokens=80)
+                               record["metadata"])
+    # max_new_tokens=80 covers "SUBTYPE: <label>\nREASON: <text>" — the reason field is capped at ~50 tokens by the prompt instruction
+    resp1 = llm_client.chat(messages1, max_new_tokens=80, temperature=0)
     candidate_subtype, candidate_reason = parse_stage1(resp1)
 
     # Stage 2
     messages2 = render_stage2(domain_name, domain_instructions,
-                               country, allowed_subtypes,
+                               allowed_subtypes,
                                candidate_subtype, candidate_reason)
-    resp2 = llm_client.chat(messages2, max_new_tokens=40)
+    resp2 = llm_client.chat(messages2, max_new_tokens=40, temperature=0)
     final_label = parse_stage2(resp2, allowed_subtypes)
 
     return final_label
@@ -332,6 +325,8 @@ def classify(record, country, allowed_subtypes, few_shots,
 2. All prompt strings are Python `str` literals usable with `.format(**kwargs)`.
 3. The `Domain Instructions` block is a single string constant — changing it is sufficient to repurpose the system for a new domain.
 4. Few-shots are injected only into the Stage 1 user prompt and are externally supplied (not hardcoded).
-5. The pipeline outputs exactly one of: an allowed subtype string, `"unknown"`, or `"MISSING: <label>"`.
-6. Stage 1 reasoning is capped at 50 tokens (enforced via `max_new_tokens` at call time).
-7. Both system prompts are stable (no per-record variation) within a `(country, few_shot_set)` batch — enabling vLLM prefix cache hits.
+5. The pipeline outputs exactly one of: a subtype label string or `"unknown"`.
+6. Stage 1 total response budget is `max_new_tokens=80`; the 50-token limit on the `REASON` field is enforced via the prompt instruction, not the token budget alone (the label itself consumes some tokens).
+7. Both LLM calls use `temperature=0` (greedy decoding) — recommended by Cohere for classification tasks and ensures deterministic output format.
+8. Both system prompts are stable (no per-record variation) within an `(allowed_subtypes_set, few_shot_set)` batch — enabling vLLM prefix cache hits.
+9. The application determines missing subtype cases by checking whether non-`unknown` Stage 2 output exists in `allowed_subtypes_list`.
