@@ -93,8 +93,30 @@ const VERDICTS = [
   { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
 ];
 
-const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_verdict: '', gpt_reasoning: '' };
+const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', ask_gpt: '' };
 const NOT_RETAGGED_LABEL = 'Not retagged';
+
+function getAskText(result) {
+  if (!result) return 'Prompt output will appear here';
+  if (result.error) return `Error: ${result.error}`;
+  if (result.text) return result.text;
+  if (result.subtype || result.reason) {
+    const subtype = result.subtype ? `SUBTYPE: ${result.subtype}` : '';
+    const reason = result.reason ? `REASON: ${result.reason}` : '';
+    return [subtype, reason].filter(Boolean).join(' | ');
+  }
+  return 'No response text';
+}
+
+function normalizeGptResult(value) {
+  if (!value) return null;
+  return {
+    text: value.text || '',
+    subtype: value.subtype || value.verdict || null,
+    reason: value.reason || value.reasoning || '',
+    error: value.error || null,
+  };
+}
 
 function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict }) {
   const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
@@ -112,6 +134,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [gptResults, setGptResults] = useState({});   // request_id -> { verdict, reasoning }
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
+  const [askGptLoading, setAskGptLoading] = useState({});
   const gptCancelledRef = useRef(false);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
@@ -131,11 +154,19 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setSelectedIds(new Set());
     setGptResults({});
     setGptRunning(false);
+    setAskGptLoading({});
     setColFilters(EMPTY_COL_FILTERS);
     if (runId) {
       fetch(`/api/gpt-results?run_id=${runId}`)
         .then(r => r.json())
-        .then(data => setGptResults(data && typeof data === 'object' ? data : {}))
+        .then(data => {
+          if (!data || typeof data !== 'object') return setGptResults({});
+          const mapped = {};
+          Object.entries(data).forEach(([requestId, value]) => {
+            mapped[requestId] = normalizeGptResult(value);
+          });
+          setGptResults(mapped);
+        })
         .catch(() => {});
     }
   }, [runId]);
@@ -189,8 +220,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   if (colFilters.pred_subtype) filtered = filtered.filter(r => (r.pred_subtype || '').toLowerCase().includes(colFilters.pred_subtype.toLowerCase()));
   if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
   if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
-  if (colFilters.gpt_verdict)  filtered = filtered.filter(r => (gptResults[r.request_id]?.verdict || '').toLowerCase().includes(colFilters.gpt_verdict.toLowerCase()));
-  if (colFilters.gpt_reasoning) filtered = filtered.filter(r => (gptResults[r.request_id]?.reasoning || '').toLowerCase().includes(colFilters.gpt_reasoning.toLowerCase()));
+  if (colFilters.ask_gpt) filtered = filtered.filter(r => getAskText(gptResults[r.request_id]).toLowerCase().includes(colFilters.ask_gpt.toLowerCase()));
   if (verdictFilter !== 'all') {
     if (verdictFilter === 'unreviewed') filtered = filtered.filter(r => !verdicts[r.request_id]);
     else filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
@@ -206,17 +236,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'true_type') {
         const aSub = verdicts[a.request_id] || '';
         const bSub = verdicts[b.request_id] || '';
-        aVal = subtypeToType[aSub] || '';
-        bVal = subtypeToType[bSub] || '';
+        aVal = aSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[aSub] || 'Unknown');
+        bVal = bSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[bSub] || 'Unknown');
       } else if (sortConfig.key === 'missing_subtype') {
         aVal = a.missing_subtype || '';
         bVal = b.missing_subtype || '';
-      } else if (sortConfig.key === 'gpt_verdict') {
-        aVal = gptResults[a.request_id]?.verdict || '';
-        bVal = gptResults[b.request_id]?.verdict || '';
-      } else if (sortConfig.key === 'gpt_reasoning') {
-        aVal = gptResults[a.request_id]?.reasoning || '';
-        bVal = gptResults[b.request_id]?.reasoning || '';
+      } else if (sortConfig.key === 'ask_gpt') {
+        aVal = getAskText(gptResults[a.request_id]);
+        bVal = getAskText(gptResults[b.request_id]);
       } else {
         aVal = a[sortConfig.key] ?? '';
         bVal = b[sortConfig.key] ?? '';
@@ -238,6 +265,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const unjustifiedCount = records.filter(r => verdicts[r.request_id] === 'unjustified').length;
   const unclearCount     = records.filter(r => verdicts[r.request_id] === 'unclear').length;
   const retaggedCount    = reviewed; // in retag mode, any selection counts as reviewed
+  const retaggedProgress = total > 0 ? Math.round((retaggedCount / total) * 100) : 0;
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
@@ -285,6 +313,50 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
 
   /* ── ask GPT (filtered records only) ── */
+  const askGptForRecord = async (record) => {
+    const requestId = record.request_id;
+    setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
+
+    let result;
+    try {
+      const res = await fetch('/api/ask-gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attributes: record.attributes,
+          metadata: record.metadata,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      result = {
+        text: data.text || '',
+        subtype: data.subtype || data.verdict || null,
+        reason: data.reason || data.reasoning || '',
+        error: null,
+      };
+    } catch (err) {
+      result = { text: '', subtype: null, reason: '', error: err.message || '(error)' };
+    }
+
+    setGptResults(prev => ({ ...prev, [requestId]: result }));
+    fetch('/api/gpt-results', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        run_id: runId,
+        results: {
+          [requestId]: {
+            verdict: result.subtype || '',
+            reasoning: result.text || result.reason || (result.error ? `Error: ${result.error}` : ''),
+          },
+        },
+      }),
+    }).catch(() => {});
+
+    setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
+  };
+
   const askGptAll = async (recordsToProcess) => {
     gptCancelledRef.current = false;
     const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
@@ -293,30 +365,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptProgress({ done: 0, total: pending.length });
     for (const record of pending) {
       if (gptCancelledRef.current) break;
-      let result;
-      try {
-        const res = await fetch('/api/ask-gpt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            attributes: record.attributes,
-            metadata: record.metadata,
-            suggested_type: record.pred_type,
-            suggested_subtype: record.pred_subtype,
-          }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        result = { verdict: data.verdict, reasoning: data.reasoning };
-      } catch (err) {
-        result = { verdict: '?', reasoning: err.message || '(error)' };
-      }
-      setGptResults(prev => ({ ...prev, [record.request_id]: result }));
-      fetch('/api/gpt-results', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ run_id: runId, results: { [record.request_id]: result } }),
-      }).catch(() => {});
+      await askGptForRecord(record);
       setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
     }
     setGptRunning(false);
@@ -352,14 +401,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── export ── */
   const doExport = (kind) => {
     const headers = isRetag
-      ? ['request_id', 'pred_type', 'pred_subtype', 'missing_subtype', 'true_subtype', 'true_type', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata']
-      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'gpt_verdict', 'gpt_reasoning', 'attributes', 'metadata'];
+      ? ['request_id', 'pred_type', 'pred_subtype', 'missing_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
+      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
       const trueSubtype = verdicts[r.request_id] || '';
-      const trueType = isRetag ? (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || '') : '';
+      const trueType = isRetag ? (trueSubtype === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || 'Unknown')) : '';
+      const askGptText = getAskText(gptResults[r.request_id]);
       return isRetag
-        ? [r.request_id, r.pred_type, r.pred_subtype, r.missing_subtype || '', trueSubtype, trueType, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
-        : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, gptResults[r.request_id]?.verdict || '', gptResults[r.request_id]?.reasoning || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
+        ? [r.request_id, r.pred_type, r.pred_subtype, r.missing_subtype || '', trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
     if (kind === 'csv') {
@@ -394,7 +444,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         <div className="validation-stats">
           {isRetag ? (
             <>
-              <span className="validation-progress">{retaggedCount}/{total} retagged</span>
+              <div className="validation-retag-progress">
+                <span className="validation-progress">{retaggedCount}/{total} retagged</span>
+                <div className="validation-retag-progress-track" aria-hidden="true">
+                  <div
+                    className="validation-retag-progress-fill"
+                    style={{ width: `${retaggedProgress}%` }}
+                  />
+                </div>
+              </div>
               <span className="validation-stat" style={{ background: '#e0f2fe', color: '#0369a1' }}>
                 {total - retaggedCount} pending
               </span>
@@ -536,11 +594,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   True Type{sortIndicator('true_type')}
                 </th>
               )}
-              <th style={{ width: 80, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
-                GPT Verdict{sortIndicator('gpt_verdict')}
-              </th>
-              <th style={{ width: 260, cursor: 'pointer' }} onClick={() => handleSort('gpt_reasoning')}>
-                GPT Reasoning{sortIndicator('gpt_reasoning')}
+              <th style={{ width: 320, cursor: 'pointer' }} onClick={() => handleSort('ask_gpt')}>
+                Ask GPT{sortIndicator('ask_gpt')}
               </th>
             </tr>
             {/* Column filters */}
@@ -554,8 +609,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
               <th />
               {isRetag && <th />}
-              <th><input className="col-filter-input" placeholder="yes/no" value={colFilters.gpt_verdict} onChange={e => setColFilter('gpt_verdict', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.gpt_reasoning} onChange={e => setColFilter('gpt_reasoning', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.ask_gpt} onChange={e => setColFilter('ask_gpt', e.target.value)} /></th>
             </tr>
           </thead>
           <tbody>
@@ -564,10 +618,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const gpt = gptResults[r.request_id];
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
-              const effectiveSubtypeOptions = countrySubtypes;
+              const effectiveSubtypeOptions = r.missing_subtype
+                ? [{ subtype: r.missing_subtype, type: 'Unknown' }, ...countrySubtypes]
+                : countrySubtypes;
 
               const trueType = isRetag
-                ? (verdict === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === verdict)?.type || ''))
+                ? (verdict === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === verdict)?.type || 'Unknown'))
                 : '';
               return (
                 <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
@@ -611,11 +667,20 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     </td>
                   )}
                   {isRetag && <td className="cell-true-type">{trueType}</td>}
-                  <td className={`cell-gpt-verdict${gpt ? ` gpt-verdict-${gpt.verdict}` : ''}`}>
-                    {gpt ? gpt.verdict : ''}
-                  </td>
-                  <td className="cell-gpt-reasoning">
-                    {gpt?.reasoning || ''}
+                  <td className="ask-gpt-td">
+                    <div className="ask-gpt-cell">
+                      <div className="ask-gpt-placeholder">{getAskText(gpt)}</div>
+                      <button
+                        className="ask-gpt-row-btn"
+                        disabled={Boolean(askGptLoading[r.request_id])}
+                        onClick={e => {
+                          e.stopPropagation();
+                          askGptForRecord(r);
+                        }}
+                      >
+                        {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

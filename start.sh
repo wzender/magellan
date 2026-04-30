@@ -22,11 +22,31 @@ fi
 
 echo "==> Installing server dependencies..."
 cd "$ROOT"
-npm install
+if [ -d "$ROOT/node_modules/xlsx" ]; then
+  echo "    Server dependencies already present (found node_modules/xlsx), skipping install"
+else
+  if ! npm ci --no-audit --fund=false --prefer-offline; then
+    echo ""
+    echo "ERROR: Failed to install server dependencies."
+    echo "This machine appears to be airgapped and missing cached npm packages (e.g. xlsx)."
+    echo "Populate node_modules (or npm cache) from a connected machine, then re-run ./start.sh."
+    exit 1
+  fi
+fi
 
 echo "==> Installing client dependencies..."
 cd "$ROOT/client"
-npm install
+if [ -d "$ROOT/client/node_modules/xlsx" ]; then
+  echo "    Client dependencies already present (found client/node_modules/xlsx), skipping install"
+else
+  if ! npm ci --no-audit --fund=false --prefer-offline; then
+    echo ""
+    echo "ERROR: Failed to install client dependencies."
+    echo "This machine appears to be airgapped and missing cached npm packages (e.g. xlsx)."
+    echo "Populate client/node_modules (or npm cache) from a connected machine, then re-run ./start.sh."
+    exit 1
+  fi
+fi
 
 echo "==> Building client..."
 npm run build

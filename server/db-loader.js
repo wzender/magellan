@@ -17,8 +17,13 @@
  * Benchmarks are read directly from the "benchmark" column in leaderboard-table.
  */
 
+const fs = require('fs');
+const path = require('path');
+const XLSX = require('xlsx');
 const { query, pool } = require('./db');
 const idColumnCache = new Map();
+const SUBTYPES_FILE = path.join(__dirname, '../data/Subtypes.xlsx');
+let subtypeVocabCache = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,6 +43,83 @@ function parseJsonFields(row) {
     metadata:      tryParseJson(row.metadata),
     en_metadata:   tryParseJson(row.en_metadata),
   };
+}
+
+function normalizeCountry(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function countriesTextMatchesCountry(countriesValue, country) {
+  const text = normalizeCountry(countriesValue);
+  const normalizedCountry = normalizeCountry(country);
+  if (!text || !normalizedCountry) return false;
+
+  if (text.includes(normalizedCountry)) return true;
+
+  const baseCountry = normalizedCountry.split('_')[0];
+  return Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry);
+}
+
+function loadSubtypeVocabs() {
+  if (subtypeVocabCache) return subtypeVocabCache;
+  if (!fs.existsSync(SUBTYPES_FILE)) {
+    subtypeVocabCache = { all: new Set(), rows: [] };
+    return subtypeVocabCache;
+  }
+
+  const wb = XLSX.readFile(SUBTYPES_FILE);
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+  const all = new Set();
+  const normalizedRows = [];
+
+  for (const row of rows) {
+    all.add(row.Subtype);
+    normalizedRows.push({ subtype: row.Subtype, countriesText: String(row.Countries || '') });
+  }
+
+  subtypeVocabCache = { all, rows: normalizedRows };
+  return subtypeVocabCache;
+}
+
+function candidateUnknownsCountries(run) {
+  const candidates = [];
+  const add = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return;
+    const normalized = normalizeCountry(text);
+    if (!normalized) return;
+    if (!candidates.includes(normalized)) candidates.push(normalized);
+
+    const stripped = normalized.replace(/^\d{8}-\d{4}-/, '');
+    if (stripped && !candidates.includes(stripped)) candidates.push(stripped);
+
+    stripped.split(/[-_\s]+/).filter(Boolean).forEach(token => {
+      if (!candidates.includes(token)) candidates.push(token);
+    });
+  };
+
+  add(run?.run_name);
+  add(run?.model_version);
+  return candidates;
+}
+
+function getUnknownsMissingSubtypeList(run) {
+  const { all: allSubtypes, rows: subtypeRows } = loadSubtypeVocabs();
+  if (allSubtypes.size === 0) return [];
+
+  const candidates = candidateUnknownsCountries(run);
+  for (const country of candidates) {
+    const countryVocab = new Set(
+      subtypeRows
+        .filter(row => countriesTextMatchesCountry(row.countriesText, country))
+        .map(row => row.subtype)
+    );
+    if (countryVocab.size > 0) {
+      return Array.from(allSubtypes).filter(s => !countryVocab.has(s)).sort();
+    }
+  }
+
+  return [];
 }
 
 // Returns true for PostgreSQL "relation does not exist" (42P01)
@@ -109,6 +191,7 @@ async function getRunIndex() {
     runs.push({
       id:            syntheticRunId,
       benchmark_id:  benchmarkId,
+      benchmark_name: benchmarkName,
       run_name:      tableName,
       model_version: row.description || '',
     });
@@ -323,6 +406,63 @@ async function getTransitionMatrix(runId1, runId2, minCount = 1) {
   return { rows: subtypeArray, cols: subtypeArray, data: filteredData };
 }
 
+async function getTypeTransitionMatrix(runId1, runId2) {
+  const { runs } = await getRunIndex();
+  const run1 = runById(runs, runId1);
+  const run2 = runById(runs, runId2);
+  if (!run1 || !run2) return { rows: [], cols: [], data: {} };
+
+  const tbl1 = run1.run_name;
+  const tbl2 = run2.run_name;
+  const [idCol1, idCol2] = await Promise.all([getIdColumn(tbl1), getIdColumn(tbl2)]);
+
+  let result;
+  try {
+    result = await query(
+      `SELECT r1.pred_type AS run1_pred,
+              r2.pred_type AS run2_pred,
+              r1.true_type AS true_type,
+              COUNT(*)     AS cnt
+       FROM "${tbl1}" r1
+       JOIN "${tbl2}" r2 ON r1.${idCol1} = r2.${idCol2}
+       GROUP BY r1.pred_type, r2.pred_type, r1.true_type`
+    );
+  } catch (err) {
+    if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl1} or ${tbl2}`); return { rows: [], cols: [], data: {} }; }
+    throw err;
+  }
+
+  const matrixData = {};
+  const predTypes = new Set();
+
+  result.rows.forEach(row => {
+    const run1Pred = row.run1_pred;
+    const run2Pred = row.run2_pred;
+    const trueType = row.true_type;
+    const cnt = parseInt(row.cnt);
+
+    predTypes.add(run1Pred);
+    predTypes.add(run2Pred);
+
+    if (!matrixData[run1Pred]) matrixData[run1Pred] = {};
+    if (!matrixData[run1Pred][run2Pred]) {
+      matrixData[run1Pred][run2Pred] = { total: 0, run1Correct: 0, run2Correct: 0, bothWrong: 0 };
+    }
+
+    const cell = matrixData[run1Pred][run2Pred];
+    cell.total += cnt;
+
+    const r1c = run1Pred === trueType;
+    const r2c = run2Pred === trueType;
+    if      (r1c && !r2c) cell.run1Correct += cnt;
+    else if (!r1c && r2c) cell.run2Correct += cnt;
+    else if (!r1c && !r2c) cell.bothWrong += cnt;
+  });
+
+  const typeArray = Array.from(predTypes).sort();
+  return { rows: typeArray, cols: typeArray, data: matrixData };
+}
+
 async function getRecords(filters = {}) {
   const { runs } = await getRunIndex();
   const limit  = filters.limit  || 100;
@@ -436,8 +576,18 @@ async function getRecords(filters = {}) {
   }
 
   const total = parseInt(countResult.rows[0].total);
+  let parsedData = dataResult.rows.map(parseJsonFields);
+
+  if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
+    const missingList = getUnknownsMissingSubtypeList(run);
+    parsedData = parsedData.map((row, idx) => ({
+      ...row,
+      missing_subtype: missingList.length > 0 ? missingList[idx % missingList.length] : null,
+    }));
+  }
+
   return {
-    data: dataResult.rows.map(parseJsonFields),
+    data: parsedData,
     pagination: { total, limit, offset, pages: Math.ceil(total / limit) },
   };
 }
@@ -1004,6 +1154,7 @@ module.exports = {
   getConfusionMatrix,
   getSubtypeMatrixForTypePair,
   getTransitionMatrix,
+  getTypeTransitionMatrix,
   getRecords,
   updateTranslation,
   updateMetadataTranslation,

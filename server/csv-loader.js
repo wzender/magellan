@@ -14,44 +14,35 @@ const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
 const METADATA_TRANSLATIONS_FILE  = path.join(DATA_DIR, 'metadata-translations.json');
 const SUBTYPES_FILE               = path.join(DATA_DIR, 'Subtypes.xlsx');
 
-function parseCountries(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(c => String(c).trim()).filter(Boolean);
-
-  const raw = String(value).trim();
-  if (!raw) return [];
-
-  // New format support: "['Spain', 'Italy']" (and valid JSON arrays).
-  if (raw.startsWith('[') && raw.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(raw.replace(/'/g, '"'));
-      if (Array.isArray(parsed)) {
-        return parsed.map(c => String(c).trim()).filter(Boolean);
-      }
-    } catch {
-      // Fallback to legacy parser below.
-    }
-  }
-
-  // Legacy format support: "Spain, Italy"
-  return raw.split(',').map(c => c.trim()).filter(Boolean);
+function normalizeCountry(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
-// Builds { all: Set<string>, byCountry: { Country: Set<string> } } from Subtypes.xlsx
+// Countries cells can be free text (for example: spain_cities, italy_rivers).
+// Match by normalized text and also allow base-country fallback for suffixed run names.
+function countriesTextMatchesCountry(countriesValue, country) {
+  const text = normalizeCountry(countriesValue);
+  const normalizedCountry = normalizeCountry(country);
+  if (!text || !normalizedCountry) return false;
+
+  if (text.includes(normalizedCountry)) return true;
+
+  const baseCountry = normalizedCountry.split('_')[0];
+  return Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry);
+}
+
+// Builds { all: Set<string>, rows: Array<{ subtype, countriesText }> } from Subtypes.xlsx
 function loadSubtypeVocabs() {
-  if (!fs.existsSync(SUBTYPES_FILE)) return { all: new Set(), byCountry: {} };
+  if (!fs.existsSync(SUBTYPES_FILE)) return { all: new Set(), rows: [] };
   const wb = XLSX.readFile(SUBTYPES_FILE);
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
   const all = new Set();
-  const byCountry = {};
+  const normalizedRows = [];
   for (const row of rows) {
     all.add(row.Subtype);
-    for (const country of parseCountries(row.Countries)) {
-      if (!byCountry[country]) byCountry[country] = new Set();
-      byCountry[country].add(row.Subtype);
-    }
+    normalizedRows.push({ subtype: row.Subtype, countriesText: String(row.Countries || '') });
   }
-  return { all, byCountry };
+  return { all, rows: normalizedRows };
 }
 
 let dataCache = null;
@@ -133,13 +124,17 @@ function loadData() {
   });
 
   // Pre-compute missing subtypes for Unknowns benchmark runs
-  const { all: allSubtypes, byCountry: subtypesByCountry } = loadSubtypeVocabs();
+  const { all: allSubtypes, rows: subtypeRows } = loadSubtypeVocabs();
   const unknownsBenchmarkId = benchmarks.find(b => b.name === 'Unknowns')?.id;
   const missingSubtypesByRun = {};
   if (unknownsBenchmarkId) {
     runs.filter(r => r.benchmark_id === unknownsBenchmarkId).forEach(run => {
       const country = run.run_name.charAt(0).toUpperCase() + run.run_name.slice(1);
-      const countryVocab = subtypesByCountry[country] || new Set();
+      const countryVocab = new Set(
+        subtypeRows
+          .filter(row => countriesTextMatchesCountry(row.countriesText, country))
+          .map(row => row.subtype)
+      );
       missingSubtypesByRun[run.id] = Array.from(allSubtypes).filter(s => !countryVocab.has(s)).sort();
     });
   }

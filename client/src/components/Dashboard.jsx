@@ -10,6 +10,33 @@ const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
 const NOT_RETAGGED_LABEL = 'Not retagged';
 const EMPTY_UNKNOWNS_GRID_FILTER = { trueType: null, trueSubtype: null, predSubtype: null };
 
+function toCountryLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
+function buildUnknownsCountryCandidates(run) {
+  const candidates = [];
+  const addCandidate = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return;
+
+    const normalized = raw.toLowerCase();
+    const stripped = normalized.replace(/^\d{8}-\d{4}-/, '');
+    const variants = [normalized, stripped, ...stripped.split(/[-_\s]+/).filter(Boolean)];
+
+    variants.forEach(v => {
+      const label = toCountryLabel(v);
+      if (label && !candidates.includes(label)) candidates.push(label);
+    });
+  };
+
+  addCandidate(run?.run_name);
+  addCandidate(run?.model_version);
+  return candidates;
+}
+
 /* ── helpers ─────────────────────────────────────────────── */
 function pctNum(n) { return (n * 100).toFixed(1); }
 
@@ -167,15 +194,14 @@ function Dashboard() {
   const [validationVerdicts, setValidationVerdicts] = useState({});
   const [validationLoading, setValidationLoading] = useState(false);
   const [countrySubtypes, setCountrySubtypes] = useState([]);
+  const [unknownsCountry, setUnknownsCountry] = useState(null);
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
 
-  /* derive country name from run_name (spain → Spain) */
+  /* derive country name candidates from run metadata */
   const _unknownsRun = leaderboard.find(r => r.run_id === selectedRunIds[0]);
-  const unknownsCountry = isUnknownsBenchmark && _unknownsRun
-    ? _unknownsRun.run_name.charAt(0).toUpperCase() + _unknownsRun.run_name.slice(1)
-    : null;
+  const unknownsCountryCandidates = isUnknownsBenchmark ? buildUnknownsCountryCandidates(_unknownsRun) : [];
 
   /* ── initial load: benchmarks + all leaderboards ── */
   useEffect(() => {
@@ -242,12 +268,40 @@ function Dashboard() {
 
   /* ── Unknowns: fetch country-specific subtypes when run changes ── */
   useEffect(() => {
-    if (!unknownsCountry) return;
-    fetch(`/api/subtypes-by-country?country=${encodeURIComponent(unknownsCountry)}`)
-      .then(r => r.json())
-      .then(data => setCountrySubtypes(Array.isArray(data) ? data : []))
-      .catch(() => setCountrySubtypes([]));
-  }, [unknownsCountry]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!isUnknownsBenchmark || unknownsCountryCandidates.length === 0) {
+      setCountrySubtypes([]);
+      setUnknownsCountry(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const load = async () => {
+      for (const candidate of unknownsCountryCandidates) {
+        try {
+          const response = await fetch(`/api/subtypes-by-country?country=${encodeURIComponent(candidate)}`);
+          if (!response.ok) continue;
+          const data = await response.json();
+          if (cancelled) return;
+          if (Array.isArray(data) && data.length > 0) {
+            setCountrySubtypes(data);
+            setUnknownsCountry(candidate);
+            return;
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+
+      if (!cancelled) {
+        setCountrySubtypes([]);
+        setUnknownsCountry(unknownsCountryCandidates[0] || null);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [isUnknownsBenchmark, selectedRunIds[0], unknownsCountryCandidates.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Unknowns: load validation records + verdicts when run changes ── */
   useEffect(() => {
