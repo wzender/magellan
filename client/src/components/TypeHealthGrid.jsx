@@ -1112,6 +1112,30 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
   const bins = Array.isArray(confidenceQuality?.bins) ? confidenceQuality.bins : [];
   if (bins.length === 0) return <div className="matrix-empty">No threshold data</div>;
 
+  // Metrics for the strip
+  const ece           = confidenceQuality.ece ?? 0;
+  const avgConfidence = confidenceQuality.avg_confidence ?? 0;
+  const accuracy      = confidenceQuality.accuracy ?? 0;
+  const maxGap        = confidenceQuality.max_gap ?? 0;
+  const worstBin      = confidenceQuality.worst_bin || 'n/a';
+  const bias          = avgConfidence - accuracy;
+  const status        = confidenceQuality.status || (ece < 0.03 ? 'good' : ece >= 0.07 ? 'poor' : 'moderate');
+  const statusLabel   = { good: 'Calibrated', moderate: 'Moderate', poor: 'Needs calibration' }[status] ?? '';
+  const biasLabel     = Math.abs(bias) < 0.005 ? 'neutral' : bias > 0 ? 'overconfident' : 'underconfident';
+  const biasCls       = Math.abs(bias) < 0.005 ? '' : bias > 0 ? 'confq-metric-over' : 'confq-metric-under';
+  const biasSign      = bias > 0.005 ? '+' : '';
+  let stdGap = 0;
+  if (bins.length > 0) {
+    const totalCount = bins.reduce((s, b) => s + b.count, 0);
+    if (totalCount > 0) {
+      const variance = bins.reduce((s, b) => {
+        const w = b.count / totalCount;
+        return s + w * Math.pow(b.gap - ece, 2);
+      }, 0);
+      stdGap = Math.sqrt(variance);
+    }
+  }
+
   const total = confidenceQuality.n || bins.reduce((sum, bin) => sum + bin.count, 0);
   const thresholds = [0.3, 0.5, 0.7, 0.9];
   const points = thresholds.map((threshold) => {
@@ -1157,8 +1181,33 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
   return (
     <div className="confq-card">
       <div className="confq-card-header">
-        <span className="confq-card-title">Decision Frontier</span>
-        <span className="confq-card-subtitle">How many records need human review vs how many errors slip through — per confidence threshold</span>
+        <div className="confq-card-title-row">
+          <span className="confq-card-title">Decision Frontier</span>
+          <span className="confq-card-subtitle">How many records need human review vs how many errors slip through — per confidence threshold</span>
+        </div>
+        <div className="confq-inline-strip">
+          <span className="confq-inline-metric" title="Expected Calibration Error">
+            <span className="confq-inline-label">ECE</span>
+            <span className="confq-inline-value">{pctMetric(ece)}</span>
+            <span className={`confq-inline-tag confq-tag-${status}`}>{statusLabel}</span>
+          </span>
+          <span className="confq-inline-divider" />
+          <span className={`confq-inline-metric ${biasCls}`} title="Bias = avg confidence − accuracy">
+            <span className="confq-inline-label">Bias</span>
+            <span className="confq-inline-value">{biasSign}{pctMetric(bias)}</span>
+            <span className="confq-inline-tag">{biasLabel}</span>
+          </span>
+          <span className="confq-inline-divider" />
+          <span className="confq-inline-metric" title="StdGap — std deviation of per-bin calibration gaps">
+            <span className="confq-inline-label">StdGap</span>
+            <span className="confq-inline-value">{pctMetric(stdGap)}</span>
+          </span>
+          <span className="confq-inline-divider" />
+          <span className="confq-inline-metric" title={`MaxGap — worst single-bin error (bin ${worstBin})`}>
+            <span className="confq-inline-label">MaxGap</span>
+            <span className="confq-inline-value">{pctMetric(maxGap)}</span>
+          </span>
+        </div>
       </div>
       <div className="confq-plot-wrap">
         <svg viewBox={`0 0 ${width} ${height}`} className="confq-plot" role="img" aria-label="Threshold decision frontier chart">
@@ -1409,7 +1458,6 @@ function TypeHealthGrid({
           onToggle={() => setConfidenceExpanded(prev => !prev)}
           extraClassName="confq-section"
         >
-          <ConfidenceScoreboard confidenceQuality={confidenceQuality} />
           <ConfidenceQualityPanel confidenceQuality={confidenceQuality} />
         </CollapsibleSection>
       )}
