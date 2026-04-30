@@ -432,6 +432,83 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   margin-bottom: 1rem;
 }
 
+/* ── Calibration Profile Strip ──────────────────────────── */
+.confq-profile-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.confq-profile-divider {
+  width: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.confq-profile-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.85rem 1.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.confq-metric-over  { background: rgba(239,68,68,0.04); }
+.confq-metric-under { background: rgba(99,102,241,0.04); }
+
+.confq-profile-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.confq-profile-value {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.confq-profile-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.confq-tag-good     { color: #15803d; }
+.confq-tag-moderate { color: #b45309; }
+.confq-tag-poor     { color: #b91c1c; }
+
+.confq-profile-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.85rem 1.25rem;
+  min-width: 120px;
+}
+
+.confq-profile-meta-item {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .confq-score-card .cmp-score-value {
   font-size: 1.95rem;
 }
@@ -526,43 +603,129 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   stroke-width: 2;
 }
 
-.confq-table-wrap {
-  padding: 0.5rem 0.75rem 0.8rem;
+.confq-zone-tradeoff {
+  fill: rgba(245, 158, 11, 0.08);
 }
 
-.confq-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
+.confq-zone-good {
+  fill: rgba(34, 197, 94, 0.12);
 }
 
-.confq-table th,
-.confq-table td {
-  padding: 0.55rem 0.5rem;
-  border-bottom: 1px solid var(--border);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.confq-zone-risk {
+  fill: rgba(239, 68, 68, 0.08);
 }
 
-.confq-table th:first-child,
-.confq-table td:first-child {
-  text-align: left;
-}
-
-.confq-table th {
-  font-size: 0.68rem;
+.confq-zone-label {
+  font-size: 8px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-faint);
+  fill: var(--text-faint);
 }
 
-.confq-table tbody tr:hover {
-  background: var(--surface-2);
+.confq-zone-label-good { fill: #15803d; }
+.confq-zone-label-tradeoff { fill: #a16207; }
+.confq-zone-label-risk { fill: #b91c1c; }
+
+.confq-frontier-line {
+  fill: none;
+  stroke: rgba(249, 115, 22, 0.92);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.confq-table tbody tr:last-child td {
-  border-bottom: none;
+.confq-frontier-dot {
+  fill: rgba(249, 115, 22, 0.96);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.confq-frontier-dot-recommended {
+  fill: #10b981;
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.confq-reco-guide {
+  stroke: rgba(16, 185, 129, 0.7);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 3;
+}
+
+.confq-reco-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  fill: #047857;
+}
+
+.confq-frontier-label {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--text-muted);
+}
+
+.confq-drop-line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.confq-axis-title {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.confq-frontier-legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.15rem 0.95rem 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.confq-frontier-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.confq-frontier-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 6px;
+  border-radius: 99px;
+}
+
+.confq-frontier-swatch-line {
+  background: rgba(249, 115, 22, 0.92);
+}
+
+.confq-frontier-swatch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(249, 115, 22, 0.96);
+}
+
+.confq-frontier-swatch-reco {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.confq-frontier-swatch-zone {
+  width: 14px;
+  height: 6px;
+  background: rgba(34, 197, 94, 0.3);
 }
 
 .cmp-stat {
@@ -837,6 +1000,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .th-col-label,
 .th-col-f1,
+.th-col-ece,
 .th-col-count,
 .th-col-changes,
 .th-col-bar {
@@ -848,6 +1012,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .th-col-f1    { text-align: right; }
+.th-col-ece   { text-align: right; }
 .th-col-count { text-align: right; }
 
 .th-list {
@@ -895,7 +1060,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .th-row-header {
   display: grid;
-  grid-template-columns: 1.2rem 160px 56px 64px 1fr;
+  grid-template-columns: 1.2rem 160px 56px 60px 64px 1fr;
   align-items: center;
   gap: 0.75rem;
   padding: 0.6rem 1rem;
@@ -979,6 +1144,18 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.th-row-ece {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+.th-row-ece-good     { background: rgba(34,197,94,0.15);  color: #15803d; }
+.th-row-ece-moderate { background: rgba(245,158,11,0.15); color: #b45309; }
+.th-row-ece-poor     { background: rgba(239,68,68,0.15);  color: #b91c1c; }
 
 .th-row-count {
   font-size: 0.76rem;

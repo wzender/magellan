@@ -151,6 +151,7 @@ function Dashboard() {
   const [selectedRunIds, setSelectedRunIds] = useState([]);
   const [typeHealth, setTypeHealth]     = useState([]);
   const [confidenceQuality, setConfidenceQuality] = useState(null);
+  const [calibrationPerType, setCalibrationPerType] = useState([]);
   const [typeHealth2, setTypeHealth2]   = useState(null);
   const [compareTypeHealth, setCompareTypeHealth] = useState(null); // compare mode: per-type 4-outcome counts
   const [compareFilter, setCompareFilter] = useState(null); // null|'both_correct'|'run1_only'|'run2_only'|'both_wrong'
@@ -338,6 +339,7 @@ function Dashboard() {
   useEffect(() => {
     if (selectedRunIds.length !== 1 || !selectedRunIds[0]) {
       setConfidenceQuality(null);
+      setCalibrationPerType([]);
       return;
     }
     const runId = selectedRunIds[0];
@@ -348,6 +350,10 @@ function Dashboard() {
         else setConfidenceQuality(null);
       })
       .catch(() => setConfidenceQuality(null));
+    fetch(`/api/calibration-per-type?run_id=${runId}`)
+      .then(r => r.json())
+      .then(data => setCalibrationPerType(Array.isArray(data) ? data : []))
+      .catch(() => setCalibrationPerType([]));
   }, [selectedRunIds[0], selectedRunIds[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── row click: switch to this run as the only selected run ── */
@@ -599,6 +605,7 @@ function Dashboard() {
             <TypeHealthGrid
               typeHealth={displayTypeHealth}
               confidenceQuality={confidenceQuality}
+              calibrationPerType={calibrationPerType}
               typeHealth2={typeHealth2}
               compareTypeHealth={compareTypeHealth}
               runId={selectedRunIds[0]}

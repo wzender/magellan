@@ -700,7 +700,7 @@ function TypeDetailPanel({ typeData, typeData2, runId, runId2, run1Name, run2Nam
 }
 
 /* ── TypeHealthRow (single mode — bar layout) ────────────── */
-function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFilter, onToggle, onViewRecords, runId, activeSubtype, badgeMatchesFilter, isUnknowns }) {
+function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFilter, onToggle, onViewRecords, runId, activeSubtype, badgeMatchesFilter, isUnknowns, calibration }) {
   const { accuracy, cross_type_rate, total, correct, cross_type_wrong, same_type_wrong } = typeData;
   const f1 = typeData.f1 ?? accuracy;
   const sev = severityClass(f1, cross_type_rate);
@@ -725,6 +725,16 @@ function TypeHealthRow({ typeData, maxTotal, isExpanded, isDimmed, correctnessFi
         <span className="th-row-expand" title="Click to explore subtypes">{isExpanded ? '▾' : '▸'}</span>
         <span className="th-row-name" title={typeData.type}>{typeData.type}</span>
         <span className="th-row-f1">{pctNum(f1)}%</span>
+        {calibration ? (
+          <span
+            className={`th-row-ece th-row-ece-${calibration.status}`}
+            title={`ECE: ${(calibration.ece * 100).toFixed(1)}% · Brier: ${(calibration.brier * 100).toFixed(1)}% · Avg conf: ${(calibration.avg_confidence * 100).toFixed(1)}%`}
+          >
+            {(calibration.ece * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span className="th-row-ece" />
+        )}
         <span className="th-row-count">{total.toLocaleString()}</span>
         <div className="th-row-bar-track" title={barTip}>
           <div className="th-row-bar" style={{ width: `${barScale}%` }}>
@@ -962,44 +972,77 @@ function CompareScoreboard({ typeHealth, typeHealth2, compareTypeHealth, run1Nam
 function ConfidenceScoreboard({ confidenceQuality }) {
   if (!confidenceQuality || !confidenceQuality.n) return null;
 
-  const ece = confidenceQuality.ece ?? 0;
-  const brier = confidenceQuality.brier ?? 0;
+  const ece           = confidenceQuality.ece ?? 0;
   const avgConfidence = confidenceQuality.avg_confidence ?? 0;
-  const maxGap = confidenceQuality.max_gap ?? 0;
-  const worstBin = confidenceQuality.worst_bin || 'n/a';
-  const n = confidenceQuality.n || 0;
+  const accuracy      = confidenceQuality.accuracy ?? 0;
+  const maxGap        = confidenceQuality.max_gap ?? 0;
+  const worstBin      = confidenceQuality.worst_bin || 'n/a';
+  const n             = confidenceQuality.n || 0;
+  const bins          = Array.isArray(confidenceQuality.bins) ? confidenceQuality.bins : [];
 
-  const status = confidenceQuality.status || (ece < 0.03 ? 'good' : ece >= 0.07 ? 'poor' : 'moderate');
-  const dir = status === 'good' ? 'up' : status === 'poor' ? 'down' : 'flat';
-  const statusLabel = status === 'good' ? 'Calibrated' : status === 'poor' ? 'Needs calibration' : 'Moderate calibration';
-  const eceTooltip = 'Expected Calibration Error. Compares average confidence to observed accuracy across confidence bins. Lower is better.';
-  const brierTooltip = 'Brier score. Mean squared error between confidence and actual correctness for each record. Lower is better.';
+  // Bias: positive = overconfident, negative = underconfident
+  const bias = avgConfidence - accuracy;
+
+  // StdGap: std deviation of per-bin gaps (weighted by bin count)
+  let stdGap = 0;
+  if (bins.length > 0) {
+    const totalCount = bins.reduce((s, b) => s + b.count, 0);
+    if (totalCount > 0) {
+      const variance = bins.reduce((s, b) => {
+        const w = b.count / totalCount;
+        return s + w * Math.pow(b.gap - ece, 2);
+      }, 0);
+      stdGap = Math.sqrt(variance);
+    }
+  }
+
+  const status   = confidenceQuality.status || (ece < 0.03 ? 'good' : ece >= 0.07 ? 'poor' : 'moderate');
+  const statusCls = { good: 'up', moderate: 'flat', poor: 'down' }[status] ?? 'flat';
+  const statusLabel = { good: 'Calibrated', moderate: 'Moderate calibration', poor: 'Needs calibration' }[status] ?? '';
+
+  const biasLabel   = Math.abs(bias) < 0.005 ? 'neutral'
+    : bias > 0 ? 'overconfident' : 'underconfident';
+  const biasCls     = Math.abs(bias) < 0.005 ? '' : bias > 0 ? 'confq-metric-over' : 'confq-metric-under';
+  const biasSign    = bias > 0.005 ? '+' : '';
 
   return (
-    <div className="cmp-scoreboard confq-scoreboard">
-      <div className="cmp-score-card confq-score-card" title={eceTooltip}>
-        <span className="cmp-score-label">ECE</span>
-        <span className="cmp-score-value">{pctMetric(ece)}</span>
+    <div className="confq-profile-strip">
+      <div className="confq-profile-metric" title="Expected Calibration Error — weighted average |accuracy − confidence| across bins. Lower is better.">
+        <span className="confq-profile-label">ECE</span>
+        <span className="confq-profile-value">{pctMetric(ece)}</span>
+        <span className={`confq-profile-tag confq-tag-${status}`}>{statusLabel}</span>
       </div>
-      <div className={`cmp-score-delta cmp-score-delta-${dir}`}>
-        <span className="cmp-score-delta-arrow">{dir === 'up' ? '▲' : dir === 'down' ? '▼' : '='}</span>
-        <span className="cmp-score-delta-num">{statusLabel}</span>
-        <span className="cmp-score-delta-label">max gap {pctMetric(maxGap)} · bin {worstBin}</span>
+
+      <div className="confq-profile-divider" />
+
+      <div className={`confq-profile-metric ${biasCls}`} title={`Bias = avg confidence − accuracy. Positive = model is overconfident, negative = underconfident.`}>
+        <span className="confq-profile-label">Bias</span>
+        <span className="confq-profile-value">{biasSign}{pctMetric(bias)}</span>
+        <span className="confq-profile-tag">{biasLabel}</span>
       </div>
-      <div className="cmp-score-card confq-score-card" title={brierTooltip}>
-        <span className="cmp-score-label">Brier</span>
-        <span className="cmp-score-value">{pctMetric(brier)}</span>
+
+      <div className="confq-profile-divider" />
+
+      <div className="confq-profile-metric" title="StdGap — standard deviation of per-bin calibration gaps. High = error concentrated in a few bins; low = evenly spread.">
+        <span className="confq-profile-label">StdGap</span>
+        <span className="confq-profile-value">{pctMetric(stdGap)}</span>
+        <span className="confq-profile-tag">{stdGap > ece ? 'concentrated' : 'spread'}</span>
       </div>
-      <div className="cmp-score-divider" />
-      <div className="cmp-score-stats">
-        <span className="cmp-stat confq-stat" title="Records with confidence score">
-          <span className="cmp-stat-num">{n.toLocaleString()}</span>
-          <span className="cmp-stat-label">scored</span>
-        </span>
-        <span className="cmp-stat confq-stat" title="Average confidence across scored records">
-          <span className="cmp-stat-num">{(avgConfidence * 100).toFixed(1)}%</span>
-          <span className="cmp-stat-label">avg conf</span>
-        </span>
+
+      <div className="confq-profile-divider" />
+
+      <div className="confq-profile-metric" title={`MaxGap — worst-case calibration error in a single bin (bin ${worstBin}). This is where the biggest problem is hiding.`}>
+        <span className="confq-profile-label">MaxGap</span>
+        <span className="confq-profile-value">{pctMetric(maxGap)}</span>
+        <span className="confq-profile-tag">bin {worstBin}</span>
+      </div>
+
+      <div className="confq-profile-divider" />
+
+      <div className="confq-profile-meta">
+        <span className="confq-profile-meta-item">{n.toLocaleString()} scored</span>
+        <span className="confq-profile-meta-item">avg conf {(avgConfidence * 100).toFixed(1)}%</span>
+        <span className="confq-profile-meta-item">acc {(accuracy * 100).toFixed(1)}%</span>
       </div>
     </div>
   );
@@ -1065,56 +1108,172 @@ function ReliabilityPlot({ bins }) {
   );
 }
 
-function ConfidenceThresholdTable({ confidenceQuality }) {
+function ConfidenceDecisionFrontier({ confidenceQuality }) {
   const bins = Array.isArray(confidenceQuality?.bins) ? confidenceQuality.bins : [];
   if (bins.length === 0) return <div className="matrix-empty">No threshold data</div>;
 
   const total = confidenceQuality.n || bins.reduce((sum, bin) => sum + bin.count, 0);
   const thresholds = [0.3, 0.5, 0.7, 0.9];
-  const rows = thresholds.map((threshold) => {
+  const points = thresholds.map((threshold) => {
     const coveredBins = bins.filter((bin) => bin.avg_confidence >= threshold);
     const coveredCount = coveredBins.reduce((sum, bin) => sum + bin.count, 0);
     const weightedAcc = coveredCount > 0
       ? coveredBins.reduce((sum, bin) => sum + bin.accuracy * bin.count, 0) / coveredCount
       : 0;
+    const errorRate = coveredCount > 0 ? 1 - weightedAcc : 0;
+    const manualLoad = total > 0 ? 1 - (coveredCount / total) : 0;
     return {
       threshold,
       coverage: total > 0 ? coveredCount / total : 0,
       accuracy: weightedAcc,
-      errorRate: coveredCount > 0 ? 1 - weightedAcc : 0,
-      manualLoad: total > 0 ? 1 - (coveredCount / total) : 0,
+      errorRate,
+      manualLoad,
+      coveredCount,
     };
   });
+
+  const width = 420;
+  const height = 255;
+  const padX = 44;
+  const padTop = 20;
+  const padBottom = 55;
+  const innerW = width - padX * 2;
+  const innerH = height - padTop - padBottom;
+
+  const x = (v) => padX + v * innerW;
+  const y = (v) => height - padBottom - v * innerH;
+
+  const pathD = points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.manualLoad).toFixed(2)} ${y(p.errorRate).toFixed(2)}`)
+    .join(' ');
+
+  // Recommended operating point: minimize combined risk (manual load + error)
+  const recommended = points.reduce((best, p) => {
+    const score = Math.hypot(p.manualLoad, p.errorRate);
+    if (!best || score < best.score) return { ...p, score };
+    return best;
+  }, null);
 
   return (
     <div className="confq-card">
       <div className="confq-card-header">
-        <span className="confq-card-title">Thresholds</span>
-        <span className="confq-card-subtitle">Coverage and quality above confidence cutoff</span>
+        <span className="confq-card-title">Decision Frontier</span>
+        <span className="confq-card-subtitle">How many records need human review vs how many errors slip through — per confidence threshold</span>
       </div>
-      <div className="confq-table-wrap">
-        <table className="confq-table">
-          <thead>
-            <tr>
-              <th>Threshold</th>
-              <th>Coverage</th>
-              <th>Accuracy</th>
-              <th>Error</th>
-              <th>Manual</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.threshold}>
-                <td>{row.threshold.toFixed(1)}</td>
-                <td>{(row.coverage * 100).toFixed(1)}%</td>
-                <td>{(row.accuracy * 100).toFixed(1)}%</td>
-                <td>{(row.errorRate * 100).toFixed(1)}%</td>
-                <td>{(row.manualLoad * 100).toFixed(1)}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="confq-plot-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} className="confq-plot" role="img" aria-label="Threshold decision frontier chart">
+          <rect
+            x={x(0)}
+            y={y(0.3)}
+            width={x(0.65) - x(0)}
+            height={y(0) - y(0.3)}
+            className="confq-zone-tradeoff"
+          />
+          <rect
+            x={x(0)}
+            y={y(0.15)}
+            width={x(0.4) - x(0)}
+            height={y(0) - y(0.15)}
+            className="confq-zone-good"
+          />
+          <rect
+            x={x(0.65)}
+            y={y(1)}
+            width={x(1) - x(0.65)}
+            height={y(0.3) - y(1)}
+            className="confq-zone-risk"
+          />
+
+          <text x={x(0.03)} y={y(0.01)} className="confq-zone-label confq-zone-label-good">Optimal</text>
+          <text x={x(0.62)} y={y(0.27)} textAnchor="end" className="confq-zone-label confq-zone-label-tradeoff">Tradeoff</text>
+          <text x={x(0.97)} y={y(0.93)} textAnchor="end" className="confq-zone-label confq-zone-label-risk">Risk</text>
+
+          {[0, 0.25, 0.5, 0.75, 1].map((tick) => (
+            <g key={tick}>
+              <line x1={x(0)} y1={y(tick)} x2={x(1)} y2={y(tick)} className="confq-gridline" />
+              <line x1={x(tick)} y1={y(0)} x2={x(tick)} y2={y(1)} className="confq-gridline" />
+              <text x={padX - 8} y={y(tick) + 4} className="confq-axis-label">{Math.round(tick * 100)}</text>
+              <text x={x(tick)} y={y(0) + 24} textAnchor="middle" className="confq-axis-label">{Math.round(tick * 100)}</text>
+            </g>
+          ))}
+
+          <text x={14} y={(padTop + height - padBottom) / 2} textAnchor="middle" className="confq-axis-title" transform={`rotate(-90 14 ${(padTop + height - padBottom) / 2})`}>
+            Error rate (%)
+          </text>
+          <text x={width / 2} y={height - 4} textAnchor="middle" className="confq-axis-title">
+            Human review %
+          </text>
+
+          <path d={pathD} className="confq-frontier-line" />
+
+          {recommended && (
+            <g>
+              <line
+                x1={x(recommended.manualLoad)}
+                y1={y(recommended.errorRate)}
+                x2={x(recommended.manualLoad)}
+                y2={y(0)}
+                className="confq-reco-guide"
+              />
+              <line
+                x1={x(0)}
+                y1={y(recommended.errorRate)}
+                x2={x(recommended.manualLoad)}
+                y2={y(recommended.errorRate)}
+                className="confq-reco-guide"
+              />
+            </g>
+          )}
+
+          {points.map((p) => {
+            const isRecommended = recommended && p.threshold === recommended.threshold;
+            return (
+              <g key={p.threshold}>
+                <line
+                  x1={x(p.manualLoad)}
+                  y1={y(p.errorRate)}
+                  x2={x(p.manualLoad)}
+                  y2={y(0)}
+                  className="confq-drop-line"
+                  strokeDasharray="3 2"
+                />
+                <circle
+                  cx={x(p.manualLoad)}
+                  cy={y(p.errorRate)}
+                  r={isRecommended ? '6.5' : '5'}
+                  className={isRecommended ? 'confq-frontier-dot confq-frontier-dot-recommended' : 'confq-frontier-dot'}
+                />
+                <text
+                  x={x(p.manualLoad)}
+                  y={y(0) + 12}
+                  textAnchor="middle"
+                  className="confq-frontier-label"
+                  style={{ fontSize: '10px', fill: '#555' }}
+                >
+                  t={Math.round(p.threshold * 100)}%
+                </text>
+                <title>{`Threshold ${p.threshold.toFixed(1)} | coverage ${(p.coverage * 100).toFixed(1)}% | human review ${(p.manualLoad * 100).toFixed(1)}% | accuracy ${(p.accuracy * 100).toFixed(1)}% | error ${(p.errorRate * 100).toFixed(1)}% | n=${p.coveredCount}`}</title>
+              </g>
+            );
+          })}
+
+          {recommended && (
+            <text
+              x={x(recommended.manualLoad) - 20}
+              y={y(recommended.errorRate) - 15}
+              className="confq-reco-label"
+              style={{ fontSize: '11px', fill: '#10b981' }}
+            >
+              ✓ Advised
+            </text>
+          )}
+        </svg>
+      </div>
+      <div className="confq-frontier-legend">
+        <span><span className="confq-frontier-swatch confq-frontier-swatch-line" /> frontier</span>
+        <span><span className="confq-frontier-swatch confq-frontier-swatch-dot" /> threshold points</span>
+        <span><span className="confq-frontier-swatch confq-frontier-swatch-reco" /> recommended</span>
+        <span><span className="confq-frontier-swatch confq-frontier-swatch-zone" /> better zone</span>
       </div>
     </div>
   );
@@ -1126,14 +1285,14 @@ function ConfidenceQualityPanel({ confidenceQuality }) {
   return (
     <div className="confq-panel">
       <ReliabilityPlot bins={confidenceQuality.bins} />
-      <ConfidenceThresholdTable confidenceQuality={confidenceQuality} />
+      <ConfidenceDecisionFrontier confidenceQuality={confidenceQuality} />
     </div>
   );
 }
 
 /* ── TypeHealthGrid ──────────────────────────────────────── */
 function TypeHealthGrid({
-  typeHealth, confidenceQuality, typeHealth2, compareTypeHealth,
+  typeHealth, confidenceQuality, calibrationPerType, typeHealth2, compareTypeHealth,
   runId, runId2, run1Name, run2Name,
   onViewRecords, activeSubtype,
   correctnessFilter, onCorrectnessFilter,
@@ -1145,6 +1304,12 @@ function TypeHealthGrid({
   const [confidenceExpanded, setConfidenceExpanded] = useState(true);
   const [typeSectionExpanded, setTypeSectionExpanded] = useState(true);
   const isCompare = !!runId2;
+
+  // Build calibration map: type -> { ece, status }
+  const calibrationMap = {};
+  if (Array.isArray(calibrationPerType)) {
+    calibrationPerType.forEach(c => { calibrationMap[c.type] = c; });
+  }
 
   useEffect(() => {
     if (isCompare) setTransitionView('type-transition');
@@ -1329,6 +1494,7 @@ function TypeHealthGrid({
                 ) : (
                   <>
                     <span className="th-col-f1">F1</span>
+                    <span className="th-col-ece" title="Expected Calibration Error — lower is better">ECE</span>
                     <span className="th-col-count">#</span>
                   </>
                 )}
@@ -1373,6 +1539,7 @@ function TypeHealthGrid({
                     activeSubtype={activeSubtype}
                     badgeMatchesFilter={badgeMatchesFilter}
                     isUnknowns={isUnknowns}
+                    calibration={calibrationMap[t.type] || null}
                   />
                 );
               })}
