@@ -104,23 +104,33 @@ function candidateUnknownsCountries(run) {
   return candidates;
 }
 
-function getUnknownsMissingSubtypeList(run) {
+function getUnknownsSubtypeMeta(run) {
   const { all: allSubtypes, rows: subtypeRows } = loadSubtypeVocabs();
-  if (allSubtypes.size === 0) return [];
+  if (allSubtypes.size === 0) return null;
 
   const candidates = candidateUnknownsCountries(run);
   for (const country of candidates) {
-    const countryVocab = new Set(
+    const validSet = new Set(
       subtypeRows
         .filter(row => countriesTextMatchesCountry(row.countriesText, country))
         .map(row => row.subtype)
     );
-    if (countryVocab.size > 0) {
-      return Array.from(allSubtypes).filter(s => !countryVocab.has(s)).sort();
+
+    if (validSet.size > 0) {
+      const validSubtypes = Array.from(validSet).sort();
+      const invalidSubtypes = Array.from(allSubtypes).filter(s => !validSet.has(s)).sort();
+      return { validSubtypes, invalidSubtypes };
     }
   }
 
-  return [];
+  return null;
+}
+
+function isCountryValidSubtype(validSubtypes, subtype) {
+  if (!subtype) return false;
+  const norm = String(subtype).trim().toLowerCase();
+  if (!norm) return false;
+  return new Set((validSubtypes || []).map(s => String(s).trim().toLowerCase())).has(norm);
 }
 
 // Returns true for PostgreSQL "relation does not exist" (42P01)
@@ -590,11 +600,43 @@ async function getRecords(filters = {}) {
   let parsedData = dataResult.rows.map(parseJsonFields);
 
   if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
-    const missingList = getUnknownsMissingSubtypeList(run);
-    parsedData = parsedData.map((row, idx) => ({
-      ...row,
-      missing_subtype: missingList.length > 0 ? missingList[idx % missingList.length] : null,
-    }));
+    const subtypeMeta = getUnknownsSubtypeMeta(run);
+    parsedData = parsedData.map((row, idx) => {
+      const missingSubtypeCandidate = subtypeMeta?.invalidSubtypes?.length
+        ? subtypeMeta.invalidSubtypes[(idx + 7) % subtypeMeta.invalidSubtypes.length]
+        : null;
+      const missingSubtypeIsValid = (subtypeMeta && missingSubtypeCandidate)
+        ? isCountryValidSubtype(subtypeMeta.validSubtypes, missingSubtypeCandidate)
+        : null;
+      const guardedMissingSubtype = (subtypeMeta && missingSubtypeCandidate && !missingSubtypeIsValid)
+        ? missingSubtypeCandidate
+        : null;
+      const predSubtype2 = subtypeMeta
+        ? (guardedMissingSubtype ? 'missing' : 'unknown')
+        : null;
+
+      return {
+        ...row,
+        pred_subtype_1: subtypeMeta?.invalidSubtypes?.length
+          ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
+          : null,
+        pred_subtype_2: predSubtype2,
+        fewshots: subtypeMeta?.validSubtypes?.length
+          ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
+          : [],
+        feshots: subtypeMeta?.validSubtypes?.length
+          ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
+          : [],
+        pred_type: predSubtype2 || row.pred_type,
+        pred_subtype: subtypeMeta?.invalidSubtypes?.length
+          ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
+          : row.pred_subtype,
+        missing_subtype: predSubtype2 === 'unknown' ? null : guardedMissingSubtype,
+        missing_subtype_is_valid: guardedMissingSubtype
+          ? isCountryValidSubtype(subtypeMeta?.validSubtypes || [], guardedMissingSubtype)
+          : null,
+      };
+    });
   }
 
   return {

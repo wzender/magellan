@@ -217,7 +217,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     });
   }
   if (colFilters.request_id)   filtered = filtered.filter(r => r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase()));
-  if (colFilters.pred_subtype) filtered = filtered.filter(r => (r.pred_subtype || '').toLowerCase().includes(colFilters.pred_subtype.toLowerCase()));
+  if (colFilters.pred_subtype) {
+    filtered = filtered.filter(r => {
+      const stage1 = String(r.pred_subtype_1 || r.pred_subtype || '').toLowerCase();
+      return stage1.includes(colFilters.pred_subtype.toLowerCase());
+    });
+  }
   if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
   if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
   if (colFilters.ask_gpt) filtered = filtered.filter(r => getAskText(gptResults[r.request_id]).toLowerCase().includes(colFilters.ask_gpt.toLowerCase()));
@@ -241,6 +246,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'missing_subtype') {
         aVal = a.missing_subtype || '';
         bVal = b.missing_subtype || '';
+      } else if (sortConfig.key === 'pred_subtype_1') {
+        aVal = a.pred_subtype_1 || a.pred_subtype || '';
+        bVal = b.pred_subtype_1 || b.pred_subtype || '';
+      } else if (sortConfig.key === 'pred_subtype_2') {
+        aVal = a.pred_subtype_2 || '';
+        bVal = b.pred_subtype_2 || '';
+      } else if (sortConfig.key === 'feshots') {
+        aVal = (a.feshots || a.fewshots || []).join(', ');
+        bVal = (b.feshots || b.fewshots || []).join(', ');
       } else if (sortConfig.key === 'ask_gpt') {
         aVal = getAskText(gptResults[a.request_id]);
         bVal = getAskText(gptResults[b.request_id]);
@@ -401,14 +415,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── export ── */
   const doExport = (kind) => {
     const headers = isRetag
-      ? ['request_id', 'pred_type', 'pred_subtype', 'missing_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
+      ? ['request_id', 'pred_subtype_1', 'feshots', 'pred_subtype_2', 'pred_type', 'missing_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
       : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
       const trueSubtype = verdicts[r.request_id] || '';
       const trueType = isRetag ? (trueSubtype === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || 'Unknown')) : '';
       const askGptText = getAskText(gptResults[r.request_id]);
+      const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
+      const stage2 = r.pred_subtype_2 || '';
       return isRetag
-        ? [r.request_id, r.pred_type, r.pred_subtype, r.missing_subtype || '', trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), stage2, r.pred_type || '', r.missing_subtype || '', trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
         : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
@@ -549,9 +565,19 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
                 Request ID{sortIndicator('request_id')}
               </th>
-              <th style={{ width: 150, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype')}>
-                Pred Subtype{sortIndicator('pred_subtype')}
+              <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
+                Pred Subtype 1{sortIndicator('pred_subtype_1')}
               </th>
+              {isRetag && (
+                <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('feshots')}>
+                  Feshots{sortIndicator('feshots')}
+                </th>
+              )}
+              {isRetag && (
+                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_2')}>
+                  Pred Subtype 2{sortIndicator('pred_subtype_2')}
+                </th>
+              )}
               {isRetag && (
                 <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('pred_type')}>
                   Pred Type{sortIndicator('pred_type')}
@@ -581,7 +607,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 </div>
               </th>
               {isRetag ? (
-                <th style={{ width: 200, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
+                <th style={{ width: 100, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                   True Subtype{sortIndicator('verdict')}
                 </th>
               ) : (
@@ -605,6 +631,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
               {isRetag && <th />}
               {isRetag && <th />}
+              {isRetag && <th />}
+              {isRetag && <th />}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
               <th />
@@ -618,13 +646,18 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const gpt = gptResults[r.request_id];
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
-              const effectiveSubtypeOptions = r.missing_subtype
-                ? [{ subtype: r.missing_subtype, type: 'Unknown' }, ...countrySubtypes]
-                : countrySubtypes;
+              const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
+              const stage2 = r.pred_subtype_2 || '';
+              const fewshotsText = (r.feshots || r.fewshots || []).join(', ');
 
               const trueType = isRetag
                 ? (verdict === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === verdict)?.type || 'Unknown'))
                 : '';
+              // Only show missing_subtype in dropdown if it's the current selected value
+              // Never show invalid subtypes as selectable options in the dropdown
+              const dropdownOptions = verdict === r.missing_subtype && r.missing_subtype
+                ? [{ subtype: r.missing_subtype, type: 'Unknown' }, ...countrySubtypes]
+                : countrySubtypes;
               return (
                 <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
                   {!isRetag && (
@@ -633,7 +666,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     </td>
                   )}
                   <td className="cell-request-id">{r.request_id}</td>
-                  <td><strong>{r.pred_subtype}</strong></td>
+                  <td><strong>{stage1}</strong></td>
+                  {isRetag && <td>{fewshotsText}</td>}
+                  {isRetag && <td>{stage2}</td>}
                   {isRetag && <td>{r.pred_type || ''}</td>}
                   {isRetag && (
                     <td className="cell-missing-subtype">
@@ -646,7 +681,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <td className="cell-verdict cell-retag">
                       <SubtypeCombobox
                         value={verdict}
-                        options={effectiveSubtypeOptions}
+                        options={dropdownOptions}
                         onChange={val => onSetVerdict(r.request_id, val)}
                       />
                     </td>

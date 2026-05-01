@@ -45,6 +45,28 @@ function loadSubtypeVocabs() {
   return { all, rows: normalizedRows };
 }
 
+function buildUnknownsSubtypeMeta(run, allSubtypes, subtypeRows) {
+  const country = run.run_name.charAt(0).toUpperCase() + run.run_name.slice(1);
+  const validSet = new Set(
+    subtypeRows
+      .filter(row => countriesTextMatchesCountry(row.countriesText, country))
+      .map(row => row.subtype)
+  );
+
+  if (validSet.size === 0) return null;
+
+  const validSubtypes = Array.from(validSet).sort();
+  const invalidSubtypes = Array.from(allSubtypes).filter(s => !validSet.has(s)).sort();
+  return { validSubtypes, invalidSubtypes };
+}
+
+function isCountryValidSubtype(validSubtypes, subtype) {
+  if (!subtype) return false;
+  const norm = String(subtype).trim().toLowerCase();
+  if (!norm) return false;
+  return new Set((validSubtypes || []).map(s => String(s).trim().toLowerCase())).has(norm);
+}
+
 let dataCache = null;
 
 function loadTranslationsFile() {
@@ -128,16 +150,10 @@ function loadData() {
   // Pre-compute missing subtypes for Unknowns benchmark runs
   const { all: allSubtypes, rows: subtypeRows } = loadSubtypeVocabs();
   const unknownsBenchmarkId = benchmarks.find(b => b.name === 'Unknowns')?.id;
-  const missingSubtypesByRun = {};
+  const unknownSubtypeMetaByRun = {};
   if (unknownsBenchmarkId) {
     runs.filter(r => r.benchmark_id === unknownsBenchmarkId).forEach(run => {
-      const country = run.run_name.charAt(0).toUpperCase() + run.run_name.slice(1);
-      const countryVocab = new Set(
-        subtypeRows
-          .filter(row => countriesTextMatchesCountry(row.countriesText, country))
-          .map(row => row.subtype)
-      );
-      missingSubtypesByRun[run.id] = Array.from(allSubtypes).filter(s => !countryVocab.has(s)).sort();
+      unknownSubtypeMetaByRun[run.id] = buildUnknownsSubtypeMeta(run, allSubtypes, subtypeRows);
     });
   }
 
@@ -155,7 +171,28 @@ function loadData() {
     if (lbEntry) lbEntry.benchmark_length = records.length;
 
     records.forEach((r, idx) => {
-      const missingList = missingSubtypesByRun[run.id];
+      const unknownsMeta = unknownSubtypeMetaByRun[run.id];
+      const predSubtype1 = unknownsMeta?.invalidSubtypes?.length
+        ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
+        : r.pred_subtype;
+      const missingSubtypeCandidate = unknownsMeta?.invalidSubtypes?.length
+        ? unknownsMeta.invalidSubtypes[(idx + 7) % unknownsMeta.invalidSubtypes.length]
+        : null;
+      const predSubtype2 = unknownsMeta
+        ? (missingSubtypeCandidate ? 'missing' : 'unknown')
+        : null;
+      const missingSubtypeIsValid = (unknownsMeta && missingSubtypeCandidate)
+        ? isCountryValidSubtype(unknownsMeta.validSubtypes, missingSubtypeCandidate)
+        : null;
+      const guardedMissingSubtype = (unknownsMeta && missingSubtypeCandidate && !missingSubtypeIsValid)
+        ? missingSubtypeCandidate
+        : null;
+      const missingSubtype = unknownsMeta
+        ? (predSubtype2 === 'unknown' ? null : guardedMissingSubtype)
+        : null;
+      const fewshots = unknownsMeta?.validSubtypes?.length
+        ? [0, 1, 2].map(step => unknownsMeta.validSubtypes[(idx + step) % unknownsMeta.validSubtypes.length])
+        : [];
       const parsedConfidence = parseFloat(r.confidence);
       run_results.push({
         id:              run.id * 100000 + idx,
@@ -163,9 +200,16 @@ function loadData() {
         request_id:      r.request_id,
         true_type:       r.true_type,
         true_subtype:    r.true_subtype,
-        pred_type:       r.pred_type,
-        pred_subtype:    r.pred_subtype,
-        missing_subtype: missingList ? missingList[idx % missingList.length] : null,
+        pred_type:       unknownsMeta ? predSubtype2 : r.pred_type,
+        pred_subtype:    unknownsMeta ? predSubtype1 : r.pred_subtype,
+        pred_subtype_1:  unknownsMeta ? predSubtype1 : null,
+        pred_subtype_2:  unknownsMeta ? predSubtype2 : null,
+        fewshots,
+        feshots:         fewshots,
+        missing_subtype: unknownsMeta ? missingSubtype : null,
+        missing_subtype_is_valid: unknownsMeta
+          ? (missingSubtype ? isCountryValidSubtype(unknownsMeta.validSubtypes, missingSubtype) : null)
+          : null,
         attributes:      tryParseJson(r.attributes),
         en_attributes:   tryParseJson(r.en_attributes),
         metadata:        tryParseJson(r.metadata),
