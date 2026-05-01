@@ -24,6 +24,7 @@ const XLSX = require('xlsx');
 const { query, pool } = require('./db');
 const idColumnCache = new Map();
 const SUBTYPES_FILE = path.join(__dirname, '../data/Subtypes.xlsx');
+const SUBTYPES_COUNTRIES_COLUMN = process.env.SUBTYPES_COUNTRIES_COLUMN || 'Countries';
 let subtypeVocabCache = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,8 +75,9 @@ function loadSubtypeVocabs() {
   const normalizedRows = [];
 
   for (const row of rows) {
-    all.add(row.Subtype);
-    normalizedRows.push({ subtype: row.Subtype, countriesText: String(row.Countries || '') });
+    const subtype = row.subType || row.Subtype;
+    all.add(subtype);
+    normalizedRows.push({ subtype, countriesText: String(row[SUBTYPES_COUNTRIES_COLUMN] || '') });
   }
 
   subtypeVocabCache = { all, rows: normalizedRows };

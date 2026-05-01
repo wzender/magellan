@@ -4,6 +4,7 @@ const path    = require('path');
 const XLSX    = require('xlsx');
 
 const FILE = path.join(__dirname, '../../data/Subtypes.xlsx');
+const SUBTYPES_COUNTRIES_COLUMN = process.env.SUBTYPES_COUNTRIES_COLUMN || 'Countries';
 
 let cache = null;
 
@@ -37,13 +38,13 @@ router.get('/subtypes-by-country', (req, res) => {
   const rows = load();
   if (country) {
     const entries = rows
-      .filter(row => countriesTextMatchesCountry(row.Countries, country))
-      .map(row => ({ subtype: row.Subtype, type: row.Type }));
+      .filter(row => countriesTextMatchesCountry(row[SUBTYPES_COUNTRIES_COLUMN], country))
+      .map(row => ({ subtype: row.subType || row.Subtype, type: row.type || row.Type }));
     if (entries.length === 0) return res.status(404).json({ error: `Unknown country: ${country}` });
     return res.json(entries.slice().sort((a, b) => a.subtype.localeCompare(b.subtype)));
   }
   // Return all countries with their sorted lists
-  return res.json(rows.map(row => ({ subtype: row.Subtype, type: row.Type, countries: row.Countries })));
+  return res.json(rows.map(row => ({ subtype: row.subType || row.Subtype, type: row.type || row.Type, countries: row[SUBTYPES_COUNTRIES_COLUMN] })));
 });
 
 module.exports = router;

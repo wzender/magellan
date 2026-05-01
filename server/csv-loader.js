@@ -13,6 +13,7 @@ const RUNS_DIR                    = path.join(DATA_DIR, 'runs');
 const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
 const METADATA_TRANSLATIONS_FILE  = path.join(DATA_DIR, 'metadata-translations.json');
 const SUBTYPES_FILE               = path.join(DATA_DIR, 'Subtypes.xlsx');
+const SUBTYPES_COUNTRIES_COLUMN   = process.env.SUBTYPES_COUNTRIES_COLUMN || 'Countries';
 
 function normalizeCountry(value) {
   return String(value || '').trim().toLowerCase();
@@ -39,8 +40,9 @@ function loadSubtypeVocabs() {
   const all = new Set();
   const normalizedRows = [];
   for (const row of rows) {
-    all.add(row.Subtype);
-    normalizedRows.push({ subtype: row.Subtype, countriesText: String(row.Countries || '') });
+    const subtype = row.subType || row.Subtype;
+    all.add(subtype);
+    normalizedRows.push({ subtype, countriesText: String(row[SUBTYPES_COUNTRIES_COLUMN] || '') });
   }
   return { all, rows: normalizedRows };
 }
