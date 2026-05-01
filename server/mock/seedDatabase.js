@@ -104,15 +104,15 @@ async function seedDatabase() {
 
         // Insert leaderboard metrics
         await query(
-          `INSERT INTO leaderboard (run_id, benchmark_id, benchmark_length, subtype_accuracy, subtype_f1_weighted, type_f1_weighted)
+          `INSERT INTO leaderboard (run_id, benchmark_id, benchmark_length, subtype_accuracy, subtype_weighted_f1, type_weighted_f1)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             runId,
             benchmarkId,
             metrics.benchmark_length,
             metrics.subtype_accuracy,
-            metrics.subtype_f1_weighted,
-            metrics.type_f1_weighted,
+            metrics.subtype_weighted_f1,
+            metrics.type_weighted_f1,
           ]
         );
 

@@ -391,7 +391,7 @@ for row in rows:
 # Add Italy
 new_rows.append({
     'benchmark': 'Unknowns', 'run_name': 'italy',
-    'model_name': '1.2.0', 'subtype_accuracy': '0', 'subtype_f1_weighted': '0',
+    'model_name': '1.2.0', 'subtype_accuracy': '0', 'subtype_weighted_f1': '0',
     'run_date': '2026-04-10T10:00:00Z',
 })
 

@@ -70,8 +70,8 @@ describe('LeaderboardWidget Component', () => {
         run_name: 'model_v1',
         model_version: '1.0.0',
         subtype_accuracy: 0.85,
-        subtype_f1_weighted: 0.84,
-        type_f1_weighted: 0.92,
+        subtype_weighted_f1: 0.84,
+        type_weighted_f1: 0.92,
         benchmark_length: 2000,
       },
     ];

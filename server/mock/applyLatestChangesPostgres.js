@@ -83,7 +83,7 @@ async function reseedRun(benchmarkName, runName, targetAccuracy) {
 
   const { accuracy, f1 } = calculateMetrics(updated);
   await query(
-    'UPDATE leaderboard SET subtype_accuracy = $1, subtype_f1_weighted = $2 WHERE run_id = $3',
+    'UPDATE leaderboard SET subtype_accuracy = $1, subtype_weighted_f1 = $2 WHERE run_id = $3',
     [accuracy, f1, runId]
   );
   console.log(`✓ ${benchmarkName} / ${runName}: accuracy=${accuracy}  f1=${f1}  (target=${targetAccuracy})`);

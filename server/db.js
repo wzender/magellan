@@ -21,14 +21,18 @@ pool.on('error', (err) => {
  * Execute a query
  * @param {string} query - SQL query
  * @param {array} params - Query parameters
+ * @param {boolean} silent - Skip error logging (for expected fallback errors)
  * @returns {Promise} Query result
  */
-async function query(sql, params = []) {
+async function query(sql, params = [], silent = false) {
   try {
     const result = await pool.query(sql, params);
     return result;
   } catch (error) {
-    console.error('Database query error:', error);
+    // Don't log expected column-not-found errors (used for fallback logic)
+    if (!silent && error.code !== '42703') {
+      console.error('Database query error:', error);
+    }
     throw error;
   }
 }

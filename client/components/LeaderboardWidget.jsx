@@ -27,8 +27,8 @@ function LeaderboardWidget({ data }) {
               <td className="run-name">{row.run_name}</td>
               <td>{row.model_version || '-'}</td>
               <td className="metric">{parseFloat(row.subtype_accuracy).toFixed(4)}</td>
-              <td className="metric">{parseFloat(row.subtype_f1_weighted).toFixed(4)}</td>
-              <td className="metric">{parseFloat(row.type_f1_weighted).toFixed(4)}</td>
+              <td className="metric">{parseFloat(row.subtype_weighted_f1).toFixed(4)}</td>
+              <td className="metric">{parseFloat(row.type_weighted_f1).toFixed(4)}</td>
               <td className="benchmark-size">{row.benchmark_length}</td>
             </tr>
           ))}

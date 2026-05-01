@@ -142,9 +142,8 @@ function loadData() {
       run_name:            row.run_name,
       model_version:       row.model_name,
       subtype_accuracy:    parseFloat(row.subtype_accuracy),
-      subtype_f1:          parseFloat(row.subtype_f1 ?? row.subtype_f1_weighted),
-      type_f1:             parseFloat(row.type_f1 ?? row.type_f1_weighted),
-      subtype_f1_weighted: parseFloat(row.subtype_f1_weighted),
+      subtype_weighted_f1: parseFloat(row.subtype_weighted_f1),
+      type_weighted_f1:    parseFloat(row.type_weighted_f1),
       benchmark_length:    0,
     });
   });
@@ -265,7 +264,7 @@ function getRun(id) {
 function getLeaderboardByBenchmarkId(benchmarkId) {
   return loadData().leaderboard
     .filter(l => l.benchmark_id === benchmarkId)
-    .sort((a, b) => b.subtype_f1_weighted - a.subtype_f1_weighted);
+    .sort((a, b) => b.subtype_weighted_f1 - a.subtype_weighted_f1);
 }
 
 function getConfusionMatrix(runId, matrixType = 'type', incorrectOnly = false) {

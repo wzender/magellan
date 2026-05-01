@@ -45,8 +45,8 @@ CREATE TABLE leaderboard (
   benchmark_id INTEGER NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
   benchmark_length INTEGER,
   subtype_accuracy NUMERIC(5, 4),
-  subtype_f1_weighted NUMERIC(5, 4),
-  type_f1_weighted NUMERIC(5, 4),
+  subtype_weighted_f1 NUMERIC(5, 4),
+  type_weighted_f1 NUMERIC(5, 4),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

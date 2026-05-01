@@ -130,7 +130,7 @@ TARGETS.forEach(({ file, subtypeAccuracy }) => {
     const bId = String(seenBenchmarks[bName]);
     if (bId === benchmarkId && sanitize(row.run_name) === sanitizedRunName) {
       matched = true;
-      return { ...row, subtype_accuracy: accuracy, subtype_f1_weighted: f1 };
+      return { ...row, subtype_accuracy: accuracy, subtype_weighted_f1: f1 };
     }
     return row;
   });

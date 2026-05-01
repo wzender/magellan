@@ -23,8 +23,8 @@ describe('API Endpoints', () => {
           model_version: '1.0.0',
           benchmark_length: 2000,
           subtype_accuracy: '0.8500',
-          subtype_f1_weighted: '0.8400',
-          type_f1_weighted: '0.9200',
+          subtype_weighted_f1: '0.8400',
+          type_weighted_f1: '0.9200',
         },
       ];
 

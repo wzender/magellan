@@ -6,7 +6,7 @@
  * ------
  * "leaderboard-table" columns:
  *   run_id (text, the actual run table name), nof_items, subtype_accuracy,
- *   subtype_f1_weighted,
+ *   subtype_weighted_f1,
  *   description, benchmark (text, explicit benchmark name)
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
@@ -169,19 +169,37 @@ async function getIdColumn(tableName) {
 
 async function getRunIndex() {
   let result;
+  let columnMapping = { subtype: 'subtype_weighted_f1', type: 'type_weighted_f1' };
+  
   try {
+    // Try new column names first
     result = await query(
-      `SELECT run_id, nof_items, subtype_accuracy, subtype_f1, type_f1, subtype_f1_weighted, description, benchmark
+      `SELECT run_id, nof_items, subtype_accuracy, subtype_weighted_f1, type_weighted_f1, description, benchmark
        FROM "leaderboard-table"
        ORDER BY run_id ASC`
     );
   } catch (err) {
     if (err.code !== '42703') throw err;
-    result = await query(
-      `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, description, benchmark
-       FROM "leaderboard-table"
-       ORDER BY run_id ASC`
-    );
+    
+    try {
+      // Try old column names with type_f1_weighted
+      columnMapping = { subtype: 'subtype_f1_weighted', type: 'type_f1_weighted' };
+      result = await query(
+        `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, type_f1_weighted, description, benchmark
+         FROM "leaderboard-table"
+         ORDER BY run_id ASC`
+      );
+    } catch (err2) {
+      if (err2.code !== '42703') throw err2;
+      
+      // Final fallback: old column names without type_f1_weighted
+      columnMapping = { subtype: 'subtype_f1_weighted', type: null };
+      result = await query(
+        `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, description, benchmark
+         FROM "leaderboard-table"
+         ORDER BY run_id ASC`
+      );
+    }
   }
 
   const tablesResult = await query(
@@ -217,6 +235,10 @@ async function getRunIndex() {
       model_version: row.description || '',
     });
 
+    // Map old column names to new column names for compatibility
+    const subtypeWeightedF1 = parseFloat(row[columnMapping.subtype]) || 0;
+    const typeWeightedF1 = columnMapping.type ? parseFloat(row[columnMapping.type]) || 0 : 0;
+
     leaderboard.push({
       id:                  syntheticRunId,
       run_id:              syntheticRunId,
@@ -224,9 +246,8 @@ async function getRunIndex() {
       run_name:            tableName,
       model_version:       row.description || '',
       subtype_accuracy:    parseFloat(row.subtype_accuracy) || 0,
-      subtype_f1:          parseFloat(row.subtype_f1 ?? row.subtype_f1_weighted) || 0,
-      type_f1:             parseFloat(row.type_f1) || 0,
-      subtype_f1_weighted: parseFloat(row.subtype_f1_weighted) || 0,
+      subtype_weighted_f1: subtypeWeightedF1,
+      type_weighted_f1:    typeWeightedF1,
       benchmark_length:    parseInt(row.nof_items) || 0,
       table_exists:        existingTables.has(tableName),
     });
@@ -265,7 +286,7 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
   const { leaderboard } = await getRunIndex();
   const rows = leaderboard.filter(l => l.benchmark_id === benchmarkId);
   // benchmark_length already populated from nof_items; no extra query needed
-  return rows.sort((a, b) => b.subtype_accuracy - a.subtype_accuracy);
+  return rows.sort((a, b) => b.subtype_weighted_f1 - a.subtype_weighted_f1);
 }
 
 async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = false) {

@@ -112,7 +112,7 @@ async function reseedRun({ benchmarkName, runName, subtypeAccuracy }) {
   await query(
     `UPDATE leaderboard SET
        subtype_accuracy    = $1,
-       subtype_f1_weighted = $2,
+       subtype_weighted_f1 = $2,
        benchmark_length    = $3
      WHERE run_id = $4`,
     [accuracy, f1, updated.length, runId]

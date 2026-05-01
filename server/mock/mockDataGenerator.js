@@ -265,8 +265,8 @@ function calculateMetrics(records) {
 
   return {
     subtype_accuracy: (correctSubtype / records.length).toFixed(4),
-    subtype_f1_weighted: Math.min(subtypeWeightedF1, 1).toFixed(4), // Cap at 1.0
-    type_f1_weighted: Math.min(typeWeightedF1, 1).toFixed(4),
+    subtype_weighted_f1: Math.min(subtypeWeightedF1, 1).toFixed(4), // Cap at 1.0
+    type_weighted_f1: Math.min(typeWeightedF1, 1).toFixed(4),
     benchmark_length: records.length,
   };
 }

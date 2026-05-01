@@ -59,8 +59,8 @@ Columns:
 * `benchmark_id`
 * `benchmark_length`
 * `subtype_accuracy`
-* `subtype_f1_weighted`
-* `type_f1_weighted`
+* `subtype_weighted_f1`
+* `type_weighted_f1`
 
 ## System Requirements
 
