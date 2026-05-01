@@ -43,15 +43,17 @@ You are a classification assistant specialized in {domain_name}.
 
 ## Task
 Given a record's attributes and metadata, determine the most appropriate subtype category.
-Respond with exactly two lines and nothing else:
+ full record and knRespond with exactly three lines and nothing else:
 1. SUBTYPE: <your candidate label>
 2. REASON: <one sentence, max 50 tokens>
+3. SIGNALS: <2–4 key field=value pairs from the input that most influenced your decision, separated by " | ">
 
 If the input provides no clear signal, respond:
 SUBTYPE: unknown
 REASON: Insufficient signal to classify.
+SIGNALS: N/A
 
-Do not output any text before SUBTYPE: or after the REASON: line. No markdown formatting, no preamble, no explanation.
+Do not output any text before SUBTYPE: or after the SIGNALS: line. No markdown formatting, no preamble, no explanation.
 """.strip()
 ```
 
@@ -160,6 +162,9 @@ RESULT: <chosen label | unknown>
 STAGE2_USER = """\
 Candidate subtype: {candidate_subtype}
 Reason: {candidate_reason}
+
+Key signals from record:
+{key_signals}
 """.strip()
 ```
 
@@ -168,6 +173,20 @@ Reason: {candidate_reason}
 |---|---|
 | `{candidate_subtype}` | `SUBTYPE` value parsed from Stage 1 response |
 | `{candidate_reason}` | `REASON` value parsed from Stage 1 response |
+| `{key_signals}` | The `SIGNALS` line parsed from Stage 1 response (see §Key Signals — Produced by Stage 1) |
+
+#### Key Signals — Produced by Stage 1
+
+Rather than extracting signals with a hardcoded Python function (which would break across domains/schemas), **Stage 1 itself outputs the key signals** it relied on. The model already sees the full record and knows which fields drove its decision — so it selects the most discriminative 2–4 field=value pairs regardless of schema.
+
+Example Stage 1 output:
+```
+SUBTYPE: Returns & Refunds
+REASON: Customer requesting refund for damaged product in support context.
+SIGNALS: department=Support | tags=refund,damaged | description=Partial refund request for broken item
+```
+
+This adds ~20–40 tokens to the Stage 2 user prompt (vs. 200–500+ for full JSON), preserving prefix-cache efficiency while remaining fully schema- and domain-agnostic.
 
 ---
 
@@ -238,7 +257,7 @@ def render_stage1(domain_name, domain_instructions, few_shots, attributes, metad
 
 
 def render_stage2(domain_name, domain_instructions, allowed_subtypes,
-                  candidate_subtype, candidate_reason):
+                  candidate_subtype, candidate_reason, key_signals):
     allowed_subtypes_list = "\n".join(f"- {s}" for s in allowed_subtypes)
     system = STAGE2_SYSTEM.format(
         domain_name=domain_name,
@@ -248,6 +267,7 @@ def render_stage2(domain_name, domain_instructions, allowed_subtypes,
     user = STAGE2_USER.format(
         candidate_subtype=candidate_subtype,
         candidate_reason=candidate_reason,
+        key_signals=key_signals,
     )
     return [{"role": "system", "content": system},
             {"role": "user",   "content": user}]
@@ -272,11 +292,13 @@ def render_stage2(domain_name, domain_instructions, allowed_subtypes,
 import re
 
 def parse_stage1(response_text):
-    subtype_match = re.search(r"^SUBTYPE:\s*(.+)$", response_text, re.MULTILINE)
-    reason_match  = re.search(r"^REASON:\s*(.+)$",  response_text, re.MULTILINE)
-    subtype = subtype_match.group(1).strip() if subtype_match else "unknown"
-    reason  = reason_match.group(1).strip()  if reason_match  else ""
-    return subtype, reason
+    subtype_match  = re.search(r"^SUBTYPE:\s*(.+)$", response_text, re.MULTILINE)
+    reason_match   = re.search(r"^REASON:\s*(.+)$",  response_text, re.MULTILINE)
+    signals_match  = re.search(r"^SIGNALS:\s*(.+)$", response_text, re.MULTILINE)
+    subtype = subtype_match.group(1).strip()  if subtype_match  else "unknown"
+    reason  = reason_match.group(1).strip()   if reason_match   else ""
+    signals = signals_match.group(1).strip()  if signals_match  else "N/A"
+    return subtype, reason, signals
 ```
 
 ### Stage 2 parser
@@ -303,14 +325,15 @@ def classify(record, allowed_subtypes, few_shots,
     messages1 = render_stage1(domain_name, domain_instructions,
                                few_shots, record["attributes"],
                                record["metadata"])
-    # max_new_tokens=80 covers "SUBTYPE: <label>\nREASON: <text>" — the reason field is capped at ~50 tokens by the prompt instruction
-    resp1 = llm_client.chat(messages1, max_new_tokens=80, temperature=0)
-    candidate_subtype, candidate_reason = parse_stage1(resp1)
+    # max_new_tokens=120 covers "SUBTYPE: <label>\nREASON: <text>\nSIGNALS: <pairs>" — reason capped at ~50 tokens, signals at ~40 tokens
+    resp1 = llm_client.chat(messages1, max_new_tokens=120, temperature=0)
+    candidate_subtype, candidate_reason, key_signals = parse_stage1(resp1)
 
     # Stage 2
     messages2 = render_stage2(domain_name, domain_instructions,
                                allowed_subtypes,
-                               candidate_subtype, candidate_reason)
+                               candidate_subtype, candidate_reason,
+                               key_signals)
     resp2 = llm_client.chat(messages2, max_new_tokens=40, temperature=0)
     final_label = parse_stage2(resp2, allowed_subtypes)
 
@@ -326,7 +349,7 @@ def classify(record, allowed_subtypes, few_shots,
 3. The `Domain Instructions` block is a single string constant — changing it is sufficient to repurpose the system for a new domain.
 4. Few-shots are injected only into the Stage 1 user prompt and are externally supplied (not hardcoded).
 5. The pipeline outputs exactly one of: a subtype label string or `"unknown"`.
-6. Stage 1 total response budget is `max_new_tokens=80`; the 50-token limit on the `REASON` field is enforced via the prompt instruction, not the token budget alone (the label itself consumes some tokens).
+6. Stage 1 total response budget is `max_new_tokens=120`; covers the label (~10 tokens), reason (~50 tokens), and signals (~40 tokens).
 7. Both LLM calls use `temperature=0` (greedy decoding) — recommended by Cohere for classification tasks and ensures deterministic output format.
 8. Both system prompts are stable (no per-record variation) within an `(allowed_subtypes_set, few_shot_set)` batch — enabling vLLM prefix cache hits.
 9. The application determines missing subtype cases by checking whether non-`unknown` Stage 2 output exists in `allowed_subtypes_list`.
