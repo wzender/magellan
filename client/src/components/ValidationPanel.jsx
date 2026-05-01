@@ -93,7 +93,7 @@ const VERDICTS = [
   { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
 ];
 
-const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', ask_gpt: '' };
+const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', gpt_subtype: '', attributes: '', metadata: '', ask_gpt: '' };
 const NOT_RETAGGED_LABEL = 'Not retagged';
 
 function getAskText(result) {
@@ -110,15 +110,57 @@ function getAskText(result) {
 
 function normalizeGptResult(value) {
   if (!value) return null;
+
+  let parsedReasoning = null;
+  if (typeof value.reasoning === 'string' && value.reasoning.trim().startsWith('{')) {
+    try {
+      parsedReasoning = JSON.parse(value.reasoning);
+    } catch {
+      parsedReasoning = null;
+    }
+  }
+
+  const decision = value.decision || value.subtype || value.verdict || parsedReasoning?.decision || null;
   return {
     text: value.text || '',
-    subtype: value.subtype || value.verdict || null,
-    reason: value.reason || value.reasoning || '',
+    subtype: decision,
+    decision,
+    mappedAllowedSubtype: value.mapped_allowed_subtype || parsedReasoning?.mapped_allowed_subtype || '',
+    suggestedMissingSubtype: value.suggested_missing_subtype || parsedReasoning?.suggested_missing_subtype || '',
+    reason: value.reason || parsedReasoning?.reasoning || value.reasoning || '',
     error: value.error || null,
   };
 }
 
-function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict }) {
+function toLegacyYesNo(decision, predictedStatus) {
+  const d = String(decision || '').trim();
+  const status = String(predictedStatus || '').trim().toLowerCase();
+
+  if (d === 'yes' || d === 'no') return d;
+
+  if (status === 'unknown') {
+    return d === 'truly_unknown' ? 'no' : 'yes';
+  }
+  if (status === 'missing') {
+    return d === 'true_missing_subtype' ? 'yes' : 'no';
+  }
+
+  return 'no';
+}
+
+function getGptSubtype(result) {
+  if (!result) return '';
+  return String(result.mappedAllowedSubtype || result.suggestedMissingSubtype || '').trim();
+}
+
+function getGptSubtypeSource(result) {
+  if (!result) return 'none';
+  if (String(result.mappedAllowedSubtype || '').trim()) return 'mapped';
+  if (String(result.suggestedMissingSubtype || '').trim()) return 'suggested';
+  return 'none';
+}
+
+function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated }) {
   const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
@@ -223,12 +265,54 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       return stage1.includes(colFilters.pred_subtype.toLowerCase());
     });
   }
+  if (colFilters.gpt_subtype) {
+    filtered = filtered.filter(r => getGptSubtype(gptResults[r.request_id]).toLowerCase().includes(colFilters.gpt_subtype.toLowerCase()));
+  }
   if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
   if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
   if (colFilters.ask_gpt) filtered = filtered.filter(r => getAskText(gptResults[r.request_id]).toLowerCase().includes(colFilters.ask_gpt.toLowerCase()));
   if (verdictFilter !== 'all') {
-    if (verdictFilter === 'unreviewed') filtered = filtered.filter(r => !verdicts[r.request_id]);
-    else filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
+    if (verdictFilter === 'unreviewed') {
+      filtered = filtered.filter(r => !verdicts[r.request_id]);
+    } else if (isRetag && verdictFilter === 'unknown') {
+      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'unknown');
+    } else if (isRetag && verdictFilter === 'missing') {
+      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'missing');
+    } else if (isRetag && verdictFilter === 'real_unknown') {
+      filtered = filtered.filter(r => {
+        const isPredUnknown = (r.pred_subtype_2 || '') === 'unknown';
+        const gptResult = gptResults[r.request_id];
+        return isPredUnknown && gptResult && gptResult.decision === 'truly_unknown';
+      });
+    } else if (isRetag && verdictFilter === 'real_missing') {
+      filtered = filtered.filter(r => {
+        const isPredMissing = (r.pred_subtype_2 || '') === 'missing';
+        const gptResult = gptResults[r.request_id];
+        return isPredMissing && gptResult && gptResult.decision === 'true_missing_subtype';
+      });
+    } else if (isRetag && verdictFilter === 'false_unknown') {
+      filtered = filtered.filter(r => {
+        const isPredUnknown = (r.pred_subtype_2 || '') === 'unknown';
+        const gptResult = gptResults[r.request_id];
+        return isPredUnknown && gptResult && (gptResult.decision === 'wrong_subtype' || gptResult.decision === 'missing_but_mappable');
+      });
+    } else if (isRetag && verdictFilter === 'false_missing') {
+      filtered = filtered.filter(r => {
+        const isPredMissing = (r.pred_subtype_2 || '') === 'missing';
+        const gptResult = gptResults[r.request_id];
+        return isPredMissing && gptResult && (gptResult.decision === 'missing_but_mappable' || gptResult.decision === 'wrong_subtype');
+      });
+    } else if (isRetag && verdictFilter === 'truly_unknown') {
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
+    } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
+    } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'missing_but_mappable');
+    } else if (isRetag && verdictFilter === 'wrong_subtype') {
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'wrong_subtype');
+    } else {
+      filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
+    }
   }
 
   /* ── sorting ── */
@@ -258,6 +342,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'ask_gpt') {
         aVal = getAskText(gptResults[a.request_id]);
         bVal = getAskText(gptResults[b.request_id]);
+      } else if (sortConfig.key === 'gpt_subtype') {
+        aVal = getGptSubtype(gptResults[a.request_id]);
+        bVal = getGptSubtype(gptResults[b.request_id]);
       } else {
         aVal = a[sortConfig.key] ?? '';
         bVal = b[sortConfig.key] ?? '';
@@ -330,30 +417,59 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const askGptForRecord = async (record) => {
     const requestId = record.request_id;
     setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
+    const predictedStatus = String(record.pred_subtype_2 || '').trim().toLowerCase();
 
     let result;
     try {
+      const allowedSubtypes = (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
       const res = await fetch('/api/ask-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          judge_mode: true,
           attributes: record.attributes,
           metadata: record.metadata,
+          predicted_status: predictedStatus,
+          pred_type: record.pred_type || '',
+          pred_subtype: record.pred_subtype || '',
+          stage2_subtype: record.pred_subtype_2 || '',
+          candidate_subtype: record.pred_subtype_1 || record.pred_subtype || '',
+          missing_subtype: record.missing_subtype || '',
+          allowed_subtypes: allowedSubtypes,
+          nearest_subtypes: record.fewshots || record.feshots || [],
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       result = {
         text: data.text || '',
-        subtype: data.subtype || data.verdict || null,
+        subtype: data.decision || data.subtype || data.verdict || null,
+        decision: data.decision || data.subtype || data.verdict || null,
+        mappedAllowedSubtype: data.mapped_allowed_subtype || '',
+        suggestedMissingSubtype: data.suggested_missing_subtype || '',
         reason: data.reason || data.reasoning || '',
         error: null,
       };
     } catch (err) {
-      result = { text: '', subtype: null, reason: '', error: err.message || '(error)' };
+      result = {
+        text: '',
+        subtype: null,
+        decision: null,
+        mappedAllowedSubtype: '',
+        suggestedMissingSubtype: '',
+        reason: '',
+        error: err.message || '(error)',
+      };
     }
 
     setGptResults(prev => ({ ...prev, [requestId]: result }));
+    const legacyVerdict = toLegacyYesNo(result.decision || result.subtype, predictedStatus);
+    const structuredReasoning = JSON.stringify({
+      decision: result.decision || result.subtype || '',
+      mapped_allowed_subtype: result.mappedAllowedSubtype || '',
+      suggested_missing_subtype: result.suggestedMissingSubtype || '',
+      reasoning: result.text || result.reason || (result.error ? `Error: ${result.error}` : ''),
+    });
     fetch('/api/gpt-results', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -361,12 +477,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         run_id: runId,
         results: {
           [requestId]: {
-            verdict: result.subtype || '',
-            reasoning: result.text || result.reason || (result.error ? `Error: ${result.error}` : ''),
+            verdict: legacyVerdict,
+            reasoning: structuredReasoning,
           },
         },
       }),
-    }).catch(() => {});
+    })
+      .then(() => {
+        if (onGptResultsUpdated) onGptResultsUpdated();
+      })
+      .catch(() => {});
 
     setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
   };
@@ -415,17 +535,18 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── export ── */
   const doExport = (kind) => {
     const headers = isRetag
-      ? ['request_id', 'pred_subtype_1', 'feshots', 'pred_subtype_2', 'pred_type', 'missing_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
-      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
+      ? ['request_id', 'pred_subtype_1', 'feshots', 'pred_subtype_2', 'pred_type', 'missing_subtype', 'gpt_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
+      : ['request_id', 'pred_type', 'pred_subtype', 'gpt_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
       const trueSubtype = verdicts[r.request_id] || '';
       const trueType = isRetag ? (trueSubtype === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || 'Unknown')) : '';
       const askGptText = getAskText(gptResults[r.request_id]);
+      const gptSubtype = getGptSubtype(gptResults[r.request_id]);
       const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
       const stage2 = r.pred_subtype_2 || '';
       return isRetag
-        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), stage2, r.pred_type || '', r.missing_subtype || '', trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
-        : [r.request_id, r.pred_type, r.pred_subtype, trueSubtype, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
+        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), stage2, r.pred_type || '', r.missing_subtype || '', gptSubtype, trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        : [r.request_id, r.pred_type, r.pred_subtype, gptSubtype, trueSubtype, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
     if (kind === 'csv') {
@@ -507,9 +628,27 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           >
             <option value="all">All</option>
             <option value="unreviewed">{isRetag ? 'Not retagged' : 'Unreviewed'}</option>
+            {isRetag && (
+              <>
+                <option value="unknown">Unknown only</option>
+                <option value="missing">Missing only</option>
+              </>
+            )}
             {!isRetag && <option value="justified">Justified</option>}
             {!isRetag && <option value="unjustified">Not Justified</option>}
             {!isRetag && <option value="unclear">Unclear</option>}
+            {isRetag && (
+              <>
+                <option value="real_unknown">Real Unknown</option>
+                <option value="real_missing">Real Missing</option>
+                <option value="false_unknown">False Unknown</option>
+                <option value="false_missing">False Missing</option>
+                <option value="truly_unknown">Judge: Truly Unknown</option>
+                <option value="true_missing_subtype">Judge: True Missing Subtype</option>
+                <option value="missing_but_mappable">Judge: Missing but Mappable</option>
+                <option value="wrong_subtype">Judge: Wrong Subtype</option>
+              </>
+            )}
           </select>
         </div>
 
@@ -588,6 +727,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   Missing Subtype{sortIndicator('missing_subtype')}
                 </th>
               )}
+              {isRetag && (
+                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
+                  GPT Subtype{sortIndicator('gpt_subtype')}
+                </th>
+              )}
               <th style={{ width: 250 }}>
                 <div className="header-cell">
                   Attributes
@@ -633,6 +777,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               {isRetag && <th />}
               {isRetag && <th />}
               {isRetag && <th />}
+              {isRetag && <th><input className="col-filter-input" placeholder="filter…" value={colFilters.gpt_subtype} onChange={e => setColFilter('gpt_subtype', e.target.value)} /></th>}
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
               <th />
@@ -675,6 +820,17 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       {r.missing_subtype || ''}
                     </td>
                   )}
+                  {isRetag && (
+                    <td>
+                      {getGptSubtype(gpt) ? (
+                        <span className={`gpt-subtype-pill ${getGptSubtypeSource(gpt) === 'mapped' ? 'is-mapped' : 'is-suggested'}`}>
+                          {getGptSubtype(gpt)}
+                        </span>
+                      ) : (
+                        <span className="gpt-subtype-pill is-empty">-</span>
+                      )}
+                    </td>
+                  )}
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
                   {isRetag ? (
@@ -705,6 +861,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   <td className="ask-gpt-td">
                     <div className="ask-gpt-cell">
                       <div className="ask-gpt-placeholder">{getAskText(gpt)}</div>
+                      {isRetag && gpt?.decision && (
+                        <div className="ask-gpt-placeholder">Decision: {gpt.decision}</div>
+                      )}
+                      {isRetag && gpt?.mappedAllowedSubtype && (
+                        <div className="ask-gpt-placeholder">Mapped: {gpt.mappedAllowedSubtype}</div>
+                      )}
                       <button
                         className="ask-gpt-row-btn"
                         disabled={Boolean(askGptLoading[r.request_id])}

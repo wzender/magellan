@@ -9,6 +9,7 @@ const fetch = require('node-fetch');
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL      = process.env.OPENAI_MODEL      || 'gpt-4o-mini';
+const OPENAI_JUDGE_MODEL = process.env.OPENAI_JUDGE_MODEL || OPENAI_MODEL;
 const OPENAI_API_URL    = process.env.OPENAI_API_URL    || 'https://api.openai.com/v1/chat/completions';
 const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS, 10) || 200;
 const TIMEOUT_MS        = 20000;
@@ -64,7 +65,51 @@ function parseStage1(rawText) {
   };
 }
 
-async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS) {
+const VALID_JUDGE_DECISIONS = new Set([
+  'truly_unknown',
+  'true_missing_subtype',
+  'missing_but_mappable',
+  'wrong_subtype',
+]);
+
+function normalizeJudgeDecision(value, predictedStatus = '') {
+  const status = String(predictedStatus || '').trim().toLowerCase();
+  const raw = String(value || '').trim().toLowerCase();
+
+  if (VALID_JUDGE_DECISIONS.has(raw)) return raw;
+
+  // Backward-compat mapping for legacy yes/no rows.
+  if (raw === 'yes') {
+    if (status === 'unknown') return 'wrong_subtype';
+    if (status === 'missing') return 'true_missing_subtype';
+    return 'wrong_subtype';
+  }
+  if (raw === 'no') {
+    if (status === 'unknown') return 'truly_unknown';
+    if (status === 'missing') return 'missing_but_mappable';
+    return 'wrong_subtype';
+  }
+
+  if (/unknown/.test(raw) && !/missing/.test(raw)) return 'truly_unknown';
+  if (/missing/.test(raw) && /(true|real|new|taxonomy)/.test(raw)) return 'true_missing_subtype';
+  if (/mapp|closest|semantic|near|similar/.test(raw)) return 'missing_but_mappable';
+  if (/wrong|incorrect|different|other/.test(raw)) return 'wrong_subtype';
+
+  // Safe fallback: if it was flagged unknown/missing by stage2, preserve conservative semantics.
+  if (status === 'unknown') return 'truly_unknown';
+  if (status === 'missing') return 'missing_but_mappable';
+  return 'wrong_subtype';
+}
+
+function parseJsonObject(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL) {
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     timeout: TIMEOUT_MS,
@@ -73,7 +118,7 @@ async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS) {
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model,
       max_tokens: maxTokens,
       temperature: 0,
       messages,
@@ -102,12 +147,96 @@ router.post('/ask-gpt', async (req, res) => {
     return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
   }
 
-  const { attributes, metadata, suggested_subtype, suggested_type } = req.body;
+  const {
+    attributes,
+    metadata,
+    suggested_subtype,
+    suggested_type,
+    judge_mode,
+    predicted_status,
+    candidate_subtype,
+    stage2_subtype,
+    pred_type,
+    pred_subtype,
+    missing_subtype,
+    allowed_subtypes,
+    nearest_subtypes,
+  } = req.body;
   if (!attributes && !metadata) {
     return res.status(400).json({ error: 'attributes or metadata required' });
   }
 
   try {
+    if (judge_mode) {
+      const allowedList = Array.isArray(allowed_subtypes) && allowed_subtypes.length > 0
+        ? allowed_subtypes.map(s => `- ${s}`).join('\n')
+        : '- N/A';
+      const nearestHints = Array.isArray(nearest_subtypes) && nearest_subtypes.length > 0
+        ? nearest_subtypes.join(', ')
+        : 'N/A';
+
+      const systemPrompt = `You are an expert audit judge for a two-stage subtype classifier.
+
+You must classify each record into exactly one decision:
+1) truly_unknown
+   Use only when available evidence is genuinely insufficient to map to an allowed subtype.
+2) true_missing_subtype
+   Use when the record has strong signal but the concept is truly absent from the allowed list.
+3) missing_but_mappable
+   Use when the classifier flagged missing, but the meaning is semantically close enough to an existing allowed subtype.
+4) wrong_subtype
+   Use when the classifier result is simply wrong and a different allowed subtype should have been chosen.
+
+Output JSON only with this schema:
+{"decision":"truly_unknown|true_missing_subtype|missing_but_mappable|wrong_subtype","mapped_allowed_subtype":"<allowed subtype or empty>","suggested_missing_subtype":"<1-3 words title case or empty>","reasoning":"1-2 concise sentences"}
+
+Rules:
+- Never output markdown.
+- mapped_allowed_subtype must be one of the allowed subtypes or empty.
+- suggested_missing_subtype must be non-empty only for true_missing_subtype.
+- If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.`;
+
+      const userPrompt = `Predicted status (from small model pipeline): ${predicted_status || stage2_subtype || 'N/A'}
+Predicted type: ${pred_type || 'N/A'}
+Predicted subtype: ${pred_subtype || 'N/A'}
+Stage-1 candidate subtype: ${candidate_subtype || 'N/A'}
+Missing subtype candidate: ${missing_subtype || 'N/A'}
+
+Allowed subtypes for this country:
+${allowedList}
+
+Nearest subtype hints from retrieval:
+${nearestHints}
+
+Attributes:
+${JSON.stringify(attributes, null, 2)}
+
+Metadata:
+${JSON.stringify(metadata, null, 2)}`;
+
+      const { data, raw } = await callChat([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ], 220, OPENAI_JUDGE_MODEL);
+
+      const parsed = parseJsonObject(raw) || {};
+      const decision = normalizeJudgeDecision(parsed.decision || parsed.verdict || raw, predicted_status || stage2_subtype);
+      const mappedAllowedSubtypeRaw = String(parsed.mapped_allowed_subtype || parsed.corrected_subtype || '').trim();
+      const allowedSet = new Set((Array.isArray(allowed_subtypes) ? allowed_subtypes : []).map(s => String(s).trim()));
+      const mappedAllowedSubtype = allowedSet.has(mappedAllowedSubtypeRaw) ? mappedAllowedSubtypeRaw : '';
+      const suggestedMissingSubtype = String(parsed.suggested_missing_subtype || parsed.suggested_label || '').trim();
+      const reasoning = String(parsed.reasoning || parsed.reason || raw).trim();
+
+      console.log(`[ask-gpt] mode=judge model=${data.model} tokens=${data.usage?.total_tokens}`);
+
+      return res.json({
+        decision,
+        mapped_allowed_subtype: mappedAllowedSubtype,
+        suggested_missing_subtype: suggestedMissingSubtype,
+        reasoning,
+      });
+    }
+
     // Existing Unknowns workflow: yes/no verdict for suggested subtype.
     if (suggested_subtype) {
       const prompt = `Based ONLY on the attributes and metadata below, is classifying this record as subtype "${suggested_subtype}" (type: "${suggested_type}") justified?

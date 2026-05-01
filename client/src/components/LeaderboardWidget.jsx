@@ -24,15 +24,34 @@ function timeAgo(date) {
   return `${years} year${years !== 1 ? 's' : ''} ago`;
 }
 
-function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }) {
-  const [columns, setColumns] = useState([
-    { key: 'select', label: 'Compare', width: 70 },
-    { key: 'run_name', label: 'Run', width: 220 },
-    { key: 'model_version', label: 'Model Version', width: 180 },
-    { key: 'subtype_weighted_f1', label: 'Subtype Weighted F1', width: 140 },
-    { key: 'type_weighted_f1', label: 'Type Weighted F1', width: 140 },
-    { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
-  ]);
+function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], isUnknowns = false }) {
+  // Define columns based on benchmark type
+  const getDefaultColumns = () => {
+    if (isUnknowns) {
+      return [
+        { key: 'run_name', label: 'Run', width: 160 },
+        { key: 'model_version', label: 'Model', width: 120 },
+        { key: 'benchmark_length', label: 'Total', width: 80 },
+        { key: 'unknowns_count', label: 'Unknowns', width: 80 },
+        { key: 'missing_count', label: 'Missing', width: 80 },
+        { key: 'real_unknown_count', label: 'Real Unknown', width: 100 },
+        { key: 'real_missing_count', label: 'Real Missing', width: 100 },
+        { key: 'false_unknown_count', label: 'False Unknown', width: 110 },
+        { key: 'false_missing_count', label: 'False Missing', width: 110 },
+        { key: 'reviewed_count', label: 'Reviewed', width: 80 },
+      ];
+    }
+    return [
+      { key: 'select', label: 'Compare', width: 70 },
+      { key: 'run_name', label: 'Run', width: 220 },
+      { key: 'model_version', label: 'Model Version', width: 180 },
+      { key: 'subtype_weighted_f1', label: 'Subtype Weighted F1', width: 140 },
+      { key: 'type_weighted_f1', label: 'Type Weighted F1', width: 140 },
+      { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
+    ];
+  };
+
+  const [columns, setColumns] = useState(getDefaultColumns());
   const [dragColumnIndex, setDragColumnIndex] = useState(null);
   const [resizingColumnIndex, setResizingColumnIndex] = useState(null);
   const [resizeStartX, setResizeStartX] = useState(0);
@@ -232,6 +251,47 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
                     return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_weighted_f1 ?? 0) * 100).toFixed(1)}%</td>;
                   case 'benchmark_length':
                     return <td key={`${row.run_id}-${col.key}`} className="benchmark-size">{row.benchmark_length}</td>;
+                  // Unknowns columns
+                  case 'unknowns_count':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.unknowns_count || 0}</td>;
+                  case 'missing_count':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.missing_count || 0}</td>;
+                  case 'real_unknown_count':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.real_unknown_count || 0}</td>;
+                  case 'real_missing_count':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.real_missing_count || 0}</td>;
+                  case 'false_unknown_count': {
+                    const count = row.false_unknown_count || 0;
+                    const total = row.unknowns_count || 1;
+                    const rate = (count / total) * 100;
+                    const isWarning = rate > 20;
+                    return (
+                      <td 
+                        key={`${row.run_id}-${col.key}`} 
+                        className={`metric ${isWarning ? 'metric-warning' : ''}`}
+                        title={isWarning ? 'Rate > 20% — classifier too conservative' : undefined}
+                      >
+                        {count}
+                      </td>
+                    );
+                  }
+                  case 'false_missing_count': {
+                    const count = row.false_missing_count || 0;
+                    const total = row.missing_count || 1;
+                    const rate = (count / total) * 100;
+                    const isWarning = rate > 20;
+                    return (
+                      <td 
+                        key={`${row.run_id}-${col.key}`} 
+                        className={`metric ${isWarning ? 'metric-warning' : ''}`}
+                        title={isWarning ? 'Rate > 20% — Stage 2 grounding failure' : undefined}
+                      >
+                        {count}
+                      </td>
+                    );
+                  }
+                  case 'reviewed_count':
+                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.reviewed_count || 0}</td>;
                   default:
                     return <td key={`${row.run_id}-${col.key}`}>-</td>;
                 }
@@ -242,7 +302,17 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [] }
       </table>
       </div>
       <div className="leaderboard-hint">
-        Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
+        {isUnknowns 
+          ? <>
+              <strong>Real Unknown</strong> = confirmed ambiguous (even GPT can't classify). 
+              <strong>Real Missing</strong> = confirmed taxonomy gap. 
+              <strong>False Unknown</strong> (orange) = classifier too conservative. 
+              <strong>False Missing</strong> (orange) = Stage 2 grounding failure.
+            </>
+          : <>
+              Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
+            </>
+        }
       </div>
     </div>
   );

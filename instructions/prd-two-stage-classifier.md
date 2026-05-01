@@ -259,6 +259,175 @@ To adapt to a new domain, replace both blocks. The Stage 1 block describes the d
 
 ---
 
+## Downstream Integration — Unknowns Benchmark & GPT-as-Judge
+
+The Magellan dashboard includes a dedicated **Unknowns benchmark** (benchmark ID 4) that consumes the pipeline's `unknown` and `missing_subtype` outputs and provides a human review workflow — assisted by a **stronger offline GPT** (e.g., GPT-4o) that judges the quality of the lightweight command-r classifier.
+
+### Model Roles
+
+| Model | Role | Context | Cost |
+|---|---|---|---|
+| command-r (vLLM) | Online classifier — fast batch inference | Tight budget, prefix-cached, temperature=0 | Low (self-hosted) |
+| GPT-4o (OpenAI API) | Offline judge — validates/corrects classifier decisions | No latency constraint, full reasoning | Higher per-call, but applied only to flagged records |
+
+The two models never run together in the pipeline. command-r classifies all records in bulk; GPT-4o reviews only the subset surfaced in the Unknowns benchmark (unknowns + missing subtypes).
+
+### Data Flow
+
+```
+classify() returns {"subtype": "missing_subtype", "suggested_label": ..., "reason": ..., "signals": ...}
+    ↓
+Records land in country-specific Unknowns run files (4_spain.csv, 4_france.csv, 4_italy.csv)
+    ↓
+csv-loader.js pre-computes valid/invalid subtypes per country (from subtypes-by-country.json)
+    ↓
+Dashboard surfaces records grouped by unknown vs. missing_subtype
+    ↓
+GPT-4o judges each record offline via Ask GPT endpoint
+```
+
+### GPT-as-Judge: What It Evaluates
+
+The stronger GPT answers a different question depending on the classifier's output:
+
+#### For `missing_subtype` records
+**Question**: "Is classifying this record as `[suggested_label]` justified, or should it map to an existing allowed subtype?"
+
+| GPT Verdict | Meaning | Action |
+|---|---|---|
+| `yes` | Genuinely missing — `suggested_label` is a valid new category | Candidate for taxonomy addition |
+| `no` + correction | command-r failed grounding — should have mapped to `[allowed_label]` | Retag `true_subtype` = allowed_label; signals classifier weakness |
+
+#### For `unknown` records
+**Question**: "Given the record's attributes and metadata, can you confidently classify this into one of the allowed subtypes?"
+
+| GPT Verdict | Meaning | Action |
+|---|---|---|
+| `yes` + label | GPT can classify — command-r was too conservative | Retag `true_subtype` = GPT's label; signals recall gap in command-r |
+| `no` | Truly ambiguous — even a stronger model can't decide | Confirms `unknown` is correct; record stays unclassified |
+
+#### For `missing_subtype` — Subtype Suggestion
+**Question**: "What should this new subtype be called? (1–3 words, Title Case, novel relative to existing list)"
+
+Used when GPT confirms the record is genuinely missing. The stronger model proposes a clean label name since command-r's `suggested_label` may be noisy or verbose.
+
+### Review Workflow
+
+| Step | Action | API Endpoint | GPT Role |
+|---|---|---|---|
+| 1. Explore | Browse flagged records | `GET /api/records?run_id=X` | — |
+| 2. Judge | GPT evaluates classifier decision | `POST /api/ask-gpt` (verdict mode) | Validates or corrects |
+| 3. Suggest | GPT proposes new subtype name | `POST /api/suggest-missing-subtype` | Names new category |
+| 4. Retag | Human confirms/overrides GPT verdict | `PUT /api/validation` | — |
+| 5. Persist | Store verdicts and suggestions | `PUT /api/gpt-results`, `PUT /api/missing-subtypes` | — |
+
+### Field Mapping: Pipeline → Dashboard
+
+| Pipeline output field | Dashboard column / API field |
+|---|---|
+| `subtype` (`"missing_subtype"`) | `pred_subtype2` = `"missing"` |
+| `suggested_label` | `suggested_subtype` passed to Ask GPT |
+| `reason` | Displayed in RowLevelTable record detail; passed to GPT for context |
+| `signals` | Displayed in RowLevelTable record detail; passed to GPT for context |
+
+### Quality Signals from GPT Verdicts
+
+Aggregating GPT verdicts across a run produces **classifier quality metrics**:
+
+| Metric | Computation | Indicates |
+|---|---|---|
+| False Unknown Rate | `unknown` records where GPT says `yes` / total `unknown` | command-r is too conservative (recall gap) |
+| False Missing Rate | `missing_subtype` records where GPT says `no` / total `missing_subtype` | Stage 2 grounding failure |
+| True Missing Rate | `missing_subtype` records where GPT says `yes` / total `missing_subtype` | Genuine taxonomy gaps |
+| Judge Agreement | GPT `no` corrections that match a human retag | GPT judge reliability |
+
+These metrics help decide whether to tune domain instructions, adjust Stage 2 disambiguation rules, or expand the allowed subtype list.
+
+---
+
+### UI Modifications for Unknowns Benchmark
+
+#### Leaderboard — Extended Columns
+
+When the Unknowns benchmark is selected, the leaderboard adds statistics columns summarising classifier behaviour and GPT verdicts per run:
+
+| Column | Source | Description |
+|---|---|---|
+| Total | Record count | Total records in the run |
+| Unknowns | `pred_subtype2 = "unknown"` count | Records where command-r had insufficient signal |
+| Missing | `pred_subtype2 = "missing"` count | Records where command-r flagged a taxonomy gap |
+| Real Unknown | GPT verdict `no` on unknown records | Confirmed ambiguous — even GPT can't classify |
+| Real Missing | GPT verdict `yes` on missing records | Confirmed taxonomy gap — new subtype needed |
+| False Unknown | GPT verdict `yes` on unknown records | command-r was too conservative (fixable recall) |
+| False Missing | GPT verdict `no` on missing records | Stage 2 grounding failure (fixable in domain instructions) |
+| Reviewed | Count of records with any GPT verdict | Progress indicator |
+
+**Sorting**: Default sort by `Missing` descending (surface runs with the most taxonomy gaps first). All columns sortable.
+
+**Colour coding**: `False Unknown` and `False Missing` cells highlighted in warning colour (orange) when rate exceeds a threshold (e.g., >20%) — these indicate classifier weaknesses that domain instruction tuning can fix.
+
+#### Record Table — Manual Review of Problematic Records
+
+The record table in Unknowns mode is designed for **sampling and manual review** of records the classifier struggled with. It is not meant for exhaustive review of all records — just enough to validate patterns and inform corrections.
+
+##### Columns
+
+| Column | Content |
+|---|---|
+| ID | Record identifier |
+| Status | `unknown` / `missing` badge |
+| Suggested Label | command-r's `candidate_subtype` from Stage 1 (only for missing records) |
+| Reason | command-r's one-sentence rationale |
+| Signals | Key field=value pairs from Stage 1 |
+| GPT Verdict | `yes` / `no` + correction label (if available) |
+| GPT Suggested Name | Clean subtype name proposed by GPT (for confirmed missing) |
+| True Subtype | Human-assigned label (editable) |
+
+##### Expandable Row Detail
+
+Clicking a row expands to show:
+- Full `attributes` JSON (syntax-highlighted)
+- Full `metadata` JSON (syntax-highlighted)
+- Nearest subtypes from retrieval (what Stage 2 saw as hints)
+- Allowed subtypes for this country (scrollable list)
+
+##### Filtering
+
+| Filter | Options |
+|---|---|
+| Status | All / Unknown only / Missing only |
+| GPT Verdict | All / Reviewed / Unreviewed / Yes / No |
+| Verdict Category | Real Unknown / Real Missing / False Unknown / False Missing |
+
+##### Actions per Record
+
+| Action | Button | Effect |
+|---|---|---|
+| Ask GPT | "Judge" | Calls `POST /api/ask-gpt` — GPT evaluates the record |
+| Suggest Name | "Suggest" | Calls `POST /api/suggest-missing-subtype` — GPT proposes clean label |
+| Retag | Inline edit on True Subtype | Calls `PUT /api/validation` — human override |
+| Accept GPT | "Accept" | Copies GPT's verdict/label into True Subtype |
+
+##### Bulk Actions
+
+| Action | Scope | Effect |
+|---|---|---|
+| Judge All Unreviewed | Filtered set | Batch `POST /api/ask-gpt` for all records without a verdict |
+| Accept All GPT Yes | Filtered set | Batch accept GPT corrections where verdict = yes |
+| Export | Filtered set | Download CSV of reviewed records with verdicts |
+
+##### Future Extension: Low-Confidence Records
+
+Currently the record table shows only `unknown` and `missing_subtype` records. Future iterations may include records where command-r assigned a label but with **low confidence** (detected via logprobs or a calibrated threshold). These would appear with a `low_confidence` status badge and follow the same GPT-as-judge review flow.
+
+### Feedback Loop
+
+The Unknowns benchmark enables **taxonomy evolution**: when enough records cluster around the same `suggested_label` and receive positive GPT verdicts, the label is a candidate for addition to `subtypes-by-country.json`. This closes the loop — new subtypes graduate from `missing_subtype` into the allowed list for future classification runs.
+
+It also drives **classifier improvement**: patterns in GPT corrections (e.g., "command-r consistently fails to ground X → Y") inform updates to `DOMAIN_INSTRUCTIONS_STAGE2` disambiguation rules.
+
+---
+
 ## Prompt Rendering Helper (pseudocode)
 
 ```python

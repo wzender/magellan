@@ -40,6 +40,68 @@ function buildUnknownsCountryCandidates(run) {
 /* ── helpers ─────────────────────────────────────────────── */
 function pctNum(n) { return (n * 100).toFixed(1); }
 
+function parseGptReasoningPayload(reasoning) {
+  if (typeof reasoning !== 'string') return null;
+  const trimmed = reasoning.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
+  const rows = Array.isArray(records) ? records : [];
+  const gpt = gptResultsByRequestId && typeof gptResultsByRequestId === 'object'
+    ? gptResultsByRequestId
+    : {};
+
+  const unknownsCount = rows.filter(r => (r.pred_subtype_2 || '') === 'unknown').length;
+  const missingCount = rows.filter(r => (r.pred_subtype_2 || '') === 'missing').length;
+
+  let reviewedCount = 0;
+  let realUnknownCount = 0;
+  let realMissingCount = 0;
+  let falseUnknownCount = 0;
+  let falseMissingCount = 0;
+
+  rows.forEach(r => {
+    const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
+    const saved = gpt[r.request_id];
+    if (!saved) return;
+
+    const payload = parseGptReasoningPayload(saved.reasoning || '') || {};
+    const mappedSubtype = String(payload.mapped_allowed_subtype || '').trim();
+    const suggestedSubtype = String(payload.suggested_missing_subtype || '').trim();
+    const hasGptSubtype = Boolean(mappedSubtype || suggestedSubtype);
+
+    // Count reviewed when we have either a parsed subtype output or a legacy verdict.
+    if (hasGptSubtype || saved.verdict) reviewedCount++;
+
+    if (status === 'unknown') {
+      if (hasGptSubtype) falseUnknownCount++;
+      else if (saved.verdict) realUnknownCount++;
+    }
+
+    if (status === 'missing') {
+      if (suggestedSubtype) realMissingCount++;
+      else if (mappedSubtype || saved.verdict) falseMissingCount++;
+    }
+  });
+
+  return {
+    unknowns_count: unknownsCount,
+    missing_count: missingCount,
+    reviewed_count: reviewedCount,
+    real_unknown_count: realUnknownCount,
+    real_missing_count: realMissingCount,
+    false_unknown_count: falseUnknownCount,
+    false_missing_count: falseMissingCount,
+  };
+}
+
 /* ── Unknowns type-health (client-side, mirrors csv-loader getTypeHealthSummary) ── */
 function computeUnknownsTypeHealth(records, verdicts, countrySubtypes) {
   const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
@@ -203,6 +265,22 @@ function Dashboard() {
   const _unknownsRun = leaderboard.find(r => r.run_id === selectedRunIds[0]);
   const unknownsCountryCandidates = isUnknownsBenchmark ? buildUnknownsCountryCandidates(_unknownsRun) : [];
 
+  const refreshUnknownsRunStats = useCallback(async (runId) => {
+    if (!runId) return;
+    try {
+      const [recRes, gptRes] = await Promise.all([
+        fetch(`/api/records?run_id=${runId}&limit=999999`),
+        fetch(`/api/gpt-results?run_id=${runId}`),
+      ]);
+      const recData = await recRes.json();
+      const gptData = await gptRes.json();
+      const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
+      setLeaderboard(prev => prev.map(r => r.run_id === runId ? { ...r, ...stats } : r));
+    } catch {
+      // no-op
+    }
+  }, []);
+
   /* ── initial load: benchmarks + all leaderboards ── */
   useEffect(() => {
     const init = async () => {
@@ -254,6 +332,41 @@ function Dashboard() {
       setSelectedRunIds([]);
     }
   }, [allLeaderboards]);
+
+  /* ── Unknowns: recompute leaderboard derived stats from GPT subtype outputs ── */
+  useEffect(() => {
+    if (!isUnknownsBenchmark || !selectedBenchmark) return;
+
+    const baseRows = allLeaderboards[selectedBenchmark.id] || [];
+    if (baseRows.length === 0) {
+      setLeaderboard([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUnknownsStats = async () => {
+      const enriched = await Promise.all(baseRows.map(async row => {
+        try {
+          const [recRes, gptRes] = await Promise.all([
+            fetch(`/api/records?run_id=${row.run_id}&limit=999999`),
+            fetch(`/api/gpt-results?run_id=${row.run_id}`),
+          ]);
+          const recData = await recRes.json();
+          const gptData = await gptRes.json();
+          const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
+          return { ...row, ...stats };
+        } catch {
+          return { ...row };
+        }
+      }));
+
+      if (!cancelled) setLeaderboard(enriched);
+    };
+
+    loadUnknownsStats();
+    return () => { cancelled = true; };
+  }, [isUnknownsBenchmark, selectedBenchmark?.id, allLeaderboards]);
 
   /* ── load type health when run 1 changes (skip for Unknowns) ── */
   useEffect(() => {
@@ -340,7 +453,16 @@ function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ run_id: String(runId), verdicts: { [requestId]: verdict } }),
     });
-  }, [selectedRunIds]);
+
+    // Keep Unknowns leaderboard derived columns fresh after local edits.
+    if (isUnknownsBenchmark && selectedBenchmark) {
+      const baseRows = allLeaderboards[selectedBenchmark.id] || [];
+      const target = baseRows.find(r => r.run_id === runId);
+      if (target) {
+        await refreshUnknownsRunStats(runId);
+      }
+    }
+  }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
 
   /* ── Unknowns: bulk verdict ── */
   const handleBulkVerdict = useCallback(async (verdictMap) => {
@@ -358,7 +480,15 @@ function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ run_id: String(runId), verdicts: verdictMap }),
     });
-  }, [selectedRunIds]);
+
+    if (isUnknownsBenchmark && selectedBenchmark) {
+      const baseRows = allLeaderboards[selectedBenchmark.id] || [];
+      const target = baseRows.find(r => r.run_id === runId);
+      if (target) {
+        await refreshUnknownsRunStats(runId);
+      }
+    }
+  }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
 
   /* ── Unknowns: drill-down from TypeHealthGrid using client-side filtered data ── */
   const handleViewRecordsForUnknowns = useCallback((trueType, trueSubtype, predSubtype) => {
@@ -653,6 +783,7 @@ function Dashboard() {
             selectedRuns={selectedRunIds}
             onRunSelect={handleRunSelect}
             onRunToggle={isUnknownsBenchmark ? undefined : handleRunToggle}
+            isUnknowns={isUnknownsBenchmark}
           />
 
           {displayTypeHealth.length > 0 && (
@@ -698,6 +829,7 @@ function Dashboard() {
                   onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
                   onSetVerdict={handleSetVerdict}
                   onBulkVerdict={handleBulkVerdict}
+                  onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
                 />
               )}
             </div>

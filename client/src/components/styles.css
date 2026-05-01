@@ -2816,8 +2816,40 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: var(--text-muted);
 }
 
+.leaderboard-table .metric-warning {
+  background-color: var(--warning-bg);
+  color: var(--warning-text);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
 .leaderboard-table .benchmark-size {
   color: var(--text-muted);
+}
+
+.gpt-subtype-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.gpt-subtype-pill.is-mapped {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.gpt-subtype-pill.is-suggested {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.gpt-subtype-pill.is-empty {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .leaderboard-table .run-date-cell {
