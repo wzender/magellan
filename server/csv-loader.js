@@ -1012,7 +1012,7 @@ function getMissingSubtypeDecisions(runId) {
   } catch { return {}; }
 }
 
-function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
+function updateMissingSubtypeDecision(runId, requestId, status, mappedTo) {
   let all = {};
   if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
     try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
@@ -1020,9 +1020,9 @@ function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
   const key = String(runId);
   if (!all[key]) all[key] = {};
   if (status === null || status === undefined) {
-    delete all[key][candidate];
+    delete all[key][String(requestId)];
   } else {
-    all[key][candidate] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
+    all[key][String(requestId)] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
   }
   fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
 }
@@ -1038,12 +1038,13 @@ function getMissingSubtypeGroups(runId) {
       const candidate = r.missing_subtype;
       if (!groups[candidate]) groups[candidate] = { candidate, records: [] };
       groups[candidate].records.push({
-        request_id:    r.request_id,
+        request_id:     r.request_id,
         pred_subtype_1: r.pred_subtype_1,
         pred_subtype_2: r.pred_subtype_2,
         missing_subtype: r.missing_subtype,
-        attributes:    r.attributes,
-        metadata:      r.metadata,
+        attributes:     r.attributes,
+        metadata:       r.metadata,
+        decision:       decisions[String(r.request_id)] || null,
       });
     });
 
@@ -1052,9 +1053,42 @@ function getMissingSubtypeGroups(runId) {
       candidate: g.candidate,
       count:     g.records.length,
       records:   g.records,
-      decision:  decisions[g.candidate] || null,
     }))
     .sort((a, b) => b.count - a.count);
+}
+
+async function publishRetagged(runId) {
+  const { query } = require('./db');
+  const { rows, filename } = exportRunCsv(runId);
+  if (!rows.length) throw new Error('No data to publish');
+
+  const tableName = filename.replace('.csv', '_retagged');
+  const cols = Object.keys(rows[0]);
+  const colDefs = cols.map(c => `"${c}" TEXT`).join(', ');
+
+  await query(`DROP TABLE IF EXISTS "${tableName}"`);
+  await query(`CREATE TABLE "${tableName}" (${colDefs})`);
+
+  for (const row of rows) {
+    const vals = cols.map(c => row[c] ?? null);
+    const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+    await query(`INSERT INTO "${tableName}" VALUES (${placeholders})`, vals);
+  }
+
+  return tableName;
+}
+
+function exportRunCsv(runId) {
+  const data = loadData();
+  const run  = data.runs.find(r => r.id === runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const fname = runFileName(run.benchmark_id, run.run_name);
+  const fpath = path.join(RUNS_DIR, fname);
+  if (!fs.existsSync(fpath)) throw new Error(`Run file not found: ${fname}`);
+
+  const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
+  return { rows: records, filename: fname };
 }
 
 module.exports = {
@@ -1084,4 +1118,6 @@ module.exports = {
   getMissingSubtypeGroups,
   getMissingSubtypeDecisions,
   updateMissingSubtypeDecision,
+  exportRunCsv,
+  publishRetagged,
 };

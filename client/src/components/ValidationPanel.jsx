@@ -603,20 +603,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       <div className="validation-toolbar" ref={toolbarRef}>
         {/* Progress stats */}
         <div className="validation-stats">
-          {isRetag ? (
-            <>
-              <div className="validation-retag-progress">
-                <span className="validation-progress">{anyReviewedCount}/{total} reviewed</span>
-                <span className="validation-progress">{retaggedCount}/{total} retagged</span>
-                <div className="validation-retag-progress-track" aria-hidden="true">
-                  <div
-                    className="validation-retag-progress-fill"
-                    style={{ width: `${retaggedProgress}%` }}
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
+          {!isRetag && (
             <>
               <span className="validation-progress">{reviewed}/{total} reviewed</span>
               <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
@@ -643,23 +630,29 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
         {/* Filter */}
         {isRetag ? (
-          <div className="validation-verdict-tabs">
-            {[
-              { key: 'all',           label: 'All',           count: total,                       title: 'All records in this run' },
-              { key: 'unreviewed',    label: 'Unreviewed',    count: total - anyReviewedCount,     title: 'No GPT verdict and no human tag yet' },
-              { key: 'real_unknown',  label: 'Real Unknown',  count: realUnknownCount,             title: 'GPT judged truly unknown — no actionable content signal' },
-              { key: 'false_unknown', label: 'False Unknown', count: falseUnknownCount,            title: 'GPT judged wrong subtype or mappable to an existing one' },
-            ].map(t => (
-              <button
-                key={t.key}
-                title={t.title}
-                className={`validation-verdict-tab${verdictFilter === t.key ? ' active' : ''}`}
-                onClick={() => setVerdictFilter(t.key)}
-              >
-                {t.label} <span className="validation-verdict-tab-count">{t.count}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="validation-verdict-tabs">
+              {[
+                { key: 'all',           label: 'All',           count: total,                       title: 'All records in this run' },
+                { key: 'unreviewed',    label: 'Unreviewed',    count: total - anyReviewedCount,     title: 'No GPT verdict and no human tag yet' },
+                { key: 'real_unknown',  label: 'Real Unknown',  count: realUnknownCount,             title: 'GPT judged truly unknown — no actionable content signal' },
+                { key: 'false_unknown', label: 'False Unknown', count: falseUnknownCount,            title: 'GPT judged wrong subtype or mappable to an existing one' },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  title={t.title}
+                  className={`validation-verdict-tab${verdictFilter === t.key ? ' active' : ''}`}
+                  onClick={() => setVerdictFilter(t.key)}
+                >
+                  {t.label} <span className="validation-verdict-tab-count">{t.count}</span>
+                </button>
+              ))}
+            </div>
+            <div className="validation-retag-stats">
+              <span className="validation-progress">{anyReviewedCount}/{total} reviewed</span>
+              <span className="validation-progress">{retaggedCount}/{total} retagged</span>
+            </div>
+          </>
         ) : (
           <div className="validation-filters">
             <select
@@ -745,9 +738,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('feshots')}>
                   Fewshots{sortIndicator('feshots')}
                 </th>
-                <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
-                  Pred Subtype 1{sortIndicator('pred_subtype_1')}
-                </th>
                 <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
                   GPT Verdict{sortIndicator('gpt_verdict')}
                 </th>
@@ -807,7 +797,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
                 <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
                 <th />
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
                 <th />
                 <th />
                 <th />
@@ -840,7 +829,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                     <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
                     <td className="cell-fewshots">{fewshotsText}</td>
-                    <td><strong>{stage1}</strong></td>
                     <td className="cell-gpt-verdict">
                       <GptVerdictBadge gpt={gpt} />
                       <button

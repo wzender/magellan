@@ -24,6 +24,8 @@ const askGptRouter      = require('./api/askGpt');
 const gptResultsRouter  = require('./api/gptResults');
 const subtypesByCountryRouter = require('./api/subtypesByCountry');
 const missingSubtypesRouter   = require('./api/missingSubtypes');
+const exportCsvRouter          = require('./api/exportCsv');
+const publishRetaggedRouter    = require('./api/publishRetagged');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -59,6 +61,8 @@ app.use('/api', askGptRouter);
 app.use('/api', gptResultsRouter);
 app.use('/api', subtypesByCountryRouter);
 app.use('/api', missingSubtypesRouter);
+app.use('/api', exportCsvRouter);
+app.use('/api', publishRetaggedRouter);
 
 // Serve React app for all non-API routes
 app.get('*', (req, res) => {

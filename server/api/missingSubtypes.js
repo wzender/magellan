@@ -3,7 +3,7 @@ const router = express.Router();
 const dbLoader = require('../loader');
 
 // GET /api/missing-subtypes?run_id=10
-// Returns grouped candidates: [{ candidate, count, records, decision }]
+// Returns grouped candidates: [{ candidate, count, records: [{ ...record, decision }] }]
 router.get('/missing-subtypes', async (req, res) => {
   const { run_id } = req.query;
   if (!run_id) return res.status(400).json({ error: 'run_id is required' });
@@ -17,13 +17,13 @@ router.get('/missing-subtypes', async (req, res) => {
 });
 
 // PUT /api/missing-subtypes
-// Body: { run_id, candidate, status, mapped_to? }
+// Body: { run_id, request_id, status, mapped_to? }
 // status: 'accepted' | 'mapped' | 'rejected' | null (to clear)
 router.put('/missing-subtypes', (req, res) => {
-  const { run_id, candidate, status, mapped_to } = req.body;
-  if (!run_id || !candidate) return res.status(400).json({ error: 'run_id and candidate are required' });
+  const { run_id, request_id, status, mapped_to } = req.body;
+  if (!run_id || !request_id) return res.status(400).json({ error: 'run_id and request_id are required' });
   try {
-    dbLoader.updateMissingSubtypeDecision(parseInt(run_id, 10), candidate, status, mapped_to);
+    dbLoader.updateMissingSubtypeDecision(parseInt(run_id, 10), request_id, status, mapped_to);
     res.json({ ok: true });
   } catch (error) {
     console.error('Error updating missing subtype decision:', error);

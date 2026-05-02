@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 /* ── GPT helpers (mirrored from ValidationPanel) ────────────────────────── */
 const GPT_VERDICT_CONFIG = {
@@ -64,7 +64,7 @@ function getGptSubtypeSource(result) {
   return 'none';
 }
 
-/* ── Group-level decision badge ─────────────────────────────────────────── */
+/* ── Per-record decision badge ───────────────────────────────────────────── */
 const STATUS_LABELS  = { accepted: 'Accepted', mapped: 'Mapped', rejected: 'Rejected' };
 const STATUS_CLASSES = { accepted: 'missing-decision-accepted', mapped: 'missing-decision-mapped', rejected: 'missing-decision-rejected' };
 
@@ -76,8 +76,93 @@ function DecisionBadge({ decision }) {
   return <span className={`missing-decision-badge ${cls}`}>{label}{extra}</span>;
 }
 
-/* ── Record table (ValidationPanel retag-style) ─────────────────────────── */
-function GroupRecordTable({ records, gptResults, askGptLoading, onAskGpt }) {
+/* ── Per-record decision controls (Accept / Map / Reject) ───────────────── */
+function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [mapQuery, setMapQuery]       = useState('');
+  const dropdownRef = useRef(null);
+  const { decision } = record;
+
+  const subtypeOptions = (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
+  const filteredOptions = mapQuery
+    ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
+    : subtypeOptions;
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!mappingOpen) return;
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMappingOpen(false);
+        setMapQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [mappingOpen]);
+
+  const handleMap = (subtype) => {
+    onDecision(record.request_id, 'mapped', subtype);
+    setMappingOpen(false);
+    setMapQuery('');
+  };
+
+  return (
+    <div className="missing-group-actions missing-record-actions">
+      <button
+        className={`missing-action missing-action-accept${decision?.status === 'accepted' ? ' active' : ''}`}
+        onClick={() => onDecision(record.request_id, decision?.status === 'accepted' ? null : 'accepted', null)}
+        title="Accept as new subtype"
+      >
+        Accept
+      </button>
+
+      <div className="missing-action-map-wrap" ref={dropdownRef}>
+        <button
+          className={`missing-action missing-action-map${decision?.status === 'mapped' ? ' active' : ''}`}
+          onClick={() => setMappingOpen(o => !o)}
+          title="Map to existing subtype"
+        >
+          Map {mappingOpen ? '▲' : '▼'}
+        </button>
+        {mappingOpen && (
+          <div className="missing-map-dropdown">
+            <input
+              className="missing-map-search"
+              placeholder="Search subtype…"
+              value={mapQuery}
+              onChange={e => setMapQuery(e.target.value)}
+              autoFocus
+            />
+            <ul className="missing-map-list">
+              <li
+                className={`subtype-combobox-option subtype-combobox-unknown${decision?.mapped_to === 'unknown' ? ' selected' : ''}`}
+                onMouseDown={e => { e.preventDefault(); handleMap('unknown'); }}
+              >
+                Unknown
+              </li>
+              {filteredOptions.map(s => (
+                <li
+                  key={s}
+                  className={`missing-map-option${decision?.mapped_to === s ? ' selected' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); handleMap(s); }}
+                >
+                  {s}
+                </li>
+              ))}
+              {filteredOptions.length === 0 && (
+                <li className="missing-map-option missing-map-empty">No matches</li>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Record table with per-row decision controls ────────────────────────── */
+function GroupRecordTable({ records, countrySubtypes, gptResults, askGptLoading, onAskGpt, onDecision }) {
   const renderJson = (val) => {
     if (!val) return <span className="json-empty">(empty)</span>;
     const obj = typeof val === 'string'
@@ -92,11 +177,12 @@ function GroupRecordTable({ records, gptResults, askGptLoading, onAskGpt }) {
         <thead>
           <tr>
             <th style={{ width: 120 }}>Request ID</th>
-            <th style={{ width: 250 }}>Attributes</th>
-            <th style={{ width: 250 }}>Metadata</th>
-            <th style={{ width: 170 }}>Pred Subtype 1</th>
-            <th style={{ width: 240 }}>GPT Verdict</th>
-            <th style={{ width: 160 }}>GPT Subtype</th>
+            <th style={{ width: 200 }}>Attributes</th>
+            <th style={{ width: 200 }}>Metadata</th>
+            <th style={{ width: 150 }}>Pred Subtype 1</th>
+            <th style={{ width: 220 }}>GPT Verdict</th>
+            <th style={{ width: 140 }}>GPT Subtype</th>
+            <th style={{ width: 280 }}>Decision</th>
           </tr>
         </thead>
         <tbody>
@@ -127,6 +213,14 @@ function GroupRecordTable({ records, gptResults, askGptLoading, onAskGpt }) {
                     <span className="gpt-subtype-pill is-empty">—</span>
                   )}
                 </td>
+                <td className="cell-missing-decision">
+                  <DecisionBadge decision={r.decision} />
+                  <RecordDecisionControls
+                    record={r}
+                    countrySubtypes={countrySubtypes}
+                    onDecision={onDecision}
+                  />
+                </td>
               </tr>
             );
           })}
@@ -139,93 +233,42 @@ function GroupRecordTable({ records, gptResults, askGptLoading, onAskGpt }) {
 /* ── Candidate group ─────────────────────────────────────────────────────── */
 function CandidateGroup({ group, countrySubtypes, gptResults, askGptLoading, onAskGpt, onDecision }) {
   const [expanded, setExpanded] = useState(false);
-  const [mappingOpen, setMappingOpen] = useState(false);
-  const [mapQuery, setMapQuery] = useState('');
+  const { candidate, count, records } = group;
 
-  const subtypeOptions = (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
-  const filteredOptions = mapQuery
-    ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
-    : subtypeOptions;
+  const reviewedCount = records.filter(r => r.decision).length;
+  const acceptedCount = records.filter(r => r.decision?.status === 'accepted').length;
+  const mappedCount   = records.filter(r => r.decision?.status === 'mapped').length;
+  const rejectedCount = records.filter(r => r.decision?.status === 'rejected').length;
 
-  const { candidate, count, records, decision } = group;
-
-  const handleMap = (subtype) => {
-    onDecision(candidate, 'mapped', subtype);
-    setMappingOpen(false);
-    setMapQuery('');
-  };
+  const summaryParts = [];
+  if (acceptedCount) summaryParts.push(`${acceptedCount} accepted`);
+  if (mappedCount)   summaryParts.push(`${mappedCount} mapped`);
+  if (rejectedCount) summaryParts.push(`${rejectedCount} rejected`);
+  const unreviewed = count - reviewedCount;
+  if (unreviewed)    summaryParts.push(`${unreviewed} unreviewed`);
 
   return (
-    <div className={`missing-group ${decision ? `missing-group-${decision.status}` : ''}`}>
+    <div className="missing-group">
       <div className="missing-group-header">
         <button className="missing-group-expand" onClick={() => setExpanded(e => !e)}>
           <span className="missing-group-name">{candidate}</span>
           <span className="missing-group-count">{count} {count === 1 ? 'record' : 'records'}</span>
-          <DecisionBadge decision={decision} />
+          {summaryParts.length > 0 && (
+            <span className="missing-group-summary">{summaryParts.join(', ')}</span>
+          )}
           <span className="missing-group-toggle">{expanded ? '▾' : '▸'}</span>
         </button>
-
-        <div className="missing-group-actions">
-          <button
-            className={`missing-action missing-action-accept${decision?.status === 'accepted' ? ' active' : ''}`}
-            onClick={() => onDecision(candidate, decision?.status === 'accepted' ? null : 'accepted', null)}
-            title="Accept as new subtype"
-          >
-            Accept
-          </button>
-
-          <div className="missing-action-map-wrap">
-            <button
-              className={`missing-action missing-action-map${decision?.status === 'mapped' ? ' active' : ''}`}
-              onClick={() => setMappingOpen(o => !o)}
-              title="Map to existing subtype"
-            >
-              Map to existing {mappingOpen ? '▲' : '▼'}
-            </button>
-            {mappingOpen && (
-              <div className="missing-map-dropdown">
-                <input
-                  className="missing-map-search"
-                  placeholder="Search subtype…"
-                  value={mapQuery}
-                  onChange={e => setMapQuery(e.target.value)}
-                  autoFocus
-                />
-                <ul className="missing-map-list">
-                  {filteredOptions.map(s => (
-                    <li
-                      key={s}
-                      className={`missing-map-option${decision?.mapped_to === s ? ' selected' : ''}`}
-                      onMouseDown={e => { e.preventDefault(); handleMap(s); }}
-                    >
-                      {s}
-                    </li>
-                  ))}
-                  {filteredOptions.length === 0 && (
-                    <li className="missing-map-option missing-map-empty">No matches</li>
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <button
-            className={`missing-action missing-action-reject${decision?.status === 'rejected' ? ' active' : ''}`}
-            onClick={() => onDecision(candidate, decision?.status === 'rejected' ? null : 'rejected', null)}
-            title="Reject — classifier error"
-          >
-            Reject
-          </button>
-        </div>
       </div>
 
       {expanded && (
         <div className="missing-group-records">
           <GroupRecordTable
             records={records}
+            countrySubtypes={countrySubtypes}
             gptResults={gptResults}
             askGptLoading={askGptLoading}
             onAskGpt={onAskGpt}
+            onDecision={onDecision}
           />
         </div>
       )}
@@ -234,7 +277,7 @@ function CandidateGroup({ group, countrySubtypes, gptResults, askGptLoading, onA
 }
 
 /* ── Main component ──────────────────────────────────────────────────────── */
-export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision }) {
+export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision, onGptResult }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [gptResults, setGptResults] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
@@ -298,7 +341,9 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
       };
     }
 
+    const wasAlreadyReviewed = Boolean(gptResults[requestId]);
     setGptResults(prev => ({ ...prev, [requestId]: result }));
+    if (onGptResult) onGptResult(requestId, !wasAlreadyReviewed);
 
     const legacyVerdict = toLegacyYesNo(result.decision, 'missing');
     const structuredReasoning = JSON.stringify({
@@ -324,33 +369,32 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     return <div className="missing-empty">No missing subtype candidates for this run.</div>;
   }
 
-  const unreviewed    = groups.filter(g => !g.decision).length;
-  const acceptedCount = groups.filter(g => g.decision?.status === 'accepted').length;
-  const mappedCount   = groups.filter(g => g.decision?.status === 'mapped').length;
-  const rejectedCount = groups.filter(g => g.decision?.status === 'rejected').length;
+  // Compute per-record stats for tabs
+  const allRecords = groups.flatMap(g => g.records);
+  const totalRecords    = allRecords.length;
+  const gptReviewedCount  = allRecords.filter(r => gptResults[r.request_id]).length;
+  const gptUnreviewedCount = totalRecords - gptReviewedCount;
+  const acceptedCount   = allRecords.filter(r => r.decision?.status === 'accepted').length;
+  const mappedCount     = allRecords.filter(r => r.decision?.status === 'mapped').length;
+  const humanDecidedCount = acceptedCount + mappedCount;
+  const filterGroup = (g) => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'unreviewed') return g.records.some(r => !gptResults[r.request_id]);
+    return g.records.some(r => r.decision?.status === statusFilter);
+  };
 
-  const filtered = statusFilter === 'all'
-    ? groups
-    : statusFilter === 'unreviewed'
-    ? groups.filter(g => !g.decision)
-    : groups.filter(g => g.decision?.status === statusFilter);
+  const filtered = groups.filter(filterGroup);
 
   const tabs = [
-    { key: 'all',        label: 'All',        count: groups.length },
-    { key: 'unreviewed', label: 'Unreviewed',  count: unreviewed },
-    { key: 'accepted',   label: 'Accepted',    count: acceptedCount },
-    { key: 'mapped',     label: 'Mapped',      count: mappedCount },
-    { key: 'rejected',   label: 'Rejected',    count: rejectedCount },
+    { key: 'all',        label: 'All',       count: totalRecords },
+    { key: 'unreviewed', label: 'Unreviewed', count: gptUnreviewedCount },
+    { key: 'accepted',   label: 'Accepted',   count: acceptedCount },
+    { key: 'mapped',     label: 'Mapped',     count: mappedCount },
   ];
 
   return (
     <div className="missing-subtypes-tab">
       <div className="missing-subtypes-header">
-        <div className="missing-subtypes-summary">
-          <span className="missing-summary-total">{groups.length} candidates</span>
-          <span className="missing-summary-dot">·</span>
-          <span className="missing-summary-reviewed">{groups.length - unreviewed} reviewed</span>
-        </div>
         <div className="missing-verdict-tabs">
           {tabs.map(t => (
             <button
@@ -361,6 +405,10 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               {t.label} <span className="missing-verdict-tab-count">{t.count}</span>
             </button>
           ))}
+        </div>
+        <div className="validation-retag-stats">
+          <span className="validation-progress">{gptReviewedCount}/{totalRecords} reviewed</span>
+          <span className="validation-progress">{humanDecidedCount}/{totalRecords} retagged</span>
         </div>
       </div>
 

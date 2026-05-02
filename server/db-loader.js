@@ -1292,7 +1292,7 @@ function getMissingSubtypeDecisions(runId) {
   } catch { return {}; }
 }
 
-function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
+function updateMissingSubtypeDecision(runId, requestId, status, mappedTo) {
   let all = {};
   if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
     try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
@@ -1300,11 +1300,35 @@ function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
   const key = String(runId);
   if (!all[key]) all[key] = {};
   if (status === null || status === undefined) {
-    delete all[key][candidate];
+    delete all[key][String(requestId)];
   } else {
-    all[key][candidate] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
+    all[key][String(requestId)] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
   }
   fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
+}
+
+async function publishRetagged(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const src = run.run_name;
+  const dst = `${src}_retagged`;
+  await query(`DROP TABLE IF EXISTS "${dst}"`);
+  await query(`CREATE TABLE "${dst}" AS SELECT * FROM "${src}"`);
+  return dst;
+}
+
+async function exportRunCsv(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const tbl    = run.run_name;
+  const idCol  = await getIdColumn(tbl);
+  const result = await query(`SELECT * FROM "${tbl}" ORDER BY ${idCol}`);
+  const filename = `${tbl}.csv`;
+  return { rows: result.rows, filename };
 }
 
 async function getMissingSubtypeGroups(runId) {
@@ -1350,6 +1374,7 @@ async function getMissingSubtypeGroups(runId) {
       missing_subtype: r.missing_subtype,
       attributes:     attrs,
       metadata:       meta,
+      decision:       decisions[String(r.request_id)] || null,
     });
   });
 
@@ -1358,7 +1383,6 @@ async function getMissingSubtypeGroups(runId) {
       candidate: g.candidate,
       count:     g.records.length,
       records:   g.records,
-      decision:  decisions[g.candidate] || null,
     }))
     .sort((a, b) => b.count - a.count);
 }
@@ -1388,4 +1412,6 @@ module.exports = {
   getMissingSubtypeGroups,
   getMissingSubtypeDecisions,
   updateMissingSubtypeDecision,
+  exportRunCsv,
+  publishRetagged,
 };

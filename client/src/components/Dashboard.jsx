@@ -118,20 +118,21 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 }
 
 /* ── Missing subtype leaderboard stats (client-side, from /api/missing-subtypes groups) ── */
-function computeMissingSubtypeStats(groups) {
-  const total = groups.length;
-  let accepted = 0, mapped = 0, rejected = 0;
+function computeMissingSubtypeStats(groups, gptData) {
+  let total = 0, accepted = 0, mapped = 0, gptReviewed = 0;
   groups.forEach(g => {
-    if (g.decision?.status === 'accepted') accepted++;
-    else if (g.decision?.status === 'mapped') mapped++;
-    else if (g.decision?.status === 'rejected') rejected++;
+    (g.records || []).forEach(r => {
+      total++;
+      if (gptData && gptData[String(r.request_id)]) gptReviewed++;
+      if (r.decision?.status === 'accepted') accepted++;
+      else if (r.decision?.status === 'mapped') mapped++;
+    });
   });
   return {
     missing_candidates_total: total,
-    missing_candidates_unreviewed: total - accepted - mapped - rejected,
+    missing_candidates_unreviewed: total - gptReviewed,
     missing_candidates_accepted: accepted,
     missing_candidates_mapped: mapped,
-    missing_candidates_rejected: rejected,
   };
 }
 
@@ -290,6 +291,7 @@ function Dashboard() {
   const [validationLoading, setValidationLoading] = useState(false);
   const [countrySubtypes, setCountrySubtypes] = useState([]);
   const [unknownsCountry, setUnknownsCountry] = useState(null);
+  const [publishState, setPublishState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
   const [activeUnknownsTab, setActiveUnknownsTab] = useState('validation'); // 'validation' | 'missing'
   const [missingSubtypeGroups, setMissingSubtypeGroups] = useState([]);
@@ -315,7 +317,7 @@ function Dashboard() {
       const missingGroups = await missingRes.json().catch(() => []);
       const verdictData = await verdictRes.json().catch(() => ({}));
       const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
-      const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : []);
+      const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
       const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
       setLeaderboard(prev => prev.map(r => r.run_id === runId ? { ...r, ...stats, ...missingStats, retagged_count: retaggedCount } : r));
     } catch {
@@ -401,7 +403,7 @@ function Dashboard() {
           const missingGroups = await missingRes.json().catch(() => []);
           const verdictData = await verdictRes.json().catch(() => ({}));
           const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
-          const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : []);
+          const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
           const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
           return { ...row, ...stats, ...missingStats, retagged_count: retaggedCount };
         } catch {
@@ -555,6 +557,7 @@ function Dashboard() {
   useEffect(() => {
     if (!isUnknownsBenchmark) return;
     setActiveUnknownsTab('validation');
+    setPublishState('idle');
   }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Unknowns: load missing subtype groups when run changes ── */
@@ -578,17 +581,20 @@ function Dashboard() {
   }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Unknowns: save missing subtype decision (optimistic) ── */
-  const handleMissingSubtypeDecision = useCallback(async (candidate, status, mappedTo) => {
+  const handleMissingSubtypeDecision = useCallback(async (requestId, status, mappedTo) => {
     const runId = selectedRunIds[0];
-    setMissingSubtypeGroups(prev => prev.map(g =>
-      g.candidate === candidate
-        ? { ...g, decision: status ? { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) } : null }
-        : g
-    ));
+    setMissingSubtypeGroups(prev => prev.map(g => ({
+      ...g,
+      records: g.records.map(r =>
+        String(r.request_id) === String(requestId)
+          ? { ...r, decision: status ? { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) } : null }
+          : r
+      ),
+    })));
     await fetch('/api/missing-subtypes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), candidate, status, mapped_to: mappedTo }),
+      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), status, mapped_to: mappedTo }),
     });
   }, [selectedRunIds]);
 
@@ -910,13 +916,13 @@ function Dashboard() {
               <div className="unknowns-view">
                 <div className="unknowns-view-header">
                   <h2 className="unknowns-view-country">{unknownsCountry ?? run1Name}</h2>
-                  <div className="unknowns-view-tabs">
-                    <button
+                  <div className="unknowns-view-tabs">                    <button
                       className={`unknowns-tab${activeUnknownsTab === 'validation' ? ' active' : ''}`}
                       onClick={() => setActiveUnknownsTab('validation')}
                     >
                       Unknown Validation
                       <span className="unknowns-tab-count">{validationRecords.length}</span>
+                      <span className="unknowns-tab-info" title="Records where the classifier returned no confident subtype (stage 2 = unknown). Use GPT to judge whether each is truly unknown or a fixable classifier error.">ⓘ</span>
                     </button>
                     <button
                       className={`unknowns-tab${activeUnknownsTab === 'missing' ? ' active' : ''}`}
@@ -924,10 +930,47 @@ function Dashboard() {
                     >
                       Missing Subtypes
                       <span className="unknowns-tab-count">{missingCount}</span>
+                      <span className="unknowns-tab-info" title="Records where the classifier suggested a subtype not in the country's allowed list. Review grouped candidates and decide: accept as a new subtype, map to an existing one, or reject.">ⓘ</span>
+                    </button>
+                  </div>
+                  <div style={{ marginLeft: 'auto', marginBottom: 6, display: 'flex', gap: 6 }}>
+                    <a
+                      className="export-csv-btn"
+                      href={`/api/export-csv?run_id=${selectedRunIds[0]}`}
+                      download
+                      title="Download full run as CSV with updated true_subtype values"
+                    >
+                      Export CSV
+                    </a>
+                    <button
+                      className={`export-csv-btn${publishState === 'loading' ? ' loading' : ''}`}
+                      disabled={publishState === 'loading'}
+                      title="Copy this run to Postgres as {name}_retagged"
+                      onClick={async () => {
+                        setPublishState('loading');
+                        try {
+                          const r = await fetch('/api/publish-retagged', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ run_id: selectedRunIds[0] }),
+                          });
+                          const d = await r.json();
+                          if (!r.ok) throw new Error(d.error || 'Failed');
+                          setPublishState('done');
+                          setTimeout(() => setPublishState('idle'), 3000);
+                        } catch (e) {
+                          setPublishState('error');
+                          setTimeout(() => setPublishState('idle'), 4000);
+                        }
+                      }}
+                    >
+                      {publishState === 'loading' ? 'Publishing…'
+                        : publishState === 'done'    ? 'Published ✓'
+                        : publishState === 'error'   ? 'Error ✗'
+                        : 'Publish Retagged'}
                     </button>
                   </div>
                 </div>
-
                 {activeUnknownsTab === 'validation' && (
                   <>
                     {validationLoading && <div className="viewer-loading">Loading records…</div>}
@@ -956,6 +999,14 @@ function Dashboard() {
                     loading={missingSubtypeGroupsLoading}
                     countrySubtypes={countrySubtypes}
                     onDecision={handleMissingSubtypeDecision}
+                    onGptResult={(requestId, isNew) => {
+                      if (!isNew) return;
+                      setLeaderboard(prev => prev.map(r =>
+                        r.run_id === selectedRunIds[0]
+                          ? { ...r, missing_candidates_unreviewed: Math.max(0, (r.missing_candidates_unreviewed || 0) - 1) }
+                          : r
+                      ));
+                    }}
                   />
                 )}
               </div>

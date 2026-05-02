@@ -52,12 +52,12 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
       ];
     }
     return [
-      { key: 'select', label: 'Compare', width: 70 },
-      { key: 'run_name', label: 'Run', width: 220 },
-      { key: 'model_version', label: 'Model Version', width: 180 },
-      { key: 'subtype_weighted_f1', label: 'Subtype Weighted F1', width: 140 },
-      { key: 'type_weighted_f1', label: 'Type Weighted F1', width: 140 },
-      { key: 'benchmark_length', label: 'Benchmark Size', width: 120 },
+      { key: 'select', label: 'Compare', width: 70, tooltip: 'Check up to 2 runs to view a transition matrix' },
+      { key: 'run_name', label: 'Run', width: 220, tooltip: 'Run identifier' },
+      { key: 'model_version', label: 'Model Version', width: 180, tooltip: 'Model or configuration used for this run' },
+      { key: 'subtype_weighted_f1', label: 'Subtype Weighted F1', width: 140, tooltip: 'Weighted F1 score at the subtype level — primary ranking metric' },
+      { key: 'type_weighted_f1', label: 'Type Weighted F1', width: 140, tooltip: 'Weighted F1 score at the type level' },
+      { key: 'benchmark_length', label: 'Benchmark Size', width: 120, tooltip: 'Number of records in this run' },
     ];
   };
 
@@ -184,20 +184,19 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             <tr className="unknowns-leaderboard-group-row">
               <th rowSpan={2} style={{ width: 180 }}>Country</th>
               <th colSpan={6} className="unknowns-leaderboard-group-header unknowns-group-validation">Unknown Validation</th>
-              <th colSpan={5} className="unknowns-leaderboard-group-header unknowns-group-missing">Missing Subtypes</th>
+              <th colSpan={4} className="unknowns-leaderboard-group-header unknowns-group-missing">Missing Subtypes</th>
             </tr>
             <tr>
-              <th style={{ width: 70 }}>Total</th>
-              <th style={{ width: 90 }}>Reviewed</th>
-              <th style={{ width: 90 }}>Retagged</th>
-              <th style={{ width: 100 }}>Truly Unknown</th>
-              <th style={{ width: 100 }}>Wrong Subtype</th>
-              <th style={{ width: 90 }}>Mappable</th>
-              <th style={{ width: 70 }}>Total</th>
-              <th style={{ width: 90 }}>Unreviewed</th>
-              <th style={{ width: 80 }}>Accepted</th>
-              <th style={{ width: 70 }}>Mapped</th>
-              <th style={{ width: 80 }}>Rejected</th>
+              <th style={{ width: 70 }} title="Total records in this run">Total</th>
+              <th style={{ width: 90 }} title="Records that have received a GPT verdict">Reviewed</th>
+              <th style={{ width: 90 }} title="Records where a human has assigned a true subtype">Retagged</th>
+              <th style={{ width: 100 }} title="GPT judged: classifier correctly found no subtype signal">Truly Unknown</th>
+              <th style={{ width: 100 }} title="GPT judged: a subtype exists but was predicted incorrectly">Wrong Subtype</th>
+              <th style={{ width: 90 }} title="GPT judged: subtype is not in the allowed list but can be mapped to one">Mappable</th>
+              <th style={{ width: 70 }} title="Total missing-subtype records across all candidate groups">Total</th>
+              <th style={{ width: 90 }} title="Records with a human decision (accepted / mapped) out of total">Reviewed</th>
+              <th style={{ width: 80 }} title="Records accepted as a new official subtype">Accepted</th>
+              <th style={{ width: 70 }} title="Records mapped to an existing allowed subtype">Mapped</th>
             </tr>
           </thead>
           <tbody>
@@ -229,11 +228,12 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                   <td className="metric">{row.mappable_count || 0}</td>
                   <td className="metric">{row.missing_candidates_total ?? '—'}</td>
                   <td className={`metric${(row.missing_candidates_unreviewed || 0) > 0 ? ' metric-warning' : ''}`}>
-                    {row.missing_candidates_unreviewed ?? '—'}
+                    {row.missing_candidates_total != null
+                      ? `${(row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)}/${row.missing_candidates_total}`
+                      : '—'}
                   </td>
                   <td className="metric">{row.missing_candidates_accepted ?? '—'}</td>
                   <td className="metric">{row.missing_candidates_mapped ?? '—'}</td>
-                  <td className="metric">{row.missing_candidates_rejected ?? '—'}</td>
                 </tr>
               );
             })}
@@ -247,6 +247,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                 <th
                   key={col.key}
                   style={{ width: col.width, position: 'relative' }}
+                  title={col.tooltip || undefined}
                   draggable
                   onDragStart={event => handleDragStart(index, event)}
                   onDragOver={handleDragOver}
