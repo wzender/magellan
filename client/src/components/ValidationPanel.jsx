@@ -71,6 +71,12 @@ function SubtypeCombobox({ value, options, onChange }) {
               ✕ Clear
             </li>
           )}
+          <li
+            className={`subtype-combobox-option subtype-combobox-unknown${value === 'unknown' ? ' selected' : ''}`}
+            onMouseDown={e => { e.preventDefault(); commit('unknown'); }}
+          >
+            Unknown
+          </li>
           {filtered.map((s, i) => (
             <li
               key={s}
@@ -93,7 +99,30 @@ const VERDICTS = [
   { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
 ];
 
-const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', gpt_subtype: '', attributes: '', metadata: '', ask_gpt: '' };
+const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '' };
+
+const GPT_VERDICT_CONFIG = {
+  truly_unknown:        { label: 'Truly Unknown',   cls: 'gpt-verdict-truly-unknown' },
+  wrong_subtype:        { label: 'Wrong Subtype',    cls: 'gpt-verdict-wrong-subtype' },
+  missing_but_mappable: { label: 'Mappable',         cls: 'gpt-verdict-mappable' },
+  true_missing_subtype: { label: 'True Missing',     cls: 'gpt-verdict-true-missing' },
+};
+
+function GptVerdictBadge({ gpt }) {
+  if (!gpt) return <span className="gpt-verdict-badge gpt-verdict-unreviewed">Unreviewed</span>;
+  if (gpt.error) return <span className="gpt-verdict-badge gpt-verdict-error" title={gpt.error}>Error</span>;
+  const cfg = GPT_VERDICT_CONFIG[gpt.decision];
+  const badge = cfg
+    ? <span className={`gpt-verdict-badge ${cfg.cls}`}>{cfg.label}</span>
+    : <span className="gpt-verdict-badge gpt-verdict-unreviewed">{gpt.decision || 'Unreviewed'}</span>;
+  const reason = gpt.reason || gpt.text || '';
+  return (
+    <div className="gpt-verdict-cell">
+      {badge}
+      {reason && <div className="gpt-verdict-reason">{reason}</div>}
+    </div>
+  );
+}
 const NOT_RETAGGED_LABEL = 'Not retagged';
 
 function getAskText(result) {
@@ -120,7 +149,7 @@ function normalizeGptResult(value) {
     }
   }
 
-  const decision = value.decision || value.subtype || value.verdict || parsedReasoning?.decision || null;
+  const decision = value.decision || value.subtype || parsedReasoning?.decision || value.verdict || null;
   return {
     text: value.text || '',
     subtype: decision,
@@ -150,11 +179,13 @@ function toLegacyYesNo(decision, predictedStatus) {
 
 function getGptSubtype(result) {
   if (!result) return '';
+  if (result.decision === 'truly_unknown') return 'unknown';
   return String(result.mappedAllowedSubtype || result.suggestedMissingSubtype || '').trim();
 }
 
 function getGptSubtypeSource(result) {
   if (!result) return 'none';
+  if (result.decision === 'truly_unknown') return 'truly-unknown';
   if (String(result.mappedAllowedSubtype || '').trim()) return 'mapped';
   if (String(result.suggestedMissingSubtype || '').trim()) return 'suggested';
   return 'none';
@@ -265,36 +296,23 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       return stage1.includes(colFilters.pred_subtype.toLowerCase());
     });
   }
-  if (colFilters.gpt_subtype) {
-    filtered = filtered.filter(r => getGptSubtype(gptResults[r.request_id]).toLowerCase().includes(colFilters.gpt_subtype.toLowerCase()));
-  }
   if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
   if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
-  if (colFilters.ask_gpt) filtered = filtered.filter(r => getAskText(gptResults[r.request_id]).toLowerCase().includes(colFilters.ask_gpt.toLowerCase()));
   if (verdictFilter !== 'all') {
     if (verdictFilter === 'unreviewed') {
-      filtered = filtered.filter(r => !verdicts[r.request_id]);
+      filtered = filtered.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
     } else if (isRetag && verdictFilter === 'unknown') {
       filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'unknown');
     } else if (isRetag && verdictFilter === 'missing') {
       filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'missing');
     } else if (isRetag && verdictFilter === 'real_unknown') {
-      filtered = filtered.filter(r => {
-        const isPredUnknown = (r.pred_subtype_2 || '') === 'unknown';
-        const gptResult = gptResults[r.request_id];
-        return isPredUnknown && gptResult && gptResult.decision === 'truly_unknown';
-      });
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
     } else if (isRetag && verdictFilter === 'real_missing') {
-      filtered = filtered.filter(r => {
-        const isPredMissing = (r.pred_subtype_2 || '') === 'missing';
-        const gptResult = gptResults[r.request_id];
-        return isPredMissing && gptResult && gptResult.decision === 'true_missing_subtype';
-      });
+      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
     } else if (isRetag && verdictFilter === 'false_unknown') {
       filtered = filtered.filter(r => {
-        const isPredUnknown = (r.pred_subtype_2 || '') === 'unknown';
-        const gptResult = gptResults[r.request_id];
-        return isPredUnknown && gptResult && (gptResult.decision === 'wrong_subtype' || gptResult.decision === 'missing_but_mappable');
+        const d = gptResults[r.request_id]?.decision;
+        return d === 'wrong_subtype' || d === 'missing_but_mappable';
       });
     } else if (isRetag && verdictFilter === 'false_missing') {
       filtered = filtered.filter(r => {
@@ -336,6 +354,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'pred_subtype_2') {
         aVal = a.pred_subtype_2 || '';
         bVal = b.pred_subtype_2 || '';
+      } else if (sortConfig.key === 'gpt_verdict') {
+        aVal = gptResults[a.request_id]?.decision || '';
+        bVal = gptResults[b.request_id]?.decision || '';
       } else if (sortConfig.key === 'feshots') {
         aVal = (a.feshots || a.fewshots || []).join(', ');
         bVal = (b.feshots || b.fewshots || []).join(', ');
@@ -365,8 +386,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const justifiedCount   = records.filter(r => verdicts[r.request_id] === 'justified').length;
   const unjustifiedCount = records.filter(r => verdicts[r.request_id] === 'unjustified').length;
   const unclearCount     = records.filter(r => verdicts[r.request_id] === 'unclear').length;
-  const retaggedCount    = reviewed; // in retag mode, any selection counts as reviewed
-  const retaggedProgress = total > 0 ? Math.round((retaggedCount / total) * 100) : 0;
+
+  /* Unknowns-mode specific stats (gpt-verdict based) */
+  const gptReviewedCount  = records.filter(r => gptResults[r.request_id]).length;
+  const retaggedCount     = records.filter(r => verdicts[r.request_id]).length;
+  const anyReviewedCount  = records.filter(r => gptResults[r.request_id] || verdicts[r.request_id]).length;
+  const realUnknownCount  = records.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown').length;
+  const falseUnknownCount = records.filter(r => ['wrong_subtype', 'missing_but_mappable'].includes(gptResults[r.request_id]?.decision)).length;
+  const retaggedProgress  = total > 0 ? Math.round((anyReviewedCount / total) * 100) : 0;
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
@@ -535,18 +562,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── export ── */
   const doExport = (kind) => {
     const headers = isRetag
-      ? ['request_id', 'pred_subtype_1', 'feshots', 'pred_subtype_2', 'pred_type', 'missing_subtype', 'gpt_subtype', 'true_subtype', 'true_type', 'ask_gpt', 'attributes', 'metadata']
-      : ['request_id', 'pred_type', 'pred_subtype', 'gpt_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
+      ? ['request_id', 'pred_subtype_1', 'fewshots', 'gpt_verdict', 'gpt_reason', 'true_subtype', 'attributes', 'metadata']
+      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
-      const trueSubtype = verdicts[r.request_id] || '';
-      const trueType = isRetag ? (trueSubtype === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === trueSubtype)?.type || 'Unknown')) : '';
-      const askGptText = getAskText(gptResults[r.request_id]);
-      const gptSubtype = getGptSubtype(gptResults[r.request_id]);
+      const verdict = verdicts[r.request_id] || '';
+      const gpt = gptResults[r.request_id];
       const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
-      const stage2 = r.pred_subtype_2 || '';
       return isRetag
-        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), stage2, r.pred_type || '', r.missing_subtype || '', gptSubtype, trueSubtype, trueType, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
-        : [r.request_id, r.pred_type, r.pred_subtype, gptSubtype, trueSubtype, askGptText, JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
+        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), gpt?.decision || '', gpt?.reason || gpt?.text || '', verdicts[r.request_id] || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
+        : [r.request_id, r.pred_type, r.pred_subtype, verdict, getAskText(gpt), JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
     if (kind === 'csv') {
@@ -582,6 +606,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           {isRetag ? (
             <>
               <div className="validation-retag-progress">
+                <span className="validation-progress">{anyReviewedCount}/{total} reviewed</span>
                 <span className="validation-progress">{retaggedCount}/{total} retagged</span>
                 <div className="validation-retag-progress-track" aria-hidden="true">
                   <div
@@ -590,9 +615,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   />
                 </div>
               </div>
-              <span className="validation-stat" style={{ background: '#e0f2fe', color: '#0369a1' }}>
-                {total - retaggedCount} pending
-              </span>
             </>
           ) : (
             <>
@@ -620,37 +642,39 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         )}
 
         {/* Filter */}
-        <div className="validation-filters">
-          <select
-            className="validation-verdict-filter"
-            value={verdictFilter}
-            onChange={e => setVerdictFilter(e.target.value)}
-          >
-            <option value="all">All</option>
-            <option value="unreviewed">{isRetag ? 'Not retagged' : 'Unreviewed'}</option>
-            {isRetag && (
-              <>
-                <option value="unknown">Unknown only</option>
-                <option value="missing">Missing only</option>
-              </>
-            )}
-            {!isRetag && <option value="justified">Justified</option>}
-            {!isRetag && <option value="unjustified">Not Justified</option>}
-            {!isRetag && <option value="unclear">Unclear</option>}
-            {isRetag && (
-              <>
-                <option value="real_unknown">Real Unknown</option>
-                <option value="real_missing">Real Missing</option>
-                <option value="false_unknown">False Unknown</option>
-                <option value="false_missing">False Missing</option>
-                <option value="truly_unknown">Judge: Truly Unknown</option>
-                <option value="true_missing_subtype">Judge: True Missing Subtype</option>
-                <option value="missing_but_mappable">Judge: Missing but Mappable</option>
-                <option value="wrong_subtype">Judge: Wrong Subtype</option>
-              </>
-            )}
-          </select>
-        </div>
+        {isRetag ? (
+          <div className="validation-verdict-tabs">
+            {[
+              { key: 'all',           label: 'All',           count: total,                       title: 'All records in this run' },
+              { key: 'unreviewed',    label: 'Unreviewed',    count: total - anyReviewedCount,     title: 'No GPT verdict and no human tag yet' },
+              { key: 'real_unknown',  label: 'Real Unknown',  count: realUnknownCount,             title: 'GPT judged truly unknown — no actionable content signal' },
+              { key: 'false_unknown', label: 'False Unknown', count: falseUnknownCount,            title: 'GPT judged wrong subtype or mappable to an existing one' },
+            ].map(t => (
+              <button
+                key={t.key}
+                title={t.title}
+                className={`validation-verdict-tab${verdictFilter === t.key ? ' active' : ''}`}
+                onClick={() => setVerdictFilter(t.key)}
+              >
+                {t.label} <span className="validation-verdict-tab-count">{t.count}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="validation-filters">
+            <select
+              className="validation-verdict-filter"
+              value={verdictFilter}
+              onChange={e => setVerdictFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="unreviewed">Unreviewed</option>
+              <option value="justified">Justified</option>
+              <option value="unjustified">Not Justified</option>
+              <option value="unclear">Unclear</option>
+            </select>
+          </div>
+        )}
 
         {/* Bulk actions — only for verdict mode */}
         {!isRetag && selectedIds.size > 0 && (
@@ -695,95 +719,110 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         <table className="validation-table records-table">
           <thead>
             {/* Column headers */}
-            <tr>
-              {!isRetag && (
+            {isRetag ? (
+              <tr>
+                <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
+                  Request ID{sortIndicator('request_id')}
+                </th>
+                <th style={{ width: 250 }}>
+                  <div className="header-cell">
+                    Attributes
+                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                      <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
+                      <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                    </div>
+                  </div>
+                </th>
+                <th style={{ width: 250 }}>
+                  <div className="header-cell">
+                    Metadata
+                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                      <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
+                      <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
+                    </div>
+                  </div>
+                </th>
+                <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('feshots')}>
+                  Fewshots{sortIndicator('feshots')}
+                </th>
+                <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
+                  Pred Subtype 1{sortIndicator('pred_subtype_1')}
+                </th>
+                <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
+                  GPT Verdict{sortIndicator('gpt_verdict')}
+                </th>
+                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
+                  <div>GPT Subtype{sortIndicator('gpt_subtype')}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 3 }}>
+                    <span className="gpt-subtype-pill is-mapped" style={{ fontSize: 10 }}>mapped</span>
+                    <span className="gpt-subtype-pill is-suggested" style={{ fontSize: 10 }}>suggested</span>
+                    <span className="gpt-subtype-pill is-truly-unknown" style={{ fontSize: 10 }}>unknown</span>
+                  </div>
+                </th>
+                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
+                  True Subtype{sortIndicator('verdict')}
+                </th>
+              </tr>
+            ) : (
+              <tr>
                 <th style={{ width: 40 }}>
                   <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
                 </th>
-              )}
-              <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
-                Request ID{sortIndicator('request_id')}
-              </th>
-              <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
-                Pred Subtype 1{sortIndicator('pred_subtype_1')}
-              </th>
-              {isRetag && (
-                <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('feshots')}>
-                  Feshots{sortIndicator('feshots')}
+                <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
+                  Request ID{sortIndicator('request_id')}
                 </th>
-              )}
-              {isRetag && (
-                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_2')}>
-                  Pred Subtype 2{sortIndicator('pred_subtype_2')}
+                <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
+                  Pred Subtype 1{sortIndicator('pred_subtype_1')}
                 </th>
-              )}
-              {isRetag && (
-                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('pred_type')}>
-                  Pred Type{sortIndicator('pred_type')}
-                </th>
-              )}
-              {isRetag && (
-                <th style={{ width: 150, cursor: 'pointer' }} onClick={() => handleSort('missing_subtype')}>
-                  Missing Subtype{sortIndicator('missing_subtype')}
-                </th>
-              )}
-              {isRetag && (
-                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
-                  GPT Subtype{sortIndicator('gpt_subtype')}
-                </th>
-              )}
-              <th style={{ width: 250 }}>
-                <div className="header-cell">
-                  Attributes
-                  <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                    <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
-                    <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                <th style={{ width: 250 }}>
+                  <div className="header-cell">
+                    Attributes
+                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                      <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
+                      <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                    </div>
                   </div>
-                </div>
-              </th>
-              <th style={{ width: 250 }}>
-                <div className="header-cell">
-                  Metadata
-                  <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                    <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
-                    <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
-                  </div>
-                </div>
-              </th>
-              {isRetag ? (
-                <th style={{ width: 100, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                  True Subtype{sortIndicator('verdict')}
                 </th>
-              ) : (
+                <th style={{ width: 250 }}>
+                  <div className="header-cell">
+                    Metadata
+                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                      <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
+                      <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
+                    </div>
+                  </div>
+                </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                   Verdict{sortIndicator('verdict')}
                 </th>
-              )}
-              {isRetag && (
-                <th style={{ width: 130, cursor: 'pointer' }} onClick={() => handleSort('true_type')}>
-                  True Type{sortIndicator('true_type')}
+                <th style={{ width: 320, cursor: 'pointer' }} onClick={() => handleSort('ask_gpt')}>
+                  Ask GPT{sortIndicator('ask_gpt')}
                 </th>
-              )}
-              <th style={{ width: 320, cursor: 'pointer' }} onClick={() => handleSort('ask_gpt')}>
-                Ask GPT{sortIndicator('ask_gpt')}
-              </th>
-            </tr>
+              </tr>
+            )}
             {/* Column filters */}
-            <tr className="col-filter-row">
-              {!isRetag && <th />}
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
-              {isRetag && <th />}
-              {isRetag && <th />}
-              {isRetag && <th />}
-              {isRetag && <th />}
-              {isRetag && <th><input className="col-filter-input" placeholder="filter…" value={colFilters.gpt_subtype} onChange={e => setColFilter('gpt_subtype', e.target.value)} /></th>}
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
-              <th />
-              {isRetag && <th />}
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.ask_gpt} onChange={e => setColFilter('ask_gpt', e.target.value)} /></th>
-            </tr>
+            {isRetag ? (
+              <tr className="col-filter-row">
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
+                <th />
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
+                <th />
+                <th />
+                <th />
+              </tr>
+            ) : (
+              <tr className="col-filter-row">
+                <th />
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
+                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
+                <th />
+                <th />
+              </tr>
+            )}
           </thead>
           <tbody>
             {pageData.map(r => {
@@ -792,88 +831,76 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
-              const stage2 = r.pred_subtype_2 || '';
               const fewshotsText = (r.feshots || r.fewshots || []).join(', ');
 
-              const trueType = isRetag
-                ? (verdict === '' ? NOT_RETAGGED_LABEL : (countrySubtypes.find(o => o.subtype === verdict)?.type || 'Unknown'))
-                : '';
-              // Only show missing_subtype in dropdown if it's the current selected value
-              // Never show invalid subtypes as selectable options in the dropdown
-              const dropdownOptions = verdict === r.missing_subtype && r.missing_subtype
-                ? [{ subtype: r.missing_subtype, type: 'Unknown' }, ...countrySubtypes]
-                : countrySubtypes;
-              return (
-                <tr key={r.request_id} className={verdict ? (isRetag ? 'retag-row-tagged' : `validation-row-${verdict}`) : ''}>
-                  {!isRetag && (
-                    <td>
-                      <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
-                    </td>
-                  )}
-                  <td className="cell-request-id">{r.request_id}</td>
-                  <td><strong>{stage1}</strong></td>
-                  {isRetag && <td>{fewshotsText}</td>}
-                  {isRetag && <td>{stage2}</td>}
-                  {isRetag && <td>{r.pred_type || ''}</td>}
-                  {isRetag && (
-                    <td className="cell-missing-subtype">
-                      {r.missing_subtype || ''}
-                    </td>
-                  )}
-                  {isRetag && (
-                    <td>
-                      {getGptSubtype(gpt) ? (
-                        <span className={`gpt-subtype-pill ${getGptSubtypeSource(gpt) === 'mapped' ? 'is-mapped' : 'is-suggested'}`}>
-                          {getGptSubtype(gpt)}
-                        </span>
-                      ) : (
-                        <span className="gpt-subtype-pill is-empty">-</span>
-                      )}
-                    </td>
-                  )}
-                  <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
-                  <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
-                  {isRetag ? (
-                    <td className="cell-verdict cell-retag">
-                      <SubtypeCombobox
-                        value={verdict}
-                        options={dropdownOptions}
-                        onChange={val => onSetVerdict(r.request_id, val)}
-                      />
-                    </td>
-                  ) : (
-                    <td className="cell-verdict">
-                      <div className="verdict-buttons">
-                        {VERDICTS.map(v => (
-                          <button
-                            key={v.value}
-                            className={`verdict-btn ${v.className}${verdict === v.value ? ' active' : ''}`}
-                            onClick={() => onSetVerdict(r.request_id, verdict === v.value ? '' : v.value)}
-                            title={v.label}
-                          >
-                            {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                  )}
-                  {isRetag && <td className="cell-true-type">{trueType}</td>}
-                  <td className="ask-gpt-td">
-                    <div className="ask-gpt-cell">
-                      <div className="ask-gpt-placeholder">{getAskText(gpt)}</div>
-                      {isRetag && gpt?.decision && (
-                        <div className="ask-gpt-placeholder">Decision: {gpt.decision}</div>
-                      )}
-                      {isRetag && gpt?.mappedAllowedSubtype && (
-                        <div className="ask-gpt-placeholder">Mapped: {gpt.mappedAllowedSubtype}</div>
-                      )}
+              if (isRetag) {
+                return (
+                  <tr key={r.request_id}>
+                    <td className="cell-request-id">{r.request_id}</td>
+                    <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
+                    <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
+                    <td className="cell-fewshots">{fewshotsText}</td>
+                    <td><strong>{stage1}</strong></td>
+                    <td className="cell-gpt-verdict">
+                      <GptVerdictBadge gpt={gpt} />
                       <button
                         className="ask-gpt-row-btn"
                         disabled={Boolean(askGptLoading[r.request_id])}
-                        onClick={e => {
-                          e.stopPropagation();
-                          askGptForRecord(r);
-                        }}
+                        onClick={e => { e.stopPropagation(); askGptForRecord(r); }}
+                      >
+                        {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
+                      </button>
+                    </td>
+                    <td>
+                      {getGptSubtype(gpt) ? (
+                        <span className={`gpt-subtype-pill is-${getGptSubtypeSource(gpt)}`}>
+                          {getGptSubtype(gpt)}
+                        </span>
+                      ) : (
+                        <span className="gpt-subtype-pill is-empty">—</span>
+                      )}
+                    </td>
+                    <td className="cell-verdict cell-retag">
+                      <SubtypeCombobox
+                        value={verdict}
+                        options={countrySubtypes}
+                        onChange={val => onSetVerdict(r.request_id, val)}
+                      />
+                    </td>
+                  </tr>
+                );
+              }
+
+              return (
+                <tr key={r.request_id} className={verdict ? `validation-row-${verdict}` : ''}>
+                  <td>
+                    <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
+                  </td>
+                  <td className="cell-request-id">{r.request_id}</td>
+                  <td><strong>{stage1}</strong></td>
+                  <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
+                  <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
+                  <td className="cell-verdict">
+                    <div className="verdict-buttons">
+                      {VERDICTS.map(v => (
+                        <button
+                          key={v.value}
+                          className={`verdict-btn ${v.className}${verdict === v.value ? ' active' : ''}`}
+                          onClick={() => onSetVerdict(r.request_id, verdict === v.value ? '' : v.value)}
+                          title={v.label}
+                        >
+                          {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="ask-gpt-td">
+                    <div className="ask-gpt-cell">
+                      <div className="ask-gpt-placeholder">{getAskText(gpt)}</div>
+                      <button
+                        className="ask-gpt-row-btn"
+                        disabled={Boolean(askGptLoading[r.request_id])}
+                        onClick={e => { e.stopPropagation(); askGptForRecord(r); }}
                       >
                         {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
                       </button>

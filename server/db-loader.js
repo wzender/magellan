@@ -598,7 +598,7 @@ async function getRecords(filters = {}) {
   try {
     [dataResult, countResult] = await Promise.all([
       query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
-                    attributes, en_attributes, metadata, en_metadata
+                    attributes, en_attributes, metadata, en_metadata, pred_subtype_1
              ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
@@ -606,14 +606,29 @@ async function getRecords(filters = {}) {
   } catch (err) {
     if (isTableMissing(err)) { console.warn(`⚠ Table not found: ${tbl}`); return { data: [], pagination: { total: 0, limit, offset, pages: 0 } }; }
     if (err.code === '42703') {
-      // en_metadata column not yet added — fall back without it
-      [dataResult, countResult] = await Promise.all([
-        query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
-                      attributes, en_attributes, metadata
-               ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
-          [...params, limit, offset]),
-        query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
-      ]);
+      // pred_subtype_1 or en_metadata column missing — try without pred_subtype_1
+      try {
+        [dataResult, countResult] = await Promise.all([
+          query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
+                        attributes, en_attributes, metadata, en_metadata
+                 ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
+            [...params, limit, offset]),
+          query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+        ]);
+      } catch (err2) {
+        if (err2.code === '42703') {
+          // en_metadata also missing — fall back to base columns only
+          [dataResult, countResult] = await Promise.all([
+            query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
+                          attributes, en_attributes, metadata
+                   ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
+              [...params, limit, offset]),
+            query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
+          ]);
+        } else {
+          throw err2;
+        }
+      }
     } else {
       throw err;
     }
@@ -640,9 +655,11 @@ async function getRecords(filters = {}) {
 
       return {
         ...row,
-        pred_subtype_1: subtypeMeta?.invalidSubtypes?.length
-          ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
-          : null,
+        pred_subtype_1: row.pred_subtype_1 != null
+          ? row.pred_subtype_1
+          : (subtypeMeta?.invalidSubtypes?.length
+            ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
+            : null),
         pred_subtype_2: predSubtype2,
         fewshots: subtypeMeta?.validSubtypes?.length
           ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
@@ -1272,6 +1289,85 @@ async function getCalibrationPerType(runId, bins = 10) {
     .sort((a, b) => a.ece - b.ece);
 }
 
+/* ── Missing Subtype Decisions (file-based, same as csv-loader) ── */
+
+const MISSING_SUBTYPES_FILE = path.join(__dirname, '../data/missing_subtype_decisions.json');
+
+function getMissingSubtypeDecisions(runId) {
+  if (!fs.existsSync(MISSING_SUBTYPES_FILE)) return {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8'));
+    return raw[String(runId)] || {};
+  } catch { return {}; }
+}
+
+function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
+  let all = {};
+  if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
+    try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
+  }
+  const key = String(runId);
+  if (!all[key]) all[key] = {};
+  if (status === null || status === undefined) {
+    delete all[key][candidate];
+  } else {
+    all[key][candidate] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
+  }
+  fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
+}
+
+async function getMissingSubtypeGroups(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) return [];
+
+  const tbl = run.run_name;
+  const idCol = await getIdColumn(tbl);
+
+  const colCheck = await query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = 'missing_subtype'`,
+    [tbl]
+  );
+  if (colCheck.rows.length === 0) return [];
+
+  const result = await query(
+    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, missing_subtype, attributes, metadata
+     FROM "${tbl}"
+     WHERE missing_subtype IS NOT NULL AND missing_subtype != ''`,
+    []
+  );
+
+  const decisions = getMissingSubtypeDecisions(runId);
+  const groups = {};
+
+  result.rows.forEach(r => {
+    const candidate = r.missing_subtype;
+    if (!candidate) return;
+    if (!groups[candidate]) groups[candidate] = { candidate, records: [] };
+    let attrs = r.attributes;
+    let meta  = r.metadata;
+    try { if (typeof attrs === 'string') attrs = JSON.parse(attrs); } catch {}
+    try { if (typeof meta  === 'string') meta  = JSON.parse(meta);  } catch {}
+    groups[candidate].records.push({
+      request_id:     String(r.request_id),
+      pred_subtype_1: r.pred_subtype_1,
+      pred_subtype_2: r.pred_subtype_2,
+      missing_subtype: r.missing_subtype,
+      attributes:     attrs,
+      metadata:       meta,
+    });
+  });
+
+  return Object.values(groups)
+    .map(g => ({
+      candidate: g.candidate,
+      count:     g.records.length,
+      records:   g.records,
+      decision:  decisions[g.candidate] || null,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -1293,4 +1389,7 @@ module.exports = {
   getSubtypeTransitionMatrix,
   getConfidenceQuality,
   getCalibrationPerType,
+  getMissingSubtypeGroups,
+  getMissingSubtypeDecisions,
+  updateMissingSubtypeDecision,
 };

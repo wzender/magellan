@@ -5,6 +5,7 @@ import LeaderboardWidget from './LeaderboardWidget';
 import TypeHealthGrid from './TypeHealthGrid';
 import RowLevelTable from './RowLevelTable';
 import ValidationPanel from './ValidationPanel';
+import MissingSubtypesTab from './MissingSubtypesTab';
 
 const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
 const NOT_RETAGGED_LABEL = 'Not retagged';
@@ -23,8 +24,10 @@ function buildUnknownsCountryCandidates(run) {
     if (!raw) return;
 
     const normalized = raw.toLowerCase();
-    const stripped = normalized.replace(/^\d{8}-\d{4}-/, '');
-    const variants = [normalized, stripped, ...stripped.split(/[-_\s]+/).filter(Boolean)];
+    const stripped1 = normalized.replace(/^\d{8}-\d{4}-/, '');  // strip YYYYMMDD-HHMM-
+    const stripped2 = stripped1.replace(/^\d+[-_]/, '');         // strip leading N- or N_
+    const base = stripped2 || stripped1;
+    const variants = [base, normalized, ...base.split(/[-_\s]+/).filter(Boolean)];
 
     variants.forEach(v => {
       const label = toCountryLabel(v);
@@ -66,6 +69,9 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
   let realMissingCount = 0;
   let falseUnknownCount = 0;
   let falseMissingCount = 0;
+  let trulyUnknownCount = 0;
+  let wrongSubtypeCount = 0;
+  let mappableCount = 0;
 
   rows.forEach(r => {
     const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
@@ -76,6 +82,7 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     const mappedSubtype = String(payload.mapped_allowed_subtype || '').trim();
     const suggestedSubtype = String(payload.suggested_missing_subtype || '').trim();
     const hasGptSubtype = Boolean(mappedSubtype || suggestedSubtype);
+    const decision = String(payload.decision || saved.verdict || '').trim();
 
     // Count reviewed when we have either a parsed subtype output or a legacy verdict.
     if (hasGptSubtype || saved.verdict) reviewedCount++;
@@ -89,9 +96,14 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
       if (suggestedSubtype) realMissingCount++;
       else if (mappedSubtype || saved.verdict) falseMissingCount++;
     }
+
+    if (decision === 'truly_unknown') trulyUnknownCount++;
+    else if (decision === 'wrong_subtype') wrongSubtypeCount++;
+    else if (decision === 'missing_but_mappable') mappableCount++;
   });
 
   return {
+    benchmark_length: rows.length,
     unknowns_count: unknownsCount,
     missing_count: missingCount,
     reviewed_count: reviewedCount,
@@ -99,6 +111,27 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     real_missing_count: realMissingCount,
     false_unknown_count: falseUnknownCount,
     false_missing_count: falseMissingCount,
+    truly_unknown_count: trulyUnknownCount,
+    wrong_subtype_count: wrongSubtypeCount,
+    mappable_count: mappableCount,
+  };
+}
+
+/* ── Missing subtype leaderboard stats (client-side, from /api/missing-subtypes groups) ── */
+function computeMissingSubtypeStats(groups) {
+  const total = groups.length;
+  let accepted = 0, mapped = 0, rejected = 0;
+  groups.forEach(g => {
+    if (g.decision?.status === 'accepted') accepted++;
+    else if (g.decision?.status === 'mapped') mapped++;
+    else if (g.decision?.status === 'rejected') rejected++;
+  });
+  return {
+    missing_candidates_total: total,
+    missing_candidates_unreviewed: total - accepted - mapped - rejected,
+    missing_candidates_accepted: accepted,
+    missing_candidates_mapped: mapped,
+    missing_candidates_rejected: rejected,
   };
 }
 
@@ -258,6 +291,9 @@ function Dashboard() {
   const [countrySubtypes, setCountrySubtypes] = useState([]);
   const [unknownsCountry, setUnknownsCountry] = useState(null);
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
+  const [activeUnknownsTab, setActiveUnknownsTab] = useState('validation'); // 'validation' | 'missing'
+  const [missingSubtypeGroups, setMissingSubtypeGroups] = useState([]);
+  const [missingSubtypeGroupsLoading, setMissingSubtypeGroupsLoading] = useState(false);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
 
@@ -268,14 +304,20 @@ function Dashboard() {
   const refreshUnknownsRunStats = useCallback(async (runId) => {
     if (!runId) return;
     try {
-      const [recRes, gptRes] = await Promise.all([
+      const [recRes, gptRes, missingRes, verdictRes] = await Promise.all([
         fetch(`/api/records?run_id=${runId}&limit=999999`),
         fetch(`/api/gpt-results?run_id=${runId}`),
+        fetch(`/api/missing-subtypes?run_id=${runId}`),
+        fetch(`/api/validation?run_id=${runId}`),
       ]);
       const recData = await recRes.json();
       const gptData = await gptRes.json();
+      const missingGroups = await missingRes.json().catch(() => []);
+      const verdictData = await verdictRes.json().catch(() => ({}));
       const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
-      setLeaderboard(prev => prev.map(r => r.run_id === runId ? { ...r, ...stats } : r));
+      const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : []);
+      const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
+      setLeaderboard(prev => prev.map(r => r.run_id === runId ? { ...r, ...stats, ...missingStats, retagged_count: retaggedCount } : r));
     } catch {
       // no-op
     }
@@ -348,14 +390,20 @@ function Dashboard() {
     const loadUnknownsStats = async () => {
       const enriched = await Promise.all(baseRows.map(async row => {
         try {
-          const [recRes, gptRes] = await Promise.all([
+          const [recRes, gptRes, missingRes, verdictRes] = await Promise.all([
             fetch(`/api/records?run_id=${row.run_id}&limit=999999`),
             fetch(`/api/gpt-results?run_id=${row.run_id}`),
+            fetch(`/api/missing-subtypes?run_id=${row.run_id}`),
+            fetch(`/api/validation?run_id=${row.run_id}`),
           ]);
           const recData = await recRes.json();
           const gptData = await gptRes.json();
+          const missingGroups = await missingRes.json().catch(() => []);
+          const verdictData = await verdictRes.json().catch(() => ({}));
           const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
-          return { ...row, ...stats };
+          const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : []);
+          const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
+          return { ...row, ...stats, ...missingStats, retagged_count: retaggedCount };
         } catch {
           return { ...row };
         }
@@ -498,6 +546,47 @@ function Dashboard() {
       predSubtype: predSubtype ?? null,
     });
   }, []);
+
+  /* ── Unknowns: reset tab when run changes ── */
+  useEffect(() => {
+    if (!isUnknownsBenchmark) return;
+    setActiveUnknownsTab('validation');
+  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Unknowns: load missing subtype groups when run changes ── */
+  useEffect(() => {
+    if (!isUnknownsBenchmark || selectedRunIds.length === 0) {
+      setMissingSubtypeGroups([]);
+      return;
+    }
+    const runId = selectedRunIds[0];
+    const load = async () => {
+      setMissingSubtypeGroupsLoading(true);
+      try {
+        const res = await fetch(`/api/missing-subtypes?run_id=${runId}`);
+        const data = await res.json();
+        setMissingSubtypeGroups(Array.isArray(data) ? data : []);
+      } finally {
+        setMissingSubtypeGroupsLoading(false);
+      }
+    };
+    load();
+  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Unknowns: save missing subtype decision (optimistic) ── */
+  const handleMissingSubtypeDecision = useCallback(async (candidate, status, mappedTo) => {
+    const runId = selectedRunIds[0];
+    setMissingSubtypeGroups(prev => prev.map(g =>
+      g.candidate === candidate
+        ? { ...g, decision: status ? { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) } : null }
+        : g
+    ));
+    await fetch('/api/missing-subtypes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: String(runId), candidate, status, mapped_to: mappedTo }),
+    });
+  }, [selectedRunIds]);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
@@ -786,7 +875,7 @@ function Dashboard() {
             isUnknowns={isUnknownsBenchmark}
           />
 
-          {displayTypeHealth.length > 0 && (
+          {displayTypeHealth.length > 0 && !isUnknownsBenchmark && (
             <TypeHealthGrid
               typeHealth={displayTypeHealth}
               confidenceQuality={confidenceQuality}
@@ -811,29 +900,62 @@ function Dashboard() {
             />
           )}
 
-          {isUnknownsBenchmark && selectedRunIds.length > 0 && (
-            <div className="validation-section">
-              <h3 className="validation-section-title">
-                {unknownsCountry ?? run1Name} — Prediction Validation
-              </h3>
-              {validationLoading && <div className="viewer-loading">Loading records…</div>}
-              {!validationLoading && (
-                <ValidationPanel
-                  runId={selectedRunIds[0]}
-                  runName={run1Name}
-                  country={unknownsCountry}
-                  countrySubtypes={countrySubtypes}
-                  records={validationRecords}
-                  verdicts={validationVerdicts}
-                  gridFilter={unknownsGridFilter}
-                  onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
-                  onSetVerdict={handleSetVerdict}
-                  onBulkVerdict={handleBulkVerdict}
-                  onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
-                />
-              )}
-            </div>
-          )}
+          {isUnknownsBenchmark && selectedRunIds.length > 0 && (() => {
+            const missingCount = missingSubtypeGroups.length;
+            return (
+              <div className="unknowns-view">
+                <div className="unknowns-view-header">
+                  <h2 className="unknowns-view-country">{unknownsCountry ?? run1Name}</h2>
+                  <div className="unknowns-view-tabs">
+                    <button
+                      className={`unknowns-tab${activeUnknownsTab === 'validation' ? ' active' : ''}`}
+                      onClick={() => setActiveUnknownsTab('validation')}
+                    >
+                      Unknown Validation
+                      <span className="unknowns-tab-count">{validationRecords.length}</span>
+                    </button>
+                    <button
+                      className={`unknowns-tab${activeUnknownsTab === 'missing' ? ' active' : ''}`}
+                      onClick={() => setActiveUnknownsTab('missing')}
+                    >
+                      Missing Subtypes
+                      <span className="unknowns-tab-count">{missingCount}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {activeUnknownsTab === 'validation' && (
+                  <>
+                    {validationLoading && <div className="viewer-loading">Loading records…</div>}
+                    {!validationLoading && (
+                      <ValidationPanel
+                        runId={selectedRunIds[0]}
+                        runName={run1Name}
+                        country={unknownsCountry}
+                        countrySubtypes={countrySubtypes}
+                        records={validationRecords}
+                        verdicts={validationVerdicts}
+                        gridFilter={unknownsGridFilter}
+                        onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
+                        onSetVerdict={handleSetVerdict}
+                        onBulkVerdict={handleBulkVerdict}
+                        onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
+                      />
+                    )}
+                  </>
+                )}
+
+                {activeUnknownsTab === 'missing' && (
+                  <MissingSubtypesTab
+                    groups={missingSubtypeGroups}
+                    loading={missingSubtypeGroupsLoading}
+                    countrySubtypes={countrySubtypes}
+                    onDecision={handleMissingSubtypeDecision}
+                  />
+                )}
+              </div>
+            );
+          })()}
 
           {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
             <section className={`collapsible-section records-section ${recordsExpanded ? 'is-open' : 'is-closed'}`} ref={recordsRef}>

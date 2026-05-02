@@ -23,6 +23,7 @@ const validationRouter  = require('./api/validation');
 const askGptRouter      = require('./api/askGpt');
 const gptResultsRouter  = require('./api/gptResults');
 const subtypesByCountryRouter = require('./api/subtypesByCountry');
+const missingSubtypesRouter   = require('./api/missingSubtypes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +58,7 @@ app.use('/api', validationRouter);
 app.use('/api', askGptRouter);
 app.use('/api', gptResultsRouter);
 app.use('/api', subtypesByCountryRouter);
+app.use('/api', missingSubtypesRouter);
 
 // Serve React app for all non-API routes
 app.get('*', (req, res) => {

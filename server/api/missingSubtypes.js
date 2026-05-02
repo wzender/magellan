@@ -1,42 +1,34 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-
-const FILE = path.join(__dirname, '../../data/missing-subtypes.json');
-
-function load() {
-  if (!fs.existsSync(FILE)) return {};
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf-8')); } catch { return {}; }
-}
-
-function save(data) {
-  fs.writeFileSync(FILE, JSON.stringify(data, null, 2), 'utf-8');
-}
+const dbLoader = require('../loader');
 
 // GET /api/missing-subtypes?run_id=10
+// Returns grouped candidates: [{ candidate, count, records, decision }]
 router.get('/missing-subtypes', (req, res) => {
   const { run_id } = req.query;
   if (!run_id) return res.status(400).json({ error: 'run_id is required' });
-  res.json(load()[run_id] || {});
+  try {
+    const groups = dbLoader.getMissingSubtypeGroups(parseInt(run_id, 10));
+    res.json(groups);
+  } catch (error) {
+    console.error('Error fetching missing subtypes:', error);
+    res.status(500).json({ error: 'Failed to fetch missing subtypes' });
+  }
 });
 
 // PUT /api/missing-subtypes
-// Body: { run_id, subtypes: { request_id: subtype_text, ... } }
+// Body: { run_id, candidate, status, mapped_to? }
+// status: 'accepted' | 'mapped' | 'rejected' | null (to clear)
 router.put('/missing-subtypes', (req, res) => {
-  const { run_id, subtypes } = req.body;
-  if (!run_id) return res.status(400).json({ error: 'run_id is required' });
-  if (!subtypes || typeof subtypes !== 'object') {
-    return res.status(400).json({ error: 'subtypes object is required' });
+  const { run_id, candidate, status, mapped_to } = req.body;
+  if (!run_id || !candidate) return res.status(400).json({ error: 'run_id and candidate are required' });
+  try {
+    dbLoader.updateMissingSubtypeDecision(parseInt(run_id, 10), candidate, status, mapped_to);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error updating missing subtype decision:', error);
+    res.status(500).json({ error: 'Failed to update missing subtype decision' });
   }
-  const data = load();
-  if (!data[run_id]) data[run_id] = {};
-  Object.assign(data[run_id], subtypes);
-  for (const [id, v] of Object.entries(data[run_id])) {
-    if (!v) delete data[run_id][id];
-  }
-  save(data);
-  res.json({ ok: true });
 });
 
 module.exports = router;

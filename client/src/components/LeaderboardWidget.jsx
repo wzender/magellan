@@ -7,6 +7,16 @@ function parseRunDate(runName) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function extractCountryName(runName) {
+  if (!runName) return runName;
+  // strip datetime prefix like "20261230-1445-"
+  let s = runName.replace(/^\d{8}-\d{4}-/, '');
+  // strip leading "N_" or "N-" numeric prefix
+  s = s.replace(/^\d+[-_]/, '');
+  // capitalise first letter
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function timeAgo(date) {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
   if (secs < 60)          return 'just now';
@@ -168,147 +178,164 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         <span className="leaderboard-desc">Ranked model runs by weighted F1. Click a row to inspect, check two to compare.</span>
       </div>
       <div className="leaderboard-table-wrapper">
-      <table className="leaderboard-table">
-        <thead>
-          <tr>
-            {columns.map((col, index) => (
-              <th
-                key={col.key}
-                style={{ width: col.width, position: 'relative' }}
-                draggable
-                onDragStart={event => handleDragStart(index, event)}
-                onDragOver={handleDragOver}
-                onDrop={event => handleDrop(index, event)}
-                onClick={() => {
-                  setSortConfig(prev => {
-                    if (prev.key === col.key) {
-                      return { key: col.key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-                    }
-                    return { key: col.key, direction: 'asc' };
-                  });
-                }}
-              >
-                <div className="header-cell">
-                  {col.label}
-                  {sortConfig.key === col.key && (sortConfig.direction === 'asc' ? ' ▲' : ' ▼')}
-                </div>
-                {index < columns.length - 1 && (
-                  <div
-                    className={`resize-handle ${resizingColumnIndex === index ? 'resizing' : ''}`}
-                    onMouseDown={(e) => handleResizeStart(index, e)}
-                  />
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sortedData.map((row) => (
-            <tr
-              key={row.run_id}
-              onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
-              className={[
-                selectedRuns[0] === row.run_id ? 'selected selected-run1' :
-                selectedRuns[1] === row.run_id ? 'selected selected-run2' : '',
-                row.table_exists === false ? 'table-missing' : '',
-              ].filter(Boolean).join(' ')}
-              style={{ cursor: row.table_exists === false ? 'not-allowed' : onRunSelect ? 'pointer' : 'default' }}
-              title={row.table_exists === false ? `Table "${row.run_name}" not found in the database` : undefined}
-            >
-              {columns.map(col => {
-                switch (col.key) {
-                  case 'select': {
-                    if (!onRunToggle) return <td key={`${row.run_id}-${col.key}`} />;
-                    const isChecked = selectedRuns.includes(row.run_id);
-                    const isDisabled = (selectedRuns.length >= 2 && !isChecked) || row.table_exists === false;
-                    return (
-                      <td
-                        key={`${row.run_id}-${col.key}`}
-                        className={`select-cell ${isDisabled ? 'select-cell-disabled' : ''}`}
-                        title={isDisabled ? 'Uncheck one of the selected runs first — comparison is limited to 2 runs' : undefined}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (!isDisabled) onRunToggle && onRunToggle(row.run_id);
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          readOnly
-                          tabIndex={-1}
-                        />
-                      </td>
-                    );
-                  }
-                  case 'run_name':
-                    return <td key={`${row.run_id}-${col.key}`}>{row.run_name}</td>;
-                  case 'model_version':
-                    return <td key={`${row.run_id}-${col.key}`}>{row.model_version || '-'}</td>;
-                  case 'subtype_weighted_f1':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_weighted_f1) * 100).toFixed(1)}%</td>;
-                  case 'type_weighted_f1':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_weighted_f1 ?? 0) * 100).toFixed(1)}%</td>;
-                  case 'benchmark_length':
-                    return <td key={`${row.run_id}-${col.key}`} className="benchmark-size">{row.benchmark_length}</td>;
-                  // Unknowns columns
-                  case 'unknowns_count':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.unknowns_count || 0}</td>;
-                  case 'missing_count':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.missing_count || 0}</td>;
-                  case 'real_unknown_count':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.real_unknown_count || 0}</td>;
-                  case 'real_missing_count':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.real_missing_count || 0}</td>;
-                  case 'false_unknown_count': {
-                    const count = row.false_unknown_count || 0;
-                    const total = row.unknowns_count || 1;
-                    const rate = (count / total) * 100;
-                    const isWarning = rate > 20;
-                    return (
-                      <td 
-                        key={`${row.run_id}-${col.key}`} 
-                        className={`metric ${isWarning ? 'metric-warning' : ''}`}
-                        title={isWarning ? 'Rate > 20% — classifier too conservative' : undefined}
-                      >
-                        {count}
-                      </td>
-                    );
-                  }
-                  case 'false_missing_count': {
-                    const count = row.false_missing_count || 0;
-                    const total = row.missing_count || 1;
-                    const rate = (count / total) * 100;
-                    const isWarning = rate > 20;
-                    return (
-                      <td 
-                        key={`${row.run_id}-${col.key}`} 
-                        className={`metric ${isWarning ? 'metric-warning' : ''}`}
-                        title={isWarning ? 'Rate > 20% — Stage 2 grounding failure' : undefined}
-                      >
-                        {count}
-                      </td>
-                    );
-                  }
-                  case 'reviewed_count':
-                    return <td key={`${row.run_id}-${col.key}`} className="metric">{row.reviewed_count || 0}</td>;
-                  default:
-                    return <td key={`${row.run_id}-${col.key}`}>-</td>;
-                }
-              })}
+      {isUnknowns ? (
+        <table className="leaderboard-table unknowns-leaderboard-table">
+          <thead>
+            <tr className="unknowns-leaderboard-group-row">
+              <th rowSpan={2} style={{ width: 180 }}>Country</th>
+              <th colSpan={6} className="unknowns-leaderboard-group-header unknowns-group-validation">Unknown Validation</th>
+              <th colSpan={5} className="unknowns-leaderboard-group-header unknowns-group-missing">Missing Subtypes</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+            <tr>
+              <th style={{ width: 70 }}>Total</th>
+              <th style={{ width: 90 }}>Reviewed</th>
+              <th style={{ width: 90 }}>Retagged</th>
+              <th style={{ width: 100 }}>Truly Unknown</th>
+              <th style={{ width: 100 }}>Wrong Subtype</th>
+              <th style={{ width: 90 }}>Mappable</th>
+              <th style={{ width: 70 }}>Total</th>
+              <th style={{ width: 90 }}>Unreviewed</th>
+              <th style={{ width: 80 }}>Accepted</th>
+              <th style={{ width: 70 }}>Mapped</th>
+              <th style={{ width: 80 }}>Rejected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedData.map(row => {
+              const date = parseRunDate(row.run_name);
+              const country = extractCountryName(row.run_name);
+              const total = row.benchmark_length || 0;
+              const reviewed = row.reviewed_count || 0;
+              const isSelected = selectedRuns[0] === row.run_id;
+              return (
+                <tr
+                  key={row.run_id}
+                  onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
+                  className={[
+                    isSelected ? 'selected selected-run1' : '',
+                    row.table_exists === false ? 'table-missing' : '',
+                  ].filter(Boolean).join(' ')}
+                  style={{ cursor: row.table_exists === false ? 'not-allowed' : 'pointer' }}
+                >
+                  <td className="unknowns-country-cell">
+                    <span className="unknowns-country-name">{country}</span>
+                    {date && <span className="unknowns-run-date">{date.toISOString().slice(0, 10)}</span>}
+                  </td>
+                  <td className="metric">{total}</td>
+                  <td className="metric">{reviewed}<span className="metric-of">/{total}</span></td>
+                  <td className="metric">{row.retagged_count || 0}<span className="metric-of">/{total}</span></td>
+                  <td className="metric">{row.truly_unknown_count || 0}</td>
+                  <td className="metric">{row.wrong_subtype_count || 0}</td>
+                  <td className="metric">{row.mappable_count || 0}</td>
+                  <td className="metric">{row.missing_candidates_total ?? '—'}</td>
+                  <td className={`metric${(row.missing_candidates_unreviewed || 0) > 0 ? ' metric-warning' : ''}`}>
+                    {row.missing_candidates_unreviewed ?? '—'}
+                  </td>
+                  <td className="metric">{row.missing_candidates_accepted ?? '—'}</td>
+                  <td className="metric">{row.missing_candidates_mapped ?? '—'}</td>
+                  <td className="metric">{row.missing_candidates_rejected ?? '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <table className="leaderboard-table">
+          <thead>
+            <tr>
+              {columns.map((col, index) => (
+                <th
+                  key={col.key}
+                  style={{ width: col.width, position: 'relative' }}
+                  draggable
+                  onDragStart={event => handleDragStart(index, event)}
+                  onDragOver={handleDragOver}
+                  onDrop={event => handleDrop(index, event)}
+                  onClick={() => {
+                    setSortConfig(prev => {
+                      if (prev.key === col.key) {
+                        return { key: col.key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+                      }
+                      return { key: col.key, direction: 'asc' };
+                    });
+                  }}
+                >
+                  <div className="header-cell">
+                    {col.label}
+                    {sortConfig.key === col.key && (sortConfig.direction === 'asc' ? ' ▲' : ' ▼')}
+                  </div>
+                  {index < columns.length - 1 && (
+                    <div
+                      className={`resize-handle ${resizingColumnIndex === index ? 'resizing' : ''}`}
+                      onMouseDown={(e) => handleResizeStart(index, e)}
+                    />
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sortedData.map((row) => (
+              <tr
+                key={row.run_id}
+                onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
+                className={[
+                  selectedRuns[0] === row.run_id ? 'selected selected-run1' :
+                  selectedRuns[1] === row.run_id ? 'selected selected-run2' : '',
+                  row.table_exists === false ? 'table-missing' : '',
+                ].filter(Boolean).join(' ')}
+                style={{ cursor: row.table_exists === false ? 'not-allowed' : onRunSelect ? 'pointer' : 'default' }}
+                title={row.table_exists === false ? `Table "${row.run_name}" not found in the database` : undefined}
+              >
+                {columns.map(col => {
+                  switch (col.key) {
+                    case 'select': {
+                      if (!onRunToggle) return <td key={`${row.run_id}-${col.key}`} />;
+                      const isChecked = selectedRuns.includes(row.run_id);
+                      const isDisabled = (selectedRuns.length >= 2 && !isChecked) || row.table_exists === false;
+                      return (
+                        <td
+                          key={`${row.run_id}-${col.key}`}
+                          className={`select-cell ${isDisabled ? 'select-cell-disabled' : ''}`}
+                          title={isDisabled ? 'Uncheck one of the selected runs first — comparison is limited to 2 runs' : undefined}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!isDisabled) onRunToggle && onRunToggle(row.run_id);
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            readOnly
+                            tabIndex={-1}
+                          />
+                        </td>
+                      );
+                    }
+                    case 'run_name':
+                      return <td key={`${row.run_id}-${col.key}`}>{row.run_name}</td>;
+                    case 'model_version':
+                      return <td key={`${row.run_id}-${col.key}`}>{row.model_version || '-'}</td>;
+                    case 'subtype_weighted_f1':
+                      return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.subtype_weighted_f1) * 100).toFixed(1)}%</td>;
+                    case 'type_weighted_f1':
+                      return <td key={`${row.run_id}-${col.key}`} className="metric">{(parseFloat(row.type_weighted_f1 ?? 0) * 100).toFixed(1)}%</td>;
+                    case 'benchmark_length':
+                      return <td key={`${row.run_id}-${col.key}`} className="benchmark-size">{row.benchmark_length}</td>;
+                    default:
+                      return <td key={`${row.run_id}-${col.key}`}>-</td>;
+                  }
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       </div>
       <div className="leaderboard-hint">
-        {isUnknowns 
-          ? <>
-              <strong>Real Unknown</strong> = confirmed ambiguous (even GPT can't classify). 
-              <strong>Real Missing</strong> = confirmed taxonomy gap. 
-              <strong>False Unknown</strong> (orange) = classifier too conservative. 
-              <strong>False Missing</strong> (orange) = Stage 2 grounding failure.
-            </>
+        {isUnknowns
+          ? 'Click a row to review records and manage missing subtype decisions for that country.'
           : <>
               Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
             </>

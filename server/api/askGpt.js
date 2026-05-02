@@ -179,9 +179,14 @@ router.post('/ask-gpt', async (req, res) => {
 
 You must classify each record into exactly one decision:
 1) truly_unknown
-   Use only when available evidence is genuinely insufficient to map to an allowed subtype.
+   Use when the record has no actionable content signal. This includes:
+   - Attributes where name/description are null, empty, or contain only an identifier (UUID, GUID, barcode, numeric code, "ID-xxxxx").
+   - Records with all-null or all-empty fields beyond the SKU.
+   - Records where confidence is very low (<0.15) and no human-readable description exists.
+   When in doubt and signal is weak, choose truly_unknown over any other option.
 2) true_missing_subtype
-   Use when the record has strong signal but the concept is truly absent from the allowed list.
+   Use ONLY when the record has strong, explicit content signal (a real name, description, or tags with meaningful words) AND the concept is clearly absent from the allowed list.
+   Do NOT use this for records whose only content is an identifier string — even if the identifier pattern suggests a category.
 3) missing_but_mappable
    Use when the classifier flagged missing, but the meaning is semantically close enough to an existing allowed subtype.
 4) wrong_subtype
@@ -194,7 +199,8 @@ Rules:
 - Never output markdown.
 - mapped_allowed_subtype must be one of the allowed subtypes or empty.
 - suggested_missing_subtype must be non-empty only for true_missing_subtype.
-- If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.`;
+- If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.
+- If uncertain between true_missing_subtype and truly_unknown, prefer truly_unknown.`;
 
       const userPrompt = `Predicted status (from small model pipeline): ${predicted_status || stage2_subtype || 'N/A'}
 Predicted type: ${pred_type || 'N/A'}

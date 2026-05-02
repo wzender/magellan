@@ -173,9 +173,11 @@ function loadData() {
 
     records.forEach((r, idx) => {
       const unknownsMeta = unknownSubtypeMetaByRun[run.id];
-      const predSubtype1 = unknownsMeta?.invalidSubtypes?.length
-        ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
-        : r.pred_subtype;
+      const predSubtype1 = r.pred_subtype_1
+        ? r.pred_subtype_1
+        : (unknownsMeta?.invalidSubtypes?.length
+          ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
+          : r.pred_subtype);
       const missingSubtypeCandidate = unknownsMeta?.invalidSubtypes?.length
         ? unknownsMeta.invalidSubtypes[(idx + 7) % unknownsMeta.invalidSubtypes.length]
         : null;
@@ -1008,6 +1010,63 @@ function updateGptResults(runId, results) {
   });
 }
 
+/* ── Missing Subtype Decisions ───────────────────────────── */
+
+const MISSING_SUBTYPES_FILE = path.join(DATA_DIR, 'missing_subtype_decisions.json');
+
+function getMissingSubtypeDecisions(runId) {
+  if (!fs.existsSync(MISSING_SUBTYPES_FILE)) return {};
+  try {
+    const raw = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8'));
+    return raw[String(runId)] || {};
+  } catch { return {}; }
+}
+
+function updateMissingSubtypeDecision(runId, candidate, status, mappedTo) {
+  let all = {};
+  if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
+    try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
+  }
+  const key = String(runId);
+  if (!all[key]) all[key] = {};
+  if (status === null || status === undefined) {
+    delete all[key][candidate];
+  } else {
+    all[key][candidate] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
+  }
+  fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
+}
+
+function getMissingSubtypeGroups(runId) {
+  const data = loadData();
+  const decisions = getMissingSubtypeDecisions(runId);
+  const groups = {};
+
+  data.run_results
+    .filter(r => r.run_id === runId && r.missing_subtype)
+    .forEach(r => {
+      const candidate = r.missing_subtype;
+      if (!groups[candidate]) groups[candidate] = { candidate, records: [] };
+      groups[candidate].records.push({
+        request_id:    r.request_id,
+        pred_subtype_1: r.pred_subtype_1,
+        pred_subtype_2: r.pred_subtype_2,
+        missing_subtype: r.missing_subtype,
+        attributes:    r.attributes,
+        metadata:      r.metadata,
+      });
+    });
+
+  return Object.values(groups)
+    .map(g => ({
+      candidate: g.candidate,
+      count:     g.records.length,
+      records:   g.records,
+      decision:  decisions[g.candidate] || null,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
 module.exports = {
   loadData,
   getAllBenchmarks,
@@ -1032,4 +1091,7 @@ module.exports = {
   updateTrueSubtypes,
   getGptResults,
   updateGptResults,
+  getMissingSubtypeGroups,
+  getMissingSubtypeDecisions,
+  updateMissingSubtypeDecision,
 };
