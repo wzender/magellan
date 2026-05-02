@@ -65,8 +65,8 @@ function getGptSubtypeSource(result) {
 }
 
 /* ── Per-record decision badge ───────────────────────────────────────────── */
-const STATUS_LABELS  = { accepted: 'Accepted', mapped: 'Mapped', rejected: 'Rejected' };
-const STATUS_CLASSES = { accepted: 'missing-decision-accepted', mapped: 'missing-decision-mapped', rejected: 'missing-decision-rejected' };
+const STATUS_LABELS  = { accepted: 'Accepted', mapped: 'Mapped' };
+const STATUS_CLASSES = { accepted: 'missing-decision-accepted', mapped: 'missing-decision-mapped' };
 
 function DecisionBadge({ decision }) {
   if (!decision) return <span className="missing-decision-badge missing-decision-unreviewed">Unreviewed</span>;
@@ -76,7 +76,7 @@ function DecisionBadge({ decision }) {
   return <span className={`missing-decision-badge ${cls}`}>{label}{extra}</span>;
 }
 
-/* ── Per-record decision controls (Accept / Map / Reject) ───────────────── */
+/* ── Per-record decision controls (Accept / Map) ────────────────────────── */
 function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
   const [mappingOpen, setMappingOpen] = useState(false);
   const [mapQuery, setMapQuery]       = useState('');
@@ -88,7 +88,6 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
     ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
     : subtypeOptions;
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!mappingOpen) return;
     const handler = (e) => {
@@ -161,124 +160,11 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
   );
 }
 
-/* ── Record table with per-row decision controls ────────────────────────── */
-function GroupRecordTable({ records, countrySubtypes, gptResults, askGptLoading, onAskGpt, onDecision }) {
-  const renderJson = (val) => {
-    if (!val) return <span className="json-empty">(empty)</span>;
-    const obj = typeof val === 'string'
-      ? (() => { try { return JSON.parse(val); } catch { return val; } })()
-      : val;
-    return <pre className="json-pretty">{typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj)}</pre>;
-  };
-
-  return (
-    <div className="missing-record-table-wrap">
-      <table className="validation-table records-table">
-        <thead>
-          <tr>
-            <th style={{ width: 120 }}>Request ID</th>
-            <th style={{ width: 200 }}>Attributes</th>
-            <th style={{ width: 200 }}>Metadata</th>
-            <th style={{ width: 150 }}>Pred Subtype 1</th>
-            <th style={{ width: 220 }}>GPT Verdict</th>
-            <th style={{ width: 140 }}>GPT Subtype</th>
-            <th style={{ width: 280 }}>Decision</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map(r => {
-            const gpt = gptResults[r.request_id];
-            return (
-              <tr key={r.request_id}>
-                <td className="cell-request-id">{r.request_id}</td>
-                <td className="cell-json">{renderJson(r.attributes)}</td>
-                <td className="cell-json">{renderJson(r.metadata)}</td>
-                <td><strong>{r.pred_subtype_1 || '—'}</strong></td>
-                <td className="cell-gpt-verdict">
-                  <GptVerdictBadge gpt={gpt} />
-                  <button
-                    className="ask-gpt-row-btn"
-                    disabled={Boolean(askGptLoading[r.request_id])}
-                    onClick={() => onAskGpt(r)}
-                  >
-                    {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
-                  </button>
-                </td>
-                <td>
-                  {getGptSubtype(gpt) ? (
-                    <span className={`gpt-subtype-pill is-${getGptSubtypeSource(gpt)}`}>
-                      {getGptSubtype(gpt)}
-                    </span>
-                  ) : (
-                    <span className="gpt-subtype-pill is-empty">—</span>
-                  )}
-                </td>
-                <td className="cell-missing-decision">
-                  <DecisionBadge decision={r.decision} />
-                  <RecordDecisionControls
-                    record={r}
-                    countrySubtypes={countrySubtypes}
-                    onDecision={onDecision}
-                  />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/* ── Candidate group ─────────────────────────────────────────────────────── */
-function CandidateGroup({ group, countrySubtypes, gptResults, askGptLoading, onAskGpt, onDecision }) {
-  const [expanded, setExpanded] = useState(false);
-  const { candidate, count, records } = group;
-
-  const reviewedCount = records.filter(r => r.decision).length;
-  const acceptedCount = records.filter(r => r.decision?.status === 'accepted').length;
-  const mappedCount   = records.filter(r => r.decision?.status === 'mapped').length;
-  const rejectedCount = records.filter(r => r.decision?.status === 'rejected').length;
-
-  const summaryParts = [];
-  if (acceptedCount) summaryParts.push(`${acceptedCount} accepted`);
-  if (mappedCount)   summaryParts.push(`${mappedCount} mapped`);
-  if (rejectedCount) summaryParts.push(`${rejectedCount} rejected`);
-  const unreviewed = count - reviewedCount;
-  if (unreviewed)    summaryParts.push(`${unreviewed} unreviewed`);
-
-  return (
-    <div className="missing-group">
-      <div className="missing-group-header">
-        <button className="missing-group-expand" onClick={() => setExpanded(e => !e)}>
-          <span className="missing-group-name">{candidate}</span>
-          <span className="missing-group-count">{count} {count === 1 ? 'record' : 'records'}</span>
-          {summaryParts.length > 0 && (
-            <span className="missing-group-summary">{summaryParts.join(', ')}</span>
-          )}
-          <span className="missing-group-toggle">{expanded ? '▾' : '▸'}</span>
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="missing-group-records">
-          <GroupRecordTable
-            records={records}
-            countrySubtypes={countrySubtypes}
-            gptResults={gptResults}
-            askGptLoading={askGptLoading}
-            onAskGpt={onAskGpt}
-            onDecision={onDecision}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Main component ──────────────────────────────────────────────────────── */
 export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision, onGptResult }) {
   const [statusFilter, setStatusFilter] = useState('all');
+  const [rowHeight, setRowHeight] = useState('3');
+  const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
   const [gptResults, setGptResults] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
 
@@ -369,21 +255,19 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     return <div className="missing-empty">No missing subtype candidates for this run.</div>;
   }
 
-  // Compute per-record stats for tabs
   const allRecords = groups.flatMap(g => g.records);
-  const totalRecords    = allRecords.length;
-  const gptReviewedCount  = allRecords.filter(r => gptResults[r.request_id]).length;
+  const totalRecords       = allRecords.length;
+  const gptReviewedCount   = allRecords.filter(r => gptResults[r.request_id]).length;
   const gptUnreviewedCount = totalRecords - gptReviewedCount;
-  const acceptedCount   = allRecords.filter(r => r.decision?.status === 'accepted').length;
-  const mappedCount     = allRecords.filter(r => r.decision?.status === 'mapped').length;
-  const humanDecidedCount = acceptedCount + mappedCount;
-  const filterGroup = (g) => {
-    if (statusFilter === 'all') return true;
-    if (statusFilter === 'unreviewed') return g.records.some(r => !gptResults[r.request_id]);
-    return g.records.some(r => r.decision?.status === statusFilter);
-  };
+  const acceptedCount      = allRecords.filter(r => r.decision?.status === 'accepted').length;
+  const mappedCount        = allRecords.filter(r => r.decision?.status === 'mapped').length;
+  const humanDecidedCount  = acceptedCount + mappedCount;
 
-  const filtered = groups.filter(filterGroup);
+  const filtered = allRecords.filter(r => {
+    if (statusFilter === 'all')        return true;
+    if (statusFilter === 'unreviewed') return !gptResults[r.request_id];
+    return r.decision?.status === statusFilter;
+  });
 
   const tabs = [
     { key: 'all',        label: 'All',       count: totalRecords },
@@ -391,6 +275,14 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     { key: 'accepted',   label: 'Accepted',   count: acceptedCount },
     { key: 'mapped',     label: 'Mapped',     count: mappedCount },
   ];
+
+  const renderJson = (val) => {
+    if (!val) return <span className="json-empty">(empty)</span>;
+    const obj = typeof val === 'string'
+      ? (() => { try { return JSON.parse(val); } catch { return val; } })()
+      : val;
+    return <pre className="json-pretty">{typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj)}</pre>;
+  };
 
   return (
     <div className="missing-subtypes-tab">
@@ -410,23 +302,73 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           <span className="validation-progress">{gptReviewedCount}/{totalRecords} reviewed</span>
           <span className="validation-progress">{humanDecidedCount}/{totalRecords} retagged</span>
         </div>
+        <div className="row-height-control">
+          <span className="row-height-label">Row height:</span>
+          {ROW_HEIGHT_OPTIONS.map(opt => (
+            <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
+          ))}
+        </div>
       </div>
 
-      <div className="missing-group-list">
-        {filtered.map(g => (
-          <CandidateGroup
-            key={g.candidate}
-            group={g}
-            countrySubtypes={countrySubtypes}
-            gptResults={gptResults}
-            askGptLoading={askGptLoading}
-            onAskGpt={askGptForRecord}
-            onDecision={onDecision}
-          />
-        ))}
-        {filtered.length === 0 && (
-          <div className="missing-empty">No candidates in this filter.</div>
-        )}
+      <div className={`validation-table-wrap row-height-${rowHeight.toLowerCase()}`}>
+        <table className="validation-table records-table">
+          <thead>
+            <tr>
+              <th style={{ width: 120 }}>Request ID</th>
+              <th style={{ width: 200 }}>Attributes</th>
+              <th style={{ width: 200 }}>Metadata</th>
+              <th style={{ width: 150 }}>Pred Subtype 1</th>
+              <th style={{ width: 120 }}>Pred Subtype 2</th>
+              <th style={{ width: 220 }}>GPT Verdict</th>
+              <th style={{ width: 140 }}>GPT Subtype</th>
+              <th style={{ width: 260 }}>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(r => {
+              const gpt = gptResults[r.request_id];
+              return (
+                <tr key={r.request_id}>
+                  <td className="cell-request-id">{r.request_id}</td>
+                  <td className="cell-json">{renderJson(r.attributes)}</td>
+                  <td className="cell-json">{renderJson(r.metadata)}</td>
+                  <td><strong>{r.pred_subtype_1 || '—'}</strong></td>
+                  <td><span className="gpt-verdict-badge gpt-verdict-unreviewed">{r.pred_subtype_2 || 'missing'}</span></td>
+                  <td className="cell-gpt-verdict">
+                    <GptVerdictBadge gpt={gpt} />
+                    <button
+                      className="ask-gpt-row-btn"
+                      disabled={Boolean(askGptLoading[r.request_id])}
+                      onClick={() => askGptForRecord(r)}
+                    >
+                      {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
+                    </button>
+                  </td>
+                  <td>
+                    {getGptSubtype(gpt) ? (
+                      <span className={`gpt-subtype-pill is-${getGptSubtypeSource(gpt)}`}>
+                        {getGptSubtype(gpt)}
+                      </span>
+                    ) : (
+                      <span className="gpt-subtype-pill is-empty">—</span>
+                    )}
+                  </td>
+                  <td className="cell-missing-decision">
+                    <DecisionBadge decision={r.decision} />
+                    <RecordDecisionControls
+                      record={r}
+                      countrySubtypes={countrySubtypes}
+                      onDecision={onDecision}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} className="missing-empty">No records in this filter.</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

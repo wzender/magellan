@@ -583,6 +583,14 @@ function Dashboard() {
   /* ── Unknowns: save missing subtype decision (optimistic) ── */
   const handleMissingSubtypeDecision = useCallback(async (requestId, status, mappedTo) => {
     const runId = selectedRunIds[0];
+
+    // Read old status before overwriting
+    let oldStatus = null;
+    for (const g of missingSubtypeGroups) {
+      const rec = g.records.find(r => String(r.request_id) === String(requestId));
+      if (rec) { oldStatus = rec.decision?.status || null; break; }
+    }
+
     setMissingSubtypeGroups(prev => prev.map(g => ({
       ...g,
       records: g.records.map(r =>
@@ -591,12 +599,25 @@ function Dashboard() {
           : r
       ),
     })));
+
+    // Optimistic leaderboard update
+    setLeaderboard(prev => prev.map(r => {
+      if (r.run_id !== runId) return r;
+      const newAcc = Math.max(0, (r.missing_candidates_accepted || 0)
+        - (oldStatus === 'accepted' ? 1 : 0)
+        + (status === 'accepted' ? 1 : 0));
+      const newMap = Math.max(0, (r.missing_candidates_mapped || 0)
+        - (oldStatus === 'mapped' ? 1 : 0)
+        + (status === 'mapped' ? 1 : 0));
+      return { ...r, missing_candidates_accepted: newAcc, missing_candidates_mapped: newMap };
+    }));
+
     await fetch('/api/missing-subtypes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), status, mapped_to: mappedTo }),
     });
-  }, [selectedRunIds]);
+  }, [selectedRunIds, missingSubtypeGroups]);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
