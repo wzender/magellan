@@ -281,9 +281,12 @@ Records land in country-specific Unknowns run files (4_spain.csv, 4_france.csv, 
     ↓
 csv-loader.js pre-computes valid/invalid subtypes per country (from subtypes-by-country.json)
     ↓
-Dashboard surfaces records grouped by unknown vs. missing_subtype
+Dashboard leaderboard shows one row per country/run with unknown + missing counts
     ↓
-GPT-4o judges each record offline via Ask GPT endpoint
+User selects a run → enters the two-tab per-country validation view
+    ↓
+Tab 1 (Unknown Validation): GPT-4o judges unknown records offline via Ask GPT endpoint
+Tab 2 (Missing Subtypes): human reviews candidate subtypes grouped by suggested_label
 ```
 
 ### GPT-as-Judge: What It Evaluates
@@ -315,20 +318,21 @@ Used when GPT confirms the record is genuinely missing. The stronger model propo
 
 | Step | Action | API Endpoint | GPT Role |
 |---|---|---|---|
-| 1. Explore | Browse flagged records | `GET /api/records?run_id=X` | — |
-| 2. Judge | GPT evaluates classifier decision | `POST /api/ask-gpt` (verdict mode) | Validates or corrects |
-| 3. Suggest | GPT proposes new subtype name | `POST /api/suggest-missing-subtype` | Names new category |
-| 4. Retag | Human confirms/overrides GPT verdict | `PUT /api/validation` | — |
-| 5. Persist | Store verdicts and suggestions | `PUT /api/gpt-results`, `PUT /api/missing-subtypes` | — |
+| 1. Select run | Pick country from leaderboard | — | — |
+| 2. Judge unknowns | GPT evaluates each `unknown` record | `POST /api/ask-gpt` (verdict mode) | Validates or corrects |
+| 3. Retag | Human confirms/overrides GPT verdict | `PUT /api/validation` | — |
+| 4. Review missing subtypes | Browse candidates grouped by `suggested_label` | `GET /api/missing-subtypes?run_id=X` | — |
+| 5. Decide on candidates | Accept / Map to existing / Reject each candidate group | `PUT /api/missing-subtypes` | — |
+| 6. Persist | Store GPT verdicts and missing subtype decisions | `PUT /api/gpt-results`, `PUT /api/missing-subtypes` | — |
 
 ### Field Mapping: Pipeline → Dashboard
 
 | Pipeline output field | Dashboard column / API field |
 |---|---|
 | `subtype` (`"missing_subtype"`) | `pred_subtype2` = `"missing"` |
-| `suggested_label` | `suggested_subtype` passed to Ask GPT |
-| `reason` | Displayed in RowLevelTable record detail; passed to GPT for context |
-| `signals` | Displayed in RowLevelTable record detail; passed to GPT for context |
+| `suggested_label` | `missing_subtype` column; grouped in Missing Subtypes tab |
+| `reason` | Displayed in record detail; passed to GPT for context |
+| `signals` | Displayed in record detail; passed to GPT for context |
 
 ### Quality Signals from GPT Verdicts
 
@@ -345,86 +349,137 @@ These metrics help decide whether to tune domain instructions, adjust Stage 2 di
 
 ---
 
-### UI Modifications for Unknowns Benchmark
+### UI Design: Unknowns Benchmark
 
-#### Leaderboard — Extended Columns
+The Unknowns benchmark is a **labeling and taxonomy management tool**, not a classification accuracy dashboard. Its UI is optimised for human review throughput, not metric analysis. Each run corresponds to exactly one country; selecting a run enters the full-screen per-country validation view.
 
-When the Unknowns benchmark is selected, the leaderboard adds statistics columns summarising classifier behaviour and GPT verdicts per run:
+#### Leaderboard — Entry Point
+
+The leaderboard is the only shared surface with other benchmarks. It shows one row per country/run and serves as the entry point.
 
 | Column | Source | Description |
 |---|---|---|
-| Total | Record count | Total records in the run |
+| Run | `run_name` | Country name |
 | Unknowns | `pred_subtype2 = "unknown"` count | Records where command-r had insufficient signal |
 | Missing | `pred_subtype2 = "missing"` count | Records where command-r flagged a taxonomy gap |
-| Real Unknown | GPT verdict `no` on unknown records | Confirmed ambiguous — even GPT can't classify |
-| Real Missing | GPT verdict `yes` on missing records | Confirmed taxonomy gap — new subtype needed |
-| False Unknown | GPT verdict `yes` on unknown records | command-r was too conservative (fixable recall) |
-| False Missing | GPT verdict `no` on missing records | Stage 2 grounding failure (fixable in domain instructions) |
-| Reviewed | Count of records with any GPT verdict | Progress indicator |
+| Real Unknown | GPT verdict `no` on unknown records | Confirmed ambiguous |
+| False Unknown | GPT verdict `yes` on unknown records | command-r too conservative (orange if >20%) |
+| Reviewed | Records with any GPT verdict | Progress indicator |
 
-**Sorting**: Default sort by `Missing` descending (surface runs with the most taxonomy gaps first). All columns sortable.
+Default sort: `Missing` descending (surfaces countries with the most taxonomy gaps first).
 
-**Colour coding**: `False Unknown` and `False Missing` cells highlighted in warning colour (orange) when rate exceeds a threshold (e.g., >20%) — these indicate classifier weaknesses that domain instruction tuning can fix.
+#### Per-Country Validation View
 
-#### Record Table — Manual Review of Problematic Records
+Clicking a run opens a dedicated full-screen view scoped to that country. The view has two tabs.
 
-The record table in Unknowns mode is designed for **sampling and manual review** of records the classifier struggled with. It is not meant for exhaustive review of all records — just enough to validate patterns and inform corrections.
+```
+┌─ Spain — Unknown Validation ────────────────────────────────────┐
+│  [Unknown Validation]   [Missing Subtypes]                      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-##### Columns
+---
+
+##### Tab 1: Unknown Validation
+
+For records where `pred_subtype_2 === 'unknown'`. Goal: determine whether each unknown is genuine (Real Unknown) or a classifier recall failure (False Unknown).
+
+**Header bar**
+
+```
+Progress: 47 / 120 reviewed  ████████░░░░  39%
+Real Unknown: 23  ·  False Unknown: 24  ·  Unclear: 0
+```
+
+**Verdict filter tabs** (primary navigation):
+
+```
+[All 120]  [Unreviewed 73]  [Real Unknown 23]  [False Unknown 24]  [Unclear 0]
+```
+
+**Record table columns**
 
 | Column | Content |
 |---|---|
 | ID | Record identifier |
-| Status | `unknown` / `missing` badge |
-| Suggested Label | command-r's `candidate_subtype` from Stage 1 (only for missing records) |
-| Reason | command-r's one-sentence rationale |
+| Attributes preview | Truncated `attributes` JSON |
+| Reason | command-r's one-sentence rationale from Stage 1 |
 | Signals | Key field=value pairs from Stage 1 |
-| GPT Verdict | `yes` / `no` + correction label (if available) |
-| GPT Suggested Name | Clean subtype name proposed by GPT (for confirmed missing) |
-| True Subtype | Human-assigned label (editable) |
+| GPT says | GPT verdict + correction label (if available) |
+| Verdict | Inline buttons: Real Unknown / False Unknown / Unclear |
 
-##### Expandable Row Detail
+Expanding a row shows full `attributes` and `metadata` JSON (syntax-highlighted) and the country's allowed subtype list.
 
-Clicking a row expands to show:
-- Full `attributes` JSON (syntax-highlighted)
-- Full `metadata` JSON (syntax-highlighted)
-- Nearest subtypes from retrieval (what Stage 2 saw as hints)
-- Allowed subtypes for this country (scrollable list)
+**Per-record actions**
 
-##### Filtering
-
-| Filter | Options |
+| Action | Effect |
 |---|---|
-| Status | All / Unknown only / Missing only |
-| GPT Verdict | All / Reviewed / Unreviewed / Yes / No |
-| Verdict Category | Real Unknown / Real Missing / False Unknown / False Missing |
+| Ask GPT | `POST /api/ask-gpt` — GPT evaluates whether the record is truly unknown |
+| Accept GPT | Copies GPT's verdict into the record's true subtype |
+| Retag | Inline subtype combobox → `PUT /api/validation` |
 
-##### Actions per Record
+**Bulk actions**
 
-| Action | Button | Effect |
+| Action | Scope |
+|---|---|
+| Judge All Unreviewed | Batch `POST /api/ask-gpt` for all unreviewed records in filtered set |
+| Accept All GPT Yes | Batch-accept GPT corrections where verdict = yes |
+| Export | Download CSV of filtered records with verdicts |
+
+---
+
+##### Tab 2: Missing Subtypes
+
+For records where `pred_subtype_2 === 'missing_subtype'`. Goal: identify genuine new subtypes that should be added to the country's taxonomy.
+
+Records are **grouped by `missing_subtype` candidate** (Stage 1's `suggested_label`). Record count per group is the signal-strength indicator — a candidate appearing in 15 records is a stronger taxonomy gap signal than one appearing in 1.
+
+**Group list** (sorted by record count descending):
+
+```
+mortgage_fraud        15 records   [unreviewed]   [Accept]  [Map to existing ▼]  [Reject]
+crypto_scam            8 records   [accepted]
+elder_abuse            3 records   [mapped → fraud_financial]
+loan_modification      1 record    [rejected]
+```
+
+**Per-group actions**
+
+| Action | Effect | Stored as |
 |---|---|---|
-| Ask GPT | "Judge" | Calls `POST /api/ask-gpt` — GPT evaluates the record |
-| Suggest Name | "Suggest" | Calls `POST /api/suggest-missing-subtype` — GPT proposes clean label |
-| Retag | Inline edit on True Subtype | Calls `PUT /api/validation` — human override |
-| Accept GPT | "Accept" | Copies GPT's verdict/label into True Subtype |
+| Accept | Candidate is a genuine new subtype — add to taxonomy | `{ status: "accepted" }` |
+| Map to existing | Candidate maps to an existing allowed subtype (combobox) | `{ status: "mapped", mapped_to: "existing_subtype" }` |
+| Reject | Candidate is a classifier error — ignore | `{ status: "rejected" }` |
 
-##### Bulk Actions
+Expanding a group shows all constituent records with their attributes, metadata, reason, and signals.
 
-| Action | Scope | Effect |
+**Storage**: decisions are persisted to `data/missing_subtype_decisions.json`, keyed by `run_id` → `candidate_name` → decision object. This is separate from `true_subtype` verdicts which live in the run CSV.
+
+```json
+{
+  "42": {
+    "mortgage_fraud": { "status": "accepted" },
+    "crypto_scam":    { "status": "mapped", "mapped_to": "fraud_investment" },
+    "elder_abuse":    { "status": "rejected" }
+  }
+}
+```
+
+**API**
+
+| Method | Endpoint | Description |
 |---|---|---|
-| Judge All Unreviewed | Filtered set | Batch `POST /api/ask-gpt` for all records without a verdict |
-| Accept All GPT Yes | Filtered set | Batch accept GPT corrections where verdict = yes |
-| Export | Filtered set | Download CSV of reviewed records with verdicts |
-
-##### Future Extension: Low-Confidence Records
-
-Currently the record table shows only `unknown` and `missing_subtype` records. Future iterations may include records where command-r assigned a label but with **low confidence** (detected via logprobs or a calibrated threshold). These would appear with a `low_confidence` status badge and follow the same GPT-as-judge review flow.
+| `GET` | `/api/missing-subtypes?run_id=X` | Returns grouped candidates with counts and current decision |
+| `PUT` | `/api/missing-subtypes` | Saves a decision `{ run_id, candidate, status, mapped_to? }` |
 
 ### Feedback Loop
 
-The Unknowns benchmark enables **taxonomy evolution**: when enough records cluster around the same `suggested_label` and receive positive GPT verdicts, the label is a candidate for addition to `subtypes-by-country.json`. This closes the loop — new subtypes graduate from `missing_subtype` into the allowed list for future classification runs.
+The two tabs together drive **taxonomy evolution**:
 
-It also drives **classifier improvement**: patterns in GPT corrections (e.g., "command-r consistently fails to ground X → Y") inform updates to `DOMAIN_INSTRUCTIONS_STAGE2` disambiguation rules.
+- **Missing Subtypes tab**: accepted candidates graduate to `subtypes-by-country.json`, entering the allowed list for future classification runs.
+- **Unknown Validation tab**: false-unknown patterns (command-r consistently fails on a class of records) inform updates to `DOMAIN_INSTRUCTIONS_STAGE2` disambiguation rules.
+
+The Unknowns benchmark closes the loop: every run surfaces both the classifier's recall gaps (unknowns) and its taxonomy blindspots (missing subtypes), with human decisions feeding directly back into the system.
 
 ---
 
