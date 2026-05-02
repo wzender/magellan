@@ -164,6 +164,9 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
 export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision, onGptResult }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [rowHeight, setRowHeight] = useState('3');
+  const [gptRunning, setGptRunning] = useState(false);
+  const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
+  const gptCancelledRef = useRef(false);
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
   const [gptResults, setGptResults] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
@@ -250,6 +253,20 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
   };
 
+  const askGptAll = async (recordsToProcess) => {
+    gptCancelledRef.current = false;
+    const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
+    if (pending.length === 0) return;
+    setGptRunning(true);
+    setGptProgress({ done: 0, total: pending.length });
+    for (const record of pending) {
+      if (gptCancelledRef.current) break;
+      await askGptForRecord(record);
+      setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
+    }
+    setGptRunning(false);
+  };
+
   if (loading) return <div className="viewer-loading">Loading missing subtypes…</div>;
   if (!groups || groups.length === 0) {
     return <div className="missing-empty">No missing subtype candidates for this run.</div>;
@@ -308,6 +325,18 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
             <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
           ))}
         </div>
+        <button
+          className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
+          onClick={() => askGptAll(filtered)}
+          disabled={gptRunning}
+        >
+          {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
+        </button>
+        {gptRunning && (
+          <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
+            Cancel
+          </button>
+        )}
       </div>
 
       <div className={`validation-table-wrap row-height-${rowHeight.toLowerCase()}`}>

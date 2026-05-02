@@ -690,8 +690,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
             ))}
           </div>
-          <button className="export-csv-btn" onClick={() => doExport('csv')}>CSV</button>
-          <button className="export-csv-btn" onClick={() => doExport('excel')}>Excel</button>
           <button
             className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
             onClick={() => askGptAll(filtered)}

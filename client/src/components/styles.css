@@ -3911,6 +3911,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   align-items: center;
   gap: 10px;
 }
+.missing-subtypes-header .row-height-control { margin-left: auto; }
 
 .missing-subtypes-summary {
   display: flex;
