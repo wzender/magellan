@@ -4,11 +4,11 @@ const dbLoader = require('../loader');
 
 // GET /api/missing-subtypes?run_id=10
 // Returns grouped candidates: [{ candidate, count, records, decision }]
-router.get('/missing-subtypes', (req, res) => {
+router.get('/missing-subtypes', async (req, res) => {
   const { run_id } = req.query;
   if (!run_id) return res.status(400).json({ error: 'run_id is required' });
   try {
-    const groups = dbLoader.getMissingSubtypeGroups(parseInt(run_id, 10));
+    const groups = await dbLoader.getMissingSubtypeGroups(parseInt(run_id, 10));
     res.json(groups);
   } catch (error) {
     console.error('Error fetching missing subtypes:', error);

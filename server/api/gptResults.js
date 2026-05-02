@@ -1,11 +1,9 @@
 /**
  * GPT Results API
- * Persists GPT verdict + reasoning for Unknowns benchmark records.
+ * Persists GPT verdict + reasoning directly into the run's own storage.
  *
- * Storage:
- *   CSV mode      → gpt_verdict / gpt_reasoning columns written directly into the run CSV file
- *   Postgres mode → gpt_results table  (run_id INTEGER, request_id TEXT) — no FK so it works
- *                   with both the seedDatabase schema and the db-loader per-run-table schema
+ * CSV mode      → gpt_verdict / gpt_reasoning columns written into the run CSV file
+ * Postgres mode → gpt_verdict / gpt_reasoning columns in the per-run table (added if missing)
  */
 
 require('dotenv').config();
@@ -15,27 +13,13 @@ const router  = express.Router();
 const usePostgres = (process.env.DATA_SOURCE || 'postgres').toLowerCase() === 'postgres'
                  && !!process.env.DATABASE_URL;
 
-const { query }         = usePostgres ? require('../db') : {};
+const { query }                       = usePostgres ? require('../db') : {};
+const { getRun, getIdColumn }         = usePostgres ? require('../db-loader') : {};
 const { getGptResults, updateGptResults } = usePostgres ? {} : require('../csv-loader');
 
-let postgresStoreReady = false;
-
-async function ensurePostgresStore() {
-  if (!usePostgres || postgresStoreReady) return;
-
-  // Create table/constraint once so behavior matches CSV persistence (works out of the box).
-  await query(`
-    CREATE TABLE IF NOT EXISTS gpt_results (
-      run_id INTEGER NOT NULL,
-      request_id TEXT NOT NULL,
-      verdict TEXT,
-      reasoning TEXT,
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (run_id, request_id)
-    )
-  `);
-
-  postgresStoreReady = true;
+async function ensureGptColumns(tbl) {
+  await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_verdict TEXT`);
+  await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_reasoning TEXT`);
 }
 
 /** GET /api/gpt-results?run_id=X — returns { request_id: { verdict, reasoning } } */
@@ -45,13 +29,20 @@ router.get('/gpt-results', async (req, res) => {
 
   try {
     if (usePostgres) {
-      await ensurePostgresStore();
+      const run = await getRun(run_id);
+      if (!run) return res.status(404).json({ error: 'Run not found' });
+      const tbl   = run.run_name;
+      const idCol = await getIdColumn(tbl);
+      await ensureGptColumns(tbl);
       const result = await query(
-        'SELECT request_id, verdict, reasoning FROM gpt_results WHERE run_id = $1 AND COALESCE(verdict, \'\') <> \'\'',
-        [run_id]
+        `SELECT ${idCol} AS request_id, gpt_verdict, gpt_reasoning
+         FROM "${tbl}"
+         WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> ''`
       );
       const out = {};
-      result.rows.forEach(r => { out[r.request_id] = { verdict: r.verdict, reasoning: r.reasoning }; });
+      result.rows.forEach(r => {
+        out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning };
+      });
       return res.json(out);
     } else {
       return res.json(getGptResults(run_id));
@@ -71,14 +62,15 @@ router.put('/gpt-results', async (req, res) => {
 
   try {
     if (usePostgres) {
-      await ensurePostgresStore();
+      const run = await getRun(run_id);
+      if (!run) return res.status(404).json({ error: 'Run not found' });
+      const tbl   = run.run_name;
+      const idCol = await getIdColumn(tbl);
+      await ensureGptColumns(tbl);
       for (const [request_id, { verdict, reasoning }] of Object.entries(results)) {
         await query(
-          `INSERT INTO gpt_results (run_id, request_id, verdict, reasoning, updated_at)
-           VALUES ($1, $2, $3, $4, NOW())
-           ON CONFLICT (run_id, request_id) DO UPDATE
-             SET verdict = EXCLUDED.verdict, reasoning = EXCLUDED.reasoning, updated_at = NOW()`,
-          [run_id, request_id, verdict, reasoning]
+          `UPDATE "${tbl}" SET gpt_verdict = $1, gpt_reasoning = $2 WHERE ${idCol} = $3`,
+          [verdict, reasoning, request_id]
         );
       }
     } else {

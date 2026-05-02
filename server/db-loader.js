@@ -598,7 +598,8 @@ async function getRecords(filters = {}) {
   try {
     [dataResult, countResult] = await Promise.all([
       query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
-                    attributes, en_attributes, metadata, en_metadata, pred_subtype_1
+                    attributes, en_attributes, metadata, en_metadata, pred_subtype_1,
+                    pred_subtype_2, missing_output AS missing_subtype
              ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
@@ -640,40 +641,30 @@ async function getRecords(filters = {}) {
   if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
     const subtypeMeta = getUnknownsSubtypeMeta(run);
     parsedData = parsedData.map((row, idx) => {
-      const missingSubtypeCandidate = subtypeMeta?.invalidSubtypes?.length
-        ? subtypeMeta.invalidSubtypes[(idx + 7) % subtypeMeta.invalidSubtypes.length]
-        : null;
-      const missingSubtypeIsValid = (subtypeMeta && missingSubtypeCandidate)
-        ? isCountryValidSubtype(subtypeMeta.validSubtypes, missingSubtypeCandidate)
-        : null;
-      const guardedMissingSubtype = (subtypeMeta && missingSubtypeCandidate && !missingSubtypeIsValid)
-        ? missingSubtypeCandidate
-        : null;
-      const predSubtype2 = subtypeMeta
-        ? (guardedMissingSubtype ? 'missing' : 'unknown')
-        : null;
+      const predSubtype2 = row.pred_subtype_2 ? String(row.pred_subtype_2).trim() || null : null;
+      const csvMissingSubtype = row.missing_subtype ? String(row.missing_subtype).trim() : null;
+      const missingSubtype = predSubtype2 === 'missing' ? csvMissingSubtype : null;
+
+      const predSubtype1 = row.pred_subtype_1 != null
+        ? row.pred_subtype_1
+        : (subtypeMeta?.invalidSubtypes?.length
+          ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
+          : null);
+      const fewshots = subtypeMeta?.validSubtypes?.length
+        ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
+        : [];
 
       return {
         ...row,
-        pred_subtype_1: row.pred_subtype_1 != null
-          ? row.pred_subtype_1
-          : (subtypeMeta?.invalidSubtypes?.length
-            ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
-            : null),
+        pred_subtype_1: predSubtype1,
         pred_subtype_2: predSubtype2,
-        fewshots: subtypeMeta?.validSubtypes?.length
-          ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
-          : [],
-        feshots: subtypeMeta?.validSubtypes?.length
-          ? [0, 1, 2].map(step => subtypeMeta.validSubtypes[(idx + step) % subtypeMeta.validSubtypes.length])
-          : [],
+        fewshots,
+        feshots: fewshots,
         pred_type: predSubtype2 || row.pred_type,
-        pred_subtype: subtypeMeta?.invalidSubtypes?.length
-          ? subtypeMeta.invalidSubtypes[idx % subtypeMeta.invalidSubtypes.length]
-          : row.pred_subtype,
-        missing_subtype: predSubtype2 === 'unknown' ? null : guardedMissingSubtype,
-        missing_subtype_is_valid: guardedMissingSubtype
-          ? isCountryValidSubtype(subtypeMeta?.validSubtypes || [], guardedMissingSubtype)
+        pred_subtype: predSubtype1 || row.pred_subtype,
+        missing_subtype: missingSubtype,
+        missing_subtype_is_valid: missingSubtype
+          ? isCountryValidSubtype(subtypeMeta?.validSubtypes || [], missingSubtype)
           : null,
       };
     });
@@ -1325,15 +1316,19 @@ async function getMissingSubtypeGroups(runId) {
   const idCol = await getIdColumn(tbl);
 
   const colCheck = await query(
-    `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = 'missing_subtype'`,
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name IN ('missing_subtype', 'missing_output')`,
     [tbl]
   );
-  if (colCheck.rows.length === 0) return [];
+  if (colCheck.rows.length === 0) {
+    console.warn(`[missing-subtypes] No missing_output/missing_subtype column found in table "${tbl}"`);
+    return [];
+  }
+  const missingCol = colCheck.rows[0].column_name;
 
   const result = await query(
-    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, missing_subtype, attributes, metadata
+    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, ${missingCol} AS missing_subtype, attributes, metadata
      FROM "${tbl}"
-     WHERE missing_subtype IS NOT NULL AND missing_subtype != ''`,
+     WHERE ${missingCol} IS NOT NULL AND ${missingCol} != ''`,
     []
   );
 
@@ -1379,6 +1374,7 @@ module.exports = {
   getTransitionMatrix,
   getTypeTransitionMatrix,
   getRecords,
+  getIdColumn,
   updateTranslation,
   updateMetadataTranslation,
   getValidationValues,

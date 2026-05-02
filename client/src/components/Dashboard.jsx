@@ -478,7 +478,11 @@ function Dashboard() {
         ]);
         const recData  = await recRes.json();
         const verdData = await verdRes.json();
-        setValidationRecords(recData.data || []);
+        const allRecs = recData.data || [];
+        const hasPredSubtype2 = allRecs.some(r => r.pred_subtype_2);
+        setValidationRecords(hasPredSubtype2
+          ? allRecs.filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === 'unknown')
+          : allRecs);
         setValidationVerdicts(verdData || {});
       } finally {
         setValidationLoading(false);
@@ -947,6 +951,7 @@ function Dashboard() {
 
                 {activeUnknownsTab === 'missing' && (
                   <MissingSubtypesTab
+                    runId={selectedRunIds[0]}
                     groups={missingSubtypeGroups}
                     loading={missingSubtypeGroupsLoading}
                     countrySubtypes={countrySubtypes}

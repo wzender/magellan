@@ -178,21 +178,11 @@ function loadData() {
         : (unknownsMeta?.invalidSubtypes?.length
           ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
           : r.pred_subtype);
-      const missingSubtypeCandidate = unknownsMeta?.invalidSubtypes?.length
-        ? unknownsMeta.invalidSubtypes[(idx + 7) % unknownsMeta.invalidSubtypes.length]
+      const predSubtype2 = unknownsMeta && r.pred_subtype_2
+        ? String(r.pred_subtype_2).trim() || null
         : null;
-      const predSubtype2 = unknownsMeta
-        ? (missingSubtypeCandidate ? 'missing' : 'unknown')
-        : null;
-      const missingSubtypeIsValid = (unknownsMeta && missingSubtypeCandidate)
-        ? isCountryValidSubtype(unknownsMeta.validSubtypes, missingSubtypeCandidate)
-        : null;
-      const guardedMissingSubtype = (unknownsMeta && missingSubtypeCandidate && !missingSubtypeIsValid)
-        ? missingSubtypeCandidate
-        : null;
-      const missingSubtype = unknownsMeta
-        ? (predSubtype2 === 'unknown' ? null : guardedMissingSubtype)
-        : null;
+      const missingOutput = r.missing_output ? String(r.missing_output).trim() : null;
+      const missingSubtype = predSubtype2 === 'missing' ? missingOutput : null;
       const fewshots = unknownsMeta?.validSubtypes?.length
         ? [0, 1, 2].map(step => unknownsMeta.validSubtypes[(idx + step) % unknownsMeta.validSubtypes.length])
         : [];
@@ -203,15 +193,15 @@ function loadData() {
         request_id:      r.request_id,
         true_type:       r.true_type,
         true_subtype:    r.true_subtype,
-        pred_type:       unknownsMeta ? predSubtype2 : r.pred_type,
+        pred_type:       unknownsMeta ? (predSubtype2 || r.pred_type) : r.pred_type,
         pred_subtype:    unknownsMeta ? predSubtype1 : r.pred_subtype,
         pred_subtype_1:  unknownsMeta ? predSubtype1 : null,
-        pred_subtype_2:  unknownsMeta ? predSubtype2 : null,
+        pred_subtype_2:  predSubtype2,
         fewshots,
         feshots:         fewshots,
-        missing_subtype: unknownsMeta ? missingSubtype : null,
-        missing_subtype_is_valid: unknownsMeta
-          ? (missingSubtype ? isCountryValidSubtype(unknownsMeta.validSubtypes, missingSubtype) : null)
+        missing_subtype: missingSubtype,
+        missing_subtype_is_valid: missingSubtype
+          ? isCountryValidSubtype(unknownsMeta?.validSubtypes || [], missingSubtype)
           : null,
         attributes:      tryParseJson(r.attributes),
         en_attributes:   tryParseJson(r.en_attributes),
