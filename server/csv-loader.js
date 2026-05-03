@@ -904,12 +904,13 @@ function csvEscapeCell(v) {
     ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// Treat 'Unknown' (the CSV placeholder for untagged Unknowns records) as not yet tagged.
-const PLACEHOLDER_SUBTYPE = 'unknown';
+// Treat only the CSV placeholder 'Unknown' (capitalized) as untagged.
+// Lowercase 'unknown' is a user decision and must be kept.
+const PLACEHOLDER_SUBTYPE = 'Unknown';
 
 function isTagged(trueSubtype) {
   const v = String(trueSubtype || '').trim();
-  return v !== '' && v.toLowerCase() !== PLACEHOLDER_SUBTYPE;
+  return v !== '' && v !== PLACEHOLDER_SUBTYPE;
 }
 
 function getValidationValues(runId) {

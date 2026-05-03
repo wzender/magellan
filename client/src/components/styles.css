@@ -2888,10 +2888,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   font-weight: 600;
   white-space: nowrap;
 }
-.gpt-verdict-truly-unknown  { background: #dcfce7; color: #15803d; }
-.gpt-verdict-wrong-subtype  { background: #fee2e2; color: #b91c1c; }
-.gpt-verdict-mappable       { background: #fef9c3; color: #a16207; }
-.gpt-verdict-true-missing   { background: #ede9fe; color: #6d28d9; }
+.gpt-verdict-truly-unknown  { background: #fee2e2; color: #b91c1c; }
+.gpt-verdict-wrong-subtype  { background: #dcfce7; color: #15803d; }
+.gpt-verdict-mappable       { background: #bbf7d0; color: #166534; }
+.gpt-verdict-true-missing   { background: #fef9c3; color: #a16207; }
 .gpt-verdict-unreviewed     { background: #f3f4f6; color: #6b7280; }
 .gpt-verdict-error          { background: #fee2e2; color: #b91c1c; }
 .gpt-verdict-cell { display: flex; flex-direction: column; gap: 4px; }
@@ -4087,10 +4087,14 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .missing-action:hover { background: #f3f4f6; color: var(--text); }
 
 .missing-action-accept.active  { background: #dcfce7; border-color: #86efac; color: #15803d; }
-.missing-action-map.active     { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.missing-action-map            { border-color: transparent; background: transparent; }
+.missing-action-map.active     { background: transparent; border-color: transparent; }
 .missing-action-reject.active  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .missing-action-missing.active { background: #fef9c3; border-color: #fcd34d; color: #a16207; }
 .missing-action-unknown.active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.missing-map-clear { color: #b91c1c; border-bottom: 1px solid #fee2e2; margin-bottom: 2px; }
+.missing-map-clear:hover { background: #fff5f5; }
+.missing-action-map:hover      { border-color: transparent; background: transparent; }
 .missing-action:disabled       { opacity: 0.4; cursor: not-allowed; }
 
 .missing-action-map-wrap {

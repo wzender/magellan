@@ -29,10 +29,11 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
     }
   }
   const gptIsValid     = Boolean(gptSuggestedVerdict);
-  const subtypeOptions  = [...allowedSet];
+  const subtypeOptions = [...allowedSet];
+  const dropdownOptions = ['unknown', 'Missing', ...subtypeOptions];
   const filteredOptions = mapQuery
-    ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
-    : subtypeOptions;
+    ? dropdownOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
+    : dropdownOptions;
 
   useEffect(() => {
     if (!mappingOpen) return;
@@ -46,16 +47,17 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
     return () => document.removeEventListener('mousedown', handler);
   }, [mappingOpen]);
 
+  const verdictNorm = String(verdict || '').trim().toLowerCase();
   const commit = (val) => onSetVerdict(requestId, val || '');
   const handleAcceptGpt = () => commit(verdict === gptSuggestedVerdict ? '' : gptSuggestedVerdict);
-  const handleMap = (subtype) => { commit(subtype); setMappingOpen(false); setMapQuery(''); };
-  const handleMissing = () => commit(verdict === 'Missing' ? '' : 'Missing');
-  const handleUnknown = () => commit(verdict === 'unknown' ? '' : 'unknown');
+  const handleOptionPick = (value) => {
+    commit(verdict === value ? '' : value);
+    setMappingOpen(false);
+    setMapQuery('');
+  };
 
   const isGptActive     = gptIsValid && verdict === gptSuggestedVerdict;
-  const isMissingActive = verdict === 'Missing';
-  const isUnknownActive = verdict === 'unknown';
-  const isMappedActive  = Boolean(verdict && verdict !== 'Missing' && verdict !== 'unknown' && !isGptActive);
+  const isMappedActive  = Boolean(verdict && verdictNorm !== 'missing' && verdictNorm !== 'unknown' && !isGptActive);
 
   return (
     <div className="missing-group-actions missing-record-actions">
@@ -74,9 +76,9 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
         <button
           className={`missing-action missing-action-map${isMappedActive ? ' active' : ''}`}
           onClick={() => setMappingOpen(o => !o)}
-          title="Map to existing subtype"
+          title="Set true subtype (includes Unknown and Missing)"
         >
-          Map {mappingOpen ? '▲' : '▼'}
+          Choose subtype... {mappingOpen ? '▲' : '▼'}
         </button>
         {mappingOpen && (
           <div className="missing-map-dropdown">
@@ -92,9 +94,9 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
                 <li
                   key={s}
                   className={`missing-map-option${verdict === s ? ' selected' : ''}`}
-                  onMouseDown={e => { e.preventDefault(); handleMap(s); }}
+                  onMouseDown={e => { e.preventDefault(); handleOptionPick(s); }}
                 >
-                  {s}
+                  {s === 'unknown' ? 'Unknown' : s}
                 </li>
               ))}
               {filteredOptions.length === 0 && (
@@ -105,21 +107,6 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
         )}
       </div>
 
-      <button
-        className={`missing-action missing-action-missing${isMissingActive ? ' active' : ''}`}
-        onClick={handleMissing}
-        title="Tag as genuinely missing subtype"
-      >
-        Missing
-      </button>
-
-      <button
-        className={`missing-action missing-action-unknown${isUnknownActive ? ' active' : ''}`}
-        onClick={handleUnknown}
-        title="Tag as truly unknown"
-      >
-        Unknown
-      </button>
     </div>
   );
 }

@@ -203,6 +203,10 @@ function computeUnknownsTypeHealth(records, verdicts, countrySubtypes) {
   }).sort((a, b) => a.accuracy - b.accuracy);
 }
 
+function sameRunId(a, b) {
+  return String(a) === String(b);
+}
+
 /* ── SummaryBar ──────────────────────────────────────────── */
 function SummaryBar({ typeHealth, typeHealth2, run1Name, run2Name }) {
   if (!typeHealth || typeHealth.length === 0) return null;
@@ -305,7 +309,7 @@ function Dashboard() {
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
 
   /* derive country name candidates from run metadata */
-  const _unknownsRun = leaderboard.find(r => r.run_id === selectedRunIds[0]);
+  const _unknownsRun = leaderboard.find(r => sameRunId(r.run_id, selectedRunIds[0]));
   const unknownsCountryCandidates = isUnknownsBenchmark ? buildUnknownsCountryCandidates(_unknownsRun) : [];
 
   const refreshUnknownsRunStats = useCallback(async (runId) => {
@@ -323,12 +327,18 @@ function Dashboard() {
       const verdictData = await verdictRes.json().catch(() => ({}));
       const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
       const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
-      const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN).map(r => r.request_id));
-      const verdictValues = Object.entries(verdictData || {}).filter(([id]) => unknownIds.has(id)).map(([, v]) => v);
+      const unknownIds = new Set(
+        (recData.data || [])
+          .filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN)
+          .map(r => String(r.request_id))
+      );
+      const verdictValues = Object.entries(verdictData || {})
+        .filter(([id]) => unknownIds.has(String(id)))
+        .map(([, v]) => v);
       const retaggedMapped    = verdictValues.filter(v => v && v !== 'Missing' && v !== 'unknown').length;
       const retaggedSuggested = verdictValues.filter(v => v === 'Missing').length;
       const retaggedUnknown   = verdictValues.filter(v => v === 'unknown').length;
-      setLeaderboard(prev => prev.map(r => r.run_id === runId ? {
+      setLeaderboard(prev => prev.map(r => sameRunId(r.run_id, runId) ? {
         ...r, ...stats, ...missingStats,
         retagged_count: retaggedMapped + retaggedSuggested + retaggedUnknown,
         retagged_mapped_count: retaggedMapped,
@@ -419,8 +429,14 @@ function Dashboard() {
           const verdictData = await verdictRes.json().catch(() => ({}));
           const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
           const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
-          const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === 'unknown').map(r => r.request_id));
-          const verdictValues = Object.entries(verdictData || {}).filter(([id]) => unknownIds.has(id)).map(([, v]) => v);
+          const unknownIds = new Set(
+            (recData.data || [])
+              .filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN)
+              .map(r => String(r.request_id))
+          );
+          const verdictValues = Object.entries(verdictData || {})
+            .filter(([id]) => unknownIds.has(String(id)))
+            .map(([, v]) => v);
           const retaggedMapped    = verdictValues.filter(v => v && v !== 'Missing' && v !== 'unknown').length;
           const retaggedSuggested = verdictValues.filter(v => v === 'Missing').length;
           const retaggedUnknown   = verdictValues.filter(v => v === 'unknown').length;
@@ -535,11 +551,7 @@ function Dashboard() {
 
     // Keep Unknowns leaderboard derived columns fresh after local edits.
     if (isUnknownsBenchmark && selectedBenchmark) {
-      const baseRows = allLeaderboards[selectedBenchmark.id] || [];
-      const target = baseRows.find(r => r.run_id === runId);
-      if (target) {
-        await refreshUnknownsRunStats(runId);
-      }
+      await refreshUnknownsRunStats(runId);
     }
   }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
 
@@ -561,11 +573,7 @@ function Dashboard() {
     });
 
     if (isUnknownsBenchmark && selectedBenchmark) {
-      const baseRows = allLeaderboards[selectedBenchmark.id] || [];
-      const target = baseRows.find(r => r.run_id === runId);
-      if (target) {
-        await refreshUnknownsRunStats(runId);
-      }
+      await refreshUnknownsRunStats(runId);
     }
   }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
 
@@ -824,8 +832,8 @@ function Dashboard() {
   }, [compareFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── run names for summary bar ── */
-  const run1Entry = leaderboard.find(e => e.run_id === selectedRunIds[0]);
-  const run2Entry = leaderboard.find(e => e.run_id === selectedRunIds[1]);
+  const run1Entry = leaderboard.find(e => sameRunId(e.run_id, selectedRunIds[0]));
+  const run2Entry = leaderboard.find(e => sameRunId(e.run_id, selectedRunIds[1]));
   const run1Name  = run1Entry?.run_name ?? '';
   const run2Name  = run2Entry?.run_name ?? '';
 
@@ -1030,7 +1038,7 @@ function Dashboard() {
                     onGptResult={(requestId, isNew) => {
                       if (!isNew) return;
                       setLeaderboard(prev => prev.map(r =>
-                        r.run_id === selectedRunIds[0]
+                        sameRunId(r.run_id, selectedRunIds[0])
                           ? { ...r, missing_candidates_unreviewed: Math.max(0, (r.missing_candidates_unreviewed || 0) - 1) }
                           : r
                       ));

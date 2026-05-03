@@ -789,7 +789,7 @@ async function getValidationValues(runId) {
   const out = {};
   result.rows.forEach(r => {
     const v = String(r.true_subtype || '').trim();
-    if (v !== '' && v.toLowerCase() !== 'unknown') {
+    if (v !== '' && v !== 'Unknown') {
       out[String(r.request_id)] = r.true_subtype;
     }
   });
