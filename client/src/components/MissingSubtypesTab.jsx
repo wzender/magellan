@@ -434,7 +434,7 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               <th style={{ width: 200 }}>Attributes</th>
               <th style={{ width: 200 }}>Metadata</th>
               <th style={{ width: 150 }}>Pred Subtype 1</th>
-              <th style={{ width: 120 }}>Pred Subtype 2</th>
+              <th style={{ width: 150 }}>Missing Subtype</th>
               <th style={{ width: 220 }}>GPT Verdict</th>
               <th style={{ width: 140 }}>GPT Subtype</th>
               <th style={{ width: 280 }}>True Subtype</th>
@@ -456,7 +456,7 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
                   <td className="cell-json">{renderJson(r.attributes)}</td>
                   <td className="cell-json">{renderJson(r.metadata)}</td>
                   <td><strong>{r.pred_subtype_1 || '—'}</strong></td>
-                  <td><span className="gpt-verdict-badge gpt-verdict-unreviewed">{r.pred_subtype_2 || 'missing'}</span></td>
+                  <td><strong>{r.missing_subtype || '—'}</strong></td>
                   <td className="cell-gpt-verdict">
                     <GptVerdictBadge gpt={gpt} />
                     <button

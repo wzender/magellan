@@ -81,7 +81,7 @@ async function main() {
         confidence         FLOAT,
         pred_subtype_1     TEXT,
         pred_subtype_2     TEXT,
-        missing_output     TEXT,
+        missing_subtype    TEXT,
         decision_status    TEXT,
         decision_mapped_to TEXT,
         gpt_verdict        TEXT,
@@ -97,7 +97,7 @@ async function main() {
         `INSERT INTO "${tableName}"
            (request_id, true_type, true_subtype, pred_type, pred_subtype,
             attributes, metadata, en_attributes, confidence,
-            pred_subtype_1, pred_subtype_2, missing_output,
+            pred_subtype_1, pred_subtype_2, missing_subtype,
             decision_status, decision_mapped_to)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
@@ -112,7 +112,7 @@ async function main() {
           r.confidence         ? parseFloat(r.confidence) : null,
           r.pred_subtype_1     || null,
           r.pred_subtype_2     || null,
-          r.missing_output     || null,
+          r.missing_subtype    || null,
           r.decision_status    || null,
           r.decision_mapped_to || null,
         ]

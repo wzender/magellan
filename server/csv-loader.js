@@ -197,11 +197,12 @@ function loadData() {
         : (unknownsMeta?.invalidSubtypes?.length
           ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
           : r.pred_subtype);
-      const predSubtype2 = r.pred_subtype_2
+      const predSubtype2Raw = r.pred_subtype_2
         ? String(r.pred_subtype_2).trim().toLowerCase() || null
         : null;
-      const missingOutput = r.missing_output ? String(r.missing_output).trim() : null;
-      const missingSubtype = predSubtype2 === PS2_MISSING ? missingOutput : null;
+      const missingOutput = r.missing_subtype ? String(r.missing_subtype).trim() : null;
+      const predSubtype2 = predSubtype2Raw || (missingOutput ? PS2_MISSING : null);
+      const missingSubtype = missingOutput || null;
       const fewshots = unknownsMeta?.validSubtypes?.length
         ? [0, 1, 2].map(step => unknownsMeta.validSubtypes[(idx + step) % unknownsMeta.validSubtypes.length])
         : [];

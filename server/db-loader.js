@@ -625,7 +625,7 @@ async function getRecords(filters = {}) {
     [dataResult, countResult] = await Promise.all([
       query(`SELECT ${idCol} AS request_id, true_type, true_subtype, pred_type, pred_subtype,
                     attributes, en_attributes, metadata, en_metadata, pred_subtype_1,
-                    pred_subtype_2, missing_output AS missing_subtype
+                    pred_subtype_2, missing_subtype
              ${baseSQL} ORDER BY ${idCol} LIMIT $${p} OFFSET $${p + 1}`,
         [...params, limit, offset]),
       query(`SELECT COUNT(*) AS total ${baseSQL}`, params),
@@ -667,9 +667,10 @@ async function getRecords(filters = {}) {
   if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
     const subtypeMeta = getUnknownsSubtypeMeta(run);
     parsedData = parsedData.map((row, idx) => {
-      const predSubtype2 = row.pred_subtype_2 ? String(row.pred_subtype_2).trim().toLowerCase() || null : null;
+      const predSubtype2Raw = row.pred_subtype_2 ? String(row.pred_subtype_2).trim().toLowerCase() || null : null;
       const csvMissingSubtype = row.missing_subtype ? String(row.missing_subtype).trim() : null;
-      const missingSubtype = predSubtype2 === PS2_MISSING ? csvMissingSubtype : null;
+      const predSubtype2 = predSubtype2Raw || (csvMissingSubtype ? PS2_MISSING : null);
+      const missingSubtype = csvMissingSubtype || null;
 
       const predSubtype1 = row.pred_subtype_1 != null
         ? row.pred_subtype_1
@@ -1353,11 +1354,11 @@ async function getMissingSubtypeGroups(runId) {
   const idCol = await getIdColumn(tbl);
 
   const colCheck = await query(
-    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name IN ('missing_subtype', 'missing_output')`,
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = 'missing_subtype'`,
     [tbl]
   );
   if (colCheck.rows.length === 0) {
-    console.warn(`[missing-subtypes] No missing_output/missing_subtype column found in table "${tbl}"`);
+    console.warn(`[missing-subtypes] No missing_subtype column found in table "${tbl}"`);
     return [];
   }
   const missingCol = colCheck.rows[0].column_name;

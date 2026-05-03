@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Syncs pred_subtype_1, pred_subtype_2, missing_output columns from CSV files
+ * Syncs pred_subtype_1, pred_subtype_2, missing_subtype columns from CSV files
  * into the corresponding Postgres per-run tables.
  *
  * Usage: node db/sync-classifier-columns.js
@@ -41,7 +41,7 @@ async function main() {
 
     // Only process files that have the new columns
     const sample = records[0] || {};
-    const hasCols = 'pred_subtype_1' in sample || 'pred_subtype_2' in sample || 'missing_output' in sample;
+    const hasCols = 'pred_subtype_1' in sample || 'pred_subtype_2' in sample || 'missing_subtype' in sample;
     if (!hasCols) {
       console.log(`  skip: ${file} has no classifier columns`);
       continue;
@@ -50,7 +50,7 @@ async function main() {
     console.log(`syncing ${file} → "${tableName}" (${records.length} rows)`);
 
     // Add columns if missing
-    for (const col of ['pred_subtype_1', 'pred_subtype_2', 'missing_output']) {
+    for (const col of ['pred_subtype_1', 'pred_subtype_2', 'missing_subtype']) {
       await client.query(`ALTER TABLE "${tableName}" ADD COLUMN IF NOT EXISTS ${col} TEXT`);
     }
 
@@ -73,7 +73,7 @@ async function main() {
     for (const r of records) {
       const sub1    = r.pred_subtype_1  || null;
       const sub2    = r.pred_subtype_2  || null;
-      const missing = r.missing_output  || null;
+      const missing = r.missing_subtype || null;
       const rid     = r.request_id || r.record_id;
 
       const exists = await client.query(
@@ -84,7 +84,7 @@ async function main() {
         await client.query(
           `INSERT INTO "${tableName}" (${idCol}, true_type, true_subtype, pred_type, pred_subtype,
              attributes, en_attributes, metadata, en_metadata, confidence,
-             pred_subtype_1, pred_subtype_2, missing_output)
+             pred_subtype_1, pred_subtype_2, missing_subtype)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [
             rid,
@@ -102,7 +102,7 @@ async function main() {
         );
       } else {
         await client.query(
-          `UPDATE "${tableName}" SET pred_subtype_1 = $1, pred_subtype_2 = $2, missing_output = $3 WHERE ${idCol} = $4`,
+          `UPDATE "${tableName}" SET pred_subtype_1 = $1, pred_subtype_2 = $2, missing_subtype = $3 WHERE ${idCol} = $4`,
           [sub1, sub2, missing, rid]
         );
       }
