@@ -81,9 +81,19 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
   const dropdownRef = useRef(null);
 
   const currentSubtype = record.true_subtype || null;
-  const gptProposal    = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
+  const gptMapped      = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
   const allowedSet     = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
-  const gptIsValid     = Boolean(gptProposal && allowedSet.has(gptProposal));
+  let gptSuggestedVerdict = '';
+  if (gpt) {
+    if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
+      gptSuggestedVerdict = 'unknown';
+    } else if (gptMapped && allowedSet.has(gptMapped)) {
+      gptSuggestedVerdict = gptMapped;
+    } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
+      gptSuggestedVerdict = 'Missing';
+    }
+  }
+  const gptIsValid     = Boolean(gptSuggestedVerdict);
 
   const subtypeOptions  = [...allowedSet];
   const filteredOptions = mapQuery
@@ -103,7 +113,7 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
   }, [mappingOpen]);
 
   const handleAcceptGpt = () => {
-    onDecision(record.request_id, currentSubtype === gptProposal ? null : gptProposal);
+    onDecision(record.request_id, currentSubtype === gptSuggestedVerdict ? null : gptSuggestedVerdict);
   };
 
   const handleMap = (subtype) => {
@@ -120,7 +130,7 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
     onDecision(record.request_id, currentSubtype === 'unknown' ? null : 'unknown');
   };
 
-  const isGptActive      = gptIsValid && currentSubtype === gptProposal;
+  const isGptActive      = gptIsValid && currentSubtype === gptSuggestedVerdict;
   const isMissingActive  = currentSubtype === 'Missing';
   const isUnknownActive  = currentSubtype === 'unknown';
   const isMappedActive   = Boolean(currentSubtype && currentSubtype !== 'Missing' && currentSubtype !== 'unknown' && !isGptActive);
@@ -131,7 +141,9 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
         className={`missing-action missing-action-accept${isGptActive ? ' active' : ''}`}
         disabled={!gptIsValid}
         onClick={handleAcceptGpt}
-        title={gptIsValid ? `Accept GPT proposal: ${gptProposal}` : 'GPT has not proposed a valid allowed subtype'}
+        title={gptIsValid
+          ? `Accept GPT: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
+          : 'No GPT review available'}
       >
         Accept GPT
       </button>
@@ -302,6 +314,24 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     setGptRunning(false);
   };
 
+  const handleBulkAcceptGpt = (recordsToProcess) => {
+    const allowedSet = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
+    recordsToProcess.forEach(r => {
+      const gpt = gptResults[r.request_id];
+      if (!gpt) return;
+      const gptMapped = String(gpt.mappedAllowedSubtype || '').trim();
+      let suggested = '';
+      if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
+        suggested = 'unknown';
+      } else if (gptMapped && allowedSet.has(gptMapped)) {
+        suggested = gptMapped;
+      } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
+        suggested = 'Missing';
+      }
+      if (suggested && r.true_subtype !== suggested) onDecision(r.request_id, suggested);
+    });
+  };
+
   if (loading) return <div className="viewer-loading">Loading missing subtypes…</div>;
   if (!groups || groups.length === 0) {
     return <div className="missing-empty">No missing subtype candidates for this run.</div>;
@@ -373,6 +403,14 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
             <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
           ))}
         </div>
+        <button
+          className="export-csv-btn ask-gpt-btn"
+          onClick={() => handleBulkAcceptGpt(filtered)}
+          disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+          title="Accept GPT suggestions for all reviewed records"
+        >
+          Accept GPT
+        </button>
         <button
           className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
           onClick={() => askGptAll(filtered)}

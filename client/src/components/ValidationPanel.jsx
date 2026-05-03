@@ -15,9 +15,19 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
   const [mapQuery, setMapQuery]       = useState('');
   const dropdownRef = useRef(null);
 
-  const gptProposal    = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
+  const gptMapped      = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
   const allowedSet     = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
-  const gptIsValid     = Boolean(gptProposal && allowedSet.has(gptProposal));
+  let gptSuggestedVerdict = '';
+  if (gpt) {
+    if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
+      gptSuggestedVerdict = 'unknown';
+    } else if (gptMapped && allowedSet.has(gptMapped)) {
+      gptSuggestedVerdict = gptMapped;
+    } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
+      gptSuggestedVerdict = 'Missing';
+    }
+  }
+  const gptIsValid     = Boolean(gptSuggestedVerdict);
   const subtypeOptions  = [...allowedSet];
   const filteredOptions = mapQuery
     ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
@@ -36,12 +46,12 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
   }, [mappingOpen]);
 
   const commit = (val) => onSetVerdict(requestId, val || '');
-  const handleAcceptGpt = () => commit(verdict === gptProposal ? '' : gptProposal);
+  const handleAcceptGpt = () => commit(verdict === gptSuggestedVerdict ? '' : gptSuggestedVerdict);
   const handleMap = (subtype) => { commit(subtype); setMappingOpen(false); setMapQuery(''); };
   const handleMissing = () => commit(verdict === 'Missing' ? '' : 'Missing');
   const handleUnknown = () => commit(verdict === 'unknown' ? '' : 'unknown');
 
-  const isGptActive     = gptIsValid && verdict === gptProposal;
+  const isGptActive     = gptIsValid && verdict === gptSuggestedVerdict;
   const isMissingActive = verdict === 'Missing';
   const isUnknownActive = verdict === 'unknown';
   const isMappedActive  = Boolean(verdict && verdict !== 'Missing' && verdict !== 'unknown' && !isGptActive);
@@ -52,7 +62,9 @@ function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubt
         className={`missing-action missing-action-accept${isGptActive ? ' active' : ''}`}
         disabled={!gptIsValid}
         onClick={handleAcceptGpt}
-        title={gptIsValid ? `Accept GPT proposal: ${gptProposal}` : 'GPT has not proposed a valid allowed subtype'}
+        title={gptIsValid
+          ? `Accept GPT: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
+          : 'No GPT review available'}
       >
         Accept GPT
       </button>
@@ -552,6 +564,26 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptRunning(false);
   };
 
+  const handleBulkAcceptGpt = (recordsToProcess) => {
+    const allowedSet = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
+    const bulkVerdicts = {};
+    recordsToProcess.forEach(r => {
+      const gpt = gptResults[r.request_id];
+      if (!gpt) return;
+      const gptMapped = String(gpt.mappedAllowedSubtype || '').trim();
+      let suggested = '';
+      if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
+        suggested = 'unknown';
+      } else if (gptMapped && allowedSet.has(gptMapped)) {
+        suggested = gptMapped;
+      } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
+        suggested = 'Missing';
+      }
+      if (suggested) bulkVerdicts[r.request_id] = suggested;
+    });
+    if (Object.keys(bulkVerdicts).length > 0) onBulkVerdict(bulkVerdicts);
+  };
+
   /* ── json rendering ── */
   const copyCellJson = (obj, label, cellKey) => {
     navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
@@ -715,6 +747,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
             ))}
           </div>
+          <button
+            className="export-csv-btn ask-gpt-btn"
+            onClick={() => handleBulkAcceptGpt(filtered)}
+            disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+            title="Accept GPT suggestions for all reviewed records"
+          >
+            Accept GPT
+          </button>
           <button
             className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
             onClick={() => askGptAll(filtered)}

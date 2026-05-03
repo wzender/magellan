@@ -23,8 +23,8 @@ const path = require('path');
 const csv  = require('csv-parse/sync');
 const { Client } = require('pg');
 
-const DATA_DIR  = path.join(__dirname, '../data/runs');
-const RUNS_FILE = path.join(__dirname, '../data/runs.csv');
+const DATA_DIR        = path.join(__dirname, '../data/runs');
+const LEADERBOARD_FILE = path.join(__dirname, '../data/leaderboard.csv');
 const DB_SCHEMA = process.env.DB_SCHEMA || 'magellan';
 const UNKNOWNS_BENCHMARK_ID = '4';
 
@@ -34,13 +34,13 @@ async function main() {
   await client.query(`SET search_path = ${DB_SCHEMA}`);
   console.log(`Connected. Schema: ${DB_SCHEMA}\n`);
 
-  // Read runs index to find unknowns runs
-  const runsRaw = fs.readFileSync(RUNS_FILE, 'utf-8');
-  const allRuns = csv.parse(runsRaw, { columns: true, skip_empty_lines: true });
-  const unknownsRuns = allRuns.filter(r => String(r.benchmark_id) === UNKNOWNS_BENCHMARK_ID);
+  // Read leaderboard.csv to find unknowns runs (benchmark = 'Unknowns')
+  const lbRaw = fs.readFileSync(LEADERBOARD_FILE, 'utf-8');
+  const allRows = csv.parse(lbRaw, { columns: true, skip_empty_lines: true });
+  const unknownsRuns = allRows.filter(r => r.benchmark === 'Unknowns');
 
   if (unknownsRuns.length === 0) {
-    console.error(`No runs found with benchmark_id=${UNKNOWNS_BENCHMARK_ID} in runs.csv`);
+    console.error(`No runs found with benchmark='Unknowns' in leaderboard.csv`);
     process.exit(1);
   }
 
@@ -69,18 +69,23 @@ async function main() {
     await client.query(`DROP TABLE IF EXISTS "${tableName}"`);
     await client.query(`
       CREATE TABLE "${tableName}" (
-        request_id    TEXT,
-        true_type     TEXT,
-        true_subtype  TEXT,
-        pred_type     TEXT,
-        pred_subtype  TEXT,
-        attributes    TEXT,
-        metadata      TEXT,
-        en_attributes TEXT,
-        confidence    FLOAT,
-        pred_subtype_1 TEXT,
-        pred_subtype_2 TEXT,
-        missing_output TEXT
+        request_id         TEXT,
+        true_type          TEXT,
+        true_subtype       TEXT,
+        pred_type          TEXT,
+        pred_subtype       TEXT,
+        attributes         TEXT,
+        metadata           TEXT,
+        en_attributes      TEXT,
+        en_metadata        TEXT,
+        confidence         FLOAT,
+        pred_subtype_1     TEXT,
+        pred_subtype_2     TEXT,
+        missing_output     TEXT,
+        decision_status    TEXT,
+        decision_mapped_to TEXT,
+        gpt_verdict        TEXT,
+        gpt_reasoning      TEXT
       )
     `);
     console.log(`  table "${tableName}" recreated`);
@@ -92,21 +97,24 @@ async function main() {
         `INSERT INTO "${tableName}"
            (request_id, true_type, true_subtype, pred_type, pred_subtype,
             attributes, metadata, en_attributes, confidence,
-            pred_subtype_1, pred_subtype_2, missing_output)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            pred_subtype_1, pred_subtype_2, missing_output,
+            decision_status, decision_mapped_to)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
-          r.request_id    || null,
-          r.true_type     || null,
-          r.true_subtype  || null,
-          r.pred_type     || null,
-          r.pred_subtype  || null,
-          r.attributes    || null,
-          r.metadata      || null,
-          r.en_attributes || null,
-          r.confidence    ? parseFloat(r.confidence) : null,
-          r.pred_subtype_1 || null,
-          r.pred_subtype_2 || null,
-          r.missing_output || null,
+          r.request_id         || null,
+          r.true_type          || null,
+          r.true_subtype       || null,
+          r.pred_type          || null,
+          r.pred_subtype       || null,
+          r.attributes         || null,
+          r.metadata           || null,
+          r.en_attributes      || null,
+          r.confidence         ? parseFloat(r.confidence) : null,
+          r.pred_subtype_1     || null,
+          r.pred_subtype_2     || null,
+          r.missing_output     || null,
+          r.decision_status    || null,
+          r.decision_mapped_to || null,
         ]
       );
       inserted++;
