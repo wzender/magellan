@@ -121,12 +121,13 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 
 /* ── Missing subtype leaderboard stats (client-side, from /api/missing-subtypes groups) ── */
 function computeMissingSubtypeStats(groups, gptData) {
-  let total = 0, tagged = 0, missingTagged = 0, gptReviewed = 0;
+  let total = 0, tagged = 0, missingTagged = 0, unknownTagged = 0, gptReviewed = 0;
   groups.forEach(g => {
     (g.records || []).forEach(r => {
       total++;
       if (gptData && gptData[String(r.request_id)]) gptReviewed++;
       if (r.true_subtype === 'Missing') missingTagged++;
+      else if (r.true_subtype === 'unknown') unknownTagged++;
       else if (r.true_subtype) tagged++;
     });
   });
@@ -135,6 +136,7 @@ function computeMissingSubtypeStats(groups, gptData) {
     missing_candidates_unreviewed: total - gptReviewed,
     missing_candidates_accepted: tagged,
     missing_candidates_mapped: missingTagged,
+    missing_candidates_unknown: unknownTagged,
   };
 }
 
@@ -320,8 +322,18 @@ function Dashboard() {
       const verdictData = await verdictRes.json().catch(() => ({}));
       const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
       const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
-      const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
-      setLeaderboard(prev => prev.map(r => r.run_id === runId ? { ...r, ...stats, ...missingStats, retagged_count: retaggedCount } : r));
+      const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === 'unknown').map(r => r.request_id));
+      const verdictValues = Object.entries(verdictData || {}).filter(([id]) => unknownIds.has(id)).map(([, v]) => v);
+      const retaggedMapped    = verdictValues.filter(v => v && v !== 'Missing' && v !== 'unknown').length;
+      const retaggedSuggested = verdictValues.filter(v => v === 'Missing').length;
+      const retaggedUnknown   = verdictValues.filter(v => v === 'unknown').length;
+      setLeaderboard(prev => prev.map(r => r.run_id === runId ? {
+        ...r, ...stats, ...missingStats,
+        retagged_count: retaggedMapped + retaggedSuggested + retaggedUnknown,
+        retagged_mapped_count: retaggedMapped,
+        retagged_suggested_count: retaggedSuggested,
+        retagged_unknown_count: retaggedUnknown,
+      } : r));
     } catch {
       // no-op
     }
@@ -406,8 +418,18 @@ function Dashboard() {
           const verdictData = await verdictRes.json().catch(() => ({}));
           const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
           const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
-          const retaggedCount = Object.values(verdictData || {}).filter(v => v && String(v).trim()).length;
-          return { ...row, ...stats, ...missingStats, retagged_count: retaggedCount };
+          const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === 'unknown').map(r => r.request_id));
+          const verdictValues = Object.entries(verdictData || {}).filter(([id]) => unknownIds.has(id)).map(([, v]) => v);
+          const retaggedMapped    = verdictValues.filter(v => v && v !== 'Missing' && v !== 'unknown').length;
+          const retaggedSuggested = verdictValues.filter(v => v === 'Missing').length;
+          const retaggedUnknown   = verdictValues.filter(v => v === 'unknown').length;
+          return {
+            ...row, ...stats, ...missingStats,
+            retagged_count: retaggedMapped + retaggedSuggested + retaggedUnknown,
+            retagged_mapped_count: retaggedMapped,
+            retagged_suggested_count: retaggedSuggested,
+            retagged_unknown_count: retaggedUnknown,
+          };
         } catch {
           return { ...row };
         }

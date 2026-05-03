@@ -1,94 +1,112 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-/* ── SubtypeCombobox ──────────────────────────────────────────────────────── */
-// options: [{ subtype, type }] — only subtype names are shown / filtered
-function SubtypeCombobox({ value, options, onChange }) {
-  const [query, setQuery]     = useState('');
-  const [open, setOpen]       = useState(false);
-  const [focused, setFocused] = useState(0);
-  const wrapperRef = useRef(null);
-  const inputRef   = useRef(null);
-  const listRef    = useRef(null);
+/* ── True Subtype badge (same styling as MissingSubtypesTab) ─────────────── */
+function TrueSubtypeBadge({ verdict }) {
+  if (!verdict) return <span className="missing-decision-badge missing-decision-unreviewed">Untagged</span>;
+  if (verdict === 'Missing') return <span className="missing-decision-badge missing-decision-mapped">Missing</span>;
+  if (verdict === 'unknown') return <span className="missing-decision-badge missing-decision-unknown">Unknown</span>;
+  return <span className="missing-decision-badge missing-decision-accepted">{verdict}</span>;
+}
 
-  const subtypes = Array.from(new Set(options.map(o => String(o.subtype || '').trim())));
-  const normalizedQuery = String(query || '').trim().toLowerCase();
-  const filtered = normalizedQuery
-    ? subtypes.filter(s => s.toLowerCase().includes(normalizedQuery))
-    : subtypes;
+/* ── Per-record decision controls (Accept GPT / Map / Missing) ──────────── */
+function ValidationRecordDecisionControls({ requestId, verdict, gpt, countrySubtypes, onSetVerdict }) {
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [mapQuery, setMapQuery]       = useState('');
+  const dropdownRef = useRef(null);
 
-  // Close on click outside — no blur/focus involved so typing can't accidentally close
+  const gptProposal    = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
+  const allowedSet     = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
+  const gptIsValid     = Boolean(gptProposal && allowedSet.has(gptProposal));
+  const subtypeOptions  = [...allowedSet];
+  const filteredOptions = mapQuery
+    ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
+    : subtypeOptions;
+
   useEffect(() => {
-    if (!open) return;
-    const onOutside = (e) => {
-      if (!wrapperRef.current?.contains(e.target)) { setOpen(false); setQuery(''); }
+    if (!mappingOpen) return;
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMappingOpen(false);
+        setMapQuery('');
+      }
     };
-    document.addEventListener('mousedown', onOutside);
-    return () => document.removeEventListener('mousedown', onOutside);
-  }, [open]);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [mappingOpen]);
 
-  // Focus the input whenever the dropdown opens
-  useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  const commit = (val) => onSetVerdict(requestId, val || '');
+  const handleAcceptGpt = () => commit(verdict === gptProposal ? '' : gptProposal);
+  const handleMap = (subtype) => { commit(subtype); setMappingOpen(false); setMapQuery(''); };
+  const handleMissing = () => commit(verdict === 'Missing' ? '' : 'Missing');
+  const handleUnknown = () => commit(verdict === 'unknown' ? '' : 'unknown');
 
-  const commit = (subtype) => { onChange(subtype); setQuery(''); setOpen(false); };
-
-  const toggle = () => setOpen(o => { if (o) setQuery(''); return !o; });
-
-  const handleKey = (e) => {
-    if (!open) return;
-    if      (e.key === 'ArrowDown') { e.preventDefault(); setFocused(f => Math.min(f + 1, filtered.length - 1)); }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); setFocused(f => Math.max(f - 1, 0)); }
-    else if (e.key === 'Enter')     { e.preventDefault(); if (filtered[focused]) commit(filtered[focused]); }
-    else if (e.key === 'Escape')    { setOpen(false); setQuery(''); }
-  };
-
-  useEffect(() => { setFocused(0); }, [query]);
-
-  useEffect(() => {
-    listRef.current?.querySelectorAll('.subtype-combobox-option')[focused]
-      ?.scrollIntoView({ block: 'nearest' });
-  }, [focused]);
+  const isGptActive     = gptIsValid && verdict === gptProposal;
+  const isMissingActive = verdict === 'Missing';
+  const isUnknownActive = verdict === 'unknown';
+  const isMappedActive  = Boolean(verdict && verdict !== 'Missing' && verdict !== 'unknown' && !isGptActive);
 
   return (
-    <div className="subtype-combobox" ref={wrapperRef}>
-      <div className={`subtype-combobox-input-wrap${open ? ' open' : ''}`} onClick={toggle}>
-        <input
-          ref={inputRef}
-          className="subtype-combobox-search"
-          placeholder={value || '— select subtype —'}
-          value={open ? query : ''}
-          readOnly={!open}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={handleKey}
-          onClick={e => e.stopPropagation()}
-        />
-        <span className="subtype-combobox-arrow">{open ? '▲' : '▼'}</span>
+    <div className="missing-group-actions missing-record-actions">
+      <button
+        className={`missing-action missing-action-accept${isGptActive ? ' active' : ''}`}
+        disabled={!gptIsValid}
+        onClick={handleAcceptGpt}
+        title={gptIsValid ? `Accept GPT proposal: ${gptProposal}` : 'GPT has not proposed a valid allowed subtype'}
+      >
+        Accept GPT
+      </button>
+
+      <div className="missing-action-map-wrap" ref={dropdownRef}>
+        <button
+          className={`missing-action missing-action-map${isMappedActive ? ' active' : ''}`}
+          onClick={() => setMappingOpen(o => !o)}
+          title="Map to existing subtype"
+        >
+          Map {mappingOpen ? '▲' : '▼'}
+        </button>
+        {mappingOpen && (
+          <div className="missing-map-dropdown">
+            <input
+              className="missing-map-search"
+              placeholder="Search subtype…"
+              value={mapQuery}
+              onChange={e => setMapQuery(e.target.value)}
+              autoFocus
+            />
+            <ul className="missing-map-list">
+              {filteredOptions.map(s => (
+                <li
+                  key={s}
+                  className={`missing-map-option${verdict === s ? ' selected' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); handleMap(s); }}
+                >
+                  {s}
+                </li>
+              ))}
+              {filteredOptions.length === 0 && (
+                <li className="missing-map-option missing-map-empty">No matches</li>
+              )}
+            </ul>
+          </div>
+        )}
       </div>
-      {open && (
-        <ul ref={listRef} className="subtype-combobox-list">
-          {value && (
-            <li className="subtype-combobox-clear" onMouseDown={e => { e.preventDefault(); commit(''); }}>
-              ✕ Clear
-            </li>
-          )}
-          <li
-            className={`subtype-combobox-option subtype-combobox-unknown${value === 'unknown' ? ' selected' : ''}`}
-            onMouseDown={e => { e.preventDefault(); commit('unknown'); }}
-          >
-            Unknown
-          </li>
-          {filtered.map((s, i) => (
-            <li
-              key={s}
-              className={`subtype-combobox-option${i === focused ? ' focused' : ''}${s === value ? ' selected' : ''}`}
-              onMouseDown={e => { e.preventDefault(); commit(s); }}
-              onMouseEnter={() => setFocused(i)}
-            >
-              {s}
-            </li>
-          ))}
-        </ul>
-      )}
+
+      <button
+        className={`missing-action missing-action-missing${isMissingActive ? ' active' : ''}`}
+        onClick={handleMissing}
+        title="Tag as genuinely missing subtype"
+      >
+        Missing
+      </button>
+
+      <button
+        className={`missing-action missing-action-unknown${isUnknownActive ? ' active' : ''}`}
+        onClick={handleUnknown}
+        title="Tag as truly unknown"
+      >
+        Unknown
+      </button>
     </div>
   );
 }
@@ -186,7 +204,9 @@ function getGptSubtype(result) {
 function getGptSubtypeSource(result) {
   if (!result) return 'none';
   if (result.decision === 'truly_unknown') return 'truly-unknown';
-  if (String(result.mappedAllowedSubtype || '').trim()) return 'mapped';
+  const mapped = String(result.mappedAllowedSubtype || '').trim();
+  if (mapped.toLowerCase() === 'unknown') return 'truly-unknown';
+  if (mapped) return 'mapped';
   if (String(result.suggestedMissingSubtype || '').trim()) return 'suggested';
   return 'none';
 }
@@ -684,6 +704,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
         {/* Row height, export, ask gpt */}
         <div className="validation-controls">
+          <div className="gpt-subtype-legend">
+            <span className="gpt-subtype-pill is-mapped">existing</span>
+            <span className="gpt-subtype-pill is-suggested">missing</span>
+            <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
+          </div>
           <div className="row-height-control">
             <span className="row-height-label">Row height:</span>
             {ROW_HEIGHT_OPTIONS.map(opt => (
@@ -740,12 +765,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   GPT Verdict{sortIndicator('gpt_verdict')}
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
-                  <div>GPT Subtype{sortIndicator('gpt_subtype')}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 3 }}>
-                    <span className="gpt-subtype-pill is-mapped" style={{ fontSize: 10 }}>mapped</span>
-                    <span className="gpt-subtype-pill is-suggested" style={{ fontSize: 10 }}>suggested</span>
-                    <span className="gpt-subtype-pill is-truly-unknown" style={{ fontSize: 10 }}>unknown</span>
-                  </div>
+                  GPT Subtype{sortIndicator('gpt_subtype')}
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                   True Subtype{sortIndicator('verdict')}
@@ -847,10 +867,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       )}
                     </td>
                     <td className="cell-verdict cell-retag">
-                      <SubtypeCombobox
-                        value={verdict}
-                        options={countrySubtypes}
-                        onChange={val => onSetVerdict(r.request_id, val)}
+                      <TrueSubtypeBadge verdict={verdict} />
+                      <ValidationRecordDecisionControls
+                        requestId={r.request_id}
+                        verdict={verdict}
+                        gpt={gpt}
+                        countrySubtypes={countrySubtypes}
+                        onSetVerdict={onSetVerdict}
                       />
                     </td>
                   </tr>

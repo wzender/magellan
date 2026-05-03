@@ -197,8 +197,9 @@ Output JSON only with this schema:
 
 Rules:
 - Never output markdown.
-- mapped_allowed_subtype must be one of the allowed subtypes or empty.
-- suggested_missing_subtype must be non-empty only for true_missing_subtype.
+- The attributes and metadata may be in any language — ignore their language and respond entirely in English.
+- mapped_allowed_subtype must be copied verbatim from the allowed subtypes list, or left empty. Do not invent or translate subtype names.
+- suggested_missing_subtype must be in English title case, non-empty only for true_missing_subtype.
 - If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.
 - If uncertain between true_missing_subtype and truly_unknown, prefer truly_unknown.`;
 

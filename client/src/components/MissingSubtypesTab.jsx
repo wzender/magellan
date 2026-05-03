@@ -59,7 +59,9 @@ function getGptSubtype(result) {
 function getGptSubtypeSource(result) {
   if (!result) return 'none';
   if (result.decision === 'truly_unknown') return 'truly-unknown';
-  if (String(result.mappedAllowedSubtype || '').trim()) return 'mapped';
+  const mapped = String(result.mappedAllowedSubtype || '').trim();
+  if (mapped.toLowerCase() === 'unknown') return 'truly-unknown';
+  if (mapped) return 'mapped';
   if (String(result.suggestedMissingSubtype || '').trim()) return 'suggested';
   return 'none';
 }
@@ -68,6 +70,7 @@ function getGptSubtypeSource(result) {
 function TrueSubtypeBadge({ trueSubtype }) {
   if (!trueSubtype) return <span className="missing-decision-badge missing-decision-unreviewed">Untagged</span>;
   if (trueSubtype === 'Missing') return <span className="missing-decision-badge missing-decision-mapped">Missing</span>;
+  if (trueSubtype === 'unknown') return <span className="missing-decision-badge missing-decision-unknown">Unknown</span>;
   return <span className="missing-decision-badge missing-decision-accepted">{trueSubtype}</span>;
 }
 
@@ -113,9 +116,14 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
     onDecision(record.request_id, currentSubtype === 'Missing' ? null : 'Missing');
   };
 
-  const isGptActive     = gptIsValid && currentSubtype === gptProposal;
-  const isMissingActive = currentSubtype === 'Missing';
-  const isMappedActive  = Boolean(currentSubtype && currentSubtype !== 'Missing' && !isGptActive);
+  const handleUnknown = () => {
+    onDecision(record.request_id, currentSubtype === 'unknown' ? null : 'unknown');
+  };
+
+  const isGptActive      = gptIsValid && currentSubtype === gptProposal;
+  const isMissingActive  = currentSubtype === 'Missing';
+  const isUnknownActive  = currentSubtype === 'unknown';
+  const isMappedActive   = Boolean(currentSubtype && currentSubtype !== 'Missing' && currentSubtype !== 'unknown' && !isGptActive);
 
   return (
     <div className="missing-group-actions missing-record-actions">
@@ -170,13 +178,25 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
       >
         Missing
       </button>
+
+      <button
+        className={`missing-action missing-action-unknown${isUnknownActive ? ' active' : ''}`}
+        onClick={handleUnknown}
+        title="Tag as truly unknown"
+      >
+        Unknown
+      </button>
     </div>
   );
 }
 
 /* ── Main component ──────────────────────────────────────────────────────── */
+const EMPTY_COL_FILTERS = { request_id: '', attributes: '', metadata: '', pred_subtype_1: '' };
+
 export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision, onGptResult }) {
   const [statusFilter, setStatusFilter] = useState('all');
+  const [colFilters, setColFilters]     = useState(EMPTY_COL_FILTERS);
+  const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
   const [rowHeight, setRowHeight] = useState('3');
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
@@ -187,6 +207,7 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
 
   useEffect(() => {
     setGptResults({});
+    setColFilters(EMPTY_COL_FILTERS);
     if (!runId) return;
     fetch(`/api/gpt-results?run_id=${runId}`)
       .then(r => r.json())
@@ -300,6 +321,12 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     if (statusFilter === 'tagged')     return r.true_subtype && r.true_subtype !== 'Missing';
     if (statusFilter === 'missing')    return r.true_subtype === 'Missing';
     return true;
+  }).filter(r => {
+    if (colFilters.request_id    && !r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase())) return false;
+    if (colFilters.attributes    && !JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase())) return false;
+    if (colFilters.metadata      && !JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase())) return false;
+    if (colFilters.pred_subtype_1 && !String(r.pred_subtype_1 || '').toLowerCase().includes(colFilters.pred_subtype_1.toLowerCase())) return false;
+    return true;
   });
 
   const tabs = [
@@ -335,6 +362,11 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           <span className="validation-progress">{gptReviewedCount}/{totalRecords} reviewed</span>
           <span className="validation-progress">{humanDecidedCount}/{totalRecords} retagged</span>
         </div>
+        <div className="gpt-subtype-legend">
+          <span className="gpt-subtype-pill is-mapped">existing</span>
+          <span className="gpt-subtype-pill is-suggested">missing</span>
+          <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
+        </div>
         <div className="row-height-control">
           <span className="row-height-label">Row height:</span>
           {ROW_HEIGHT_OPTIONS.map(opt => (
@@ -367,6 +399,13 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               <th style={{ width: 220 }}>GPT Verdict</th>
               <th style={{ width: 140 }}>GPT Subtype</th>
               <th style={{ width: 280 }}>True Subtype</th>
+            </tr>
+            <tr className="col-filter-row">
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id}    onChange={e => setColFilter('request_id', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes}    onChange={e => setColFilter('attributes', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata}      onChange={e => setColFilter('metadata', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype_1} onChange={e => setColFilter('pred_subtype_1', e.target.value)} /></th>
+              <th /><th /><th /><th />
             </tr>
           </thead>
           <tbody>

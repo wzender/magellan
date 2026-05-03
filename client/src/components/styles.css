@@ -2712,10 +2712,28 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .unknowns-group-missing    { background: #faf5ff; color: #6d28d9; border-bottom: 2px solid #c4b5fd; border-left: 1px solid #cbd5e1; }
 /* Second header row: 1st th = Total (Unknown Validation), 5th th = Total (Missing Subtypes) */
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(1) { border-left: 1px solid #cbd5e1; }
-.unknowns-leaderboard-table thead tr:last-child th:nth-child(5) { border-left: 1px solid #cbd5e1; }
-/* Data rows: 2nd td = first Unknown Validation col, 6th td = first Missing Subtypes col */
+.unknowns-leaderboard-table thead tr:last-child th:nth-child(4) { border-left: 1px solid #cbd5e1; }
+/* Data rows: 2nd td = first Unknown Validation col, 8th td = first Missing Subtypes col */
 .unknowns-leaderboard-table tbody td:nth-child(2) { border-left: 1px solid #cbd5e1; }
-.unknowns-leaderboard-table tbody td:nth-child(6) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table tbody td:nth-child(8) { border-left: 1px solid #cbd5e1; }
+
+.unknowns-retagged-subheader {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  padding: 2px 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Colored breakdown columns */
+.th-existing  { color: #15803d; }
+.th-missing   { color: #a16207; }
+.th-unknown   { color: #b91c1c; }
+.metric-existing  { color: #15803d; font-weight: 600; }
+.metric-missing   { color: #a16207; font-weight: 600; }
+.metric-unknown   { color: #b91c1c; font-weight: 600; }
 .unknowns-leaderboard-table thead tr:last-child th {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -2881,6 +2899,12 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .cell-gpt-verdict { vertical-align: top; padding: 6px 8px; }
 .cell-fewshots    { font-size: 12px; color: #6b7280; vertical-align: top; }
 
+.gpt-subtype-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .gpt-subtype-pill {
   display: inline-block;
   padding: 2px 8px;
@@ -2891,18 +2915,18 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .gpt-subtype-pill.is-mapped {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.gpt-subtype-pill.is-suggested {
   background: #fef9c3;
   color: #a16207;
 }
 
-.gpt-subtype-pill.is-suggested {
-  background: #ede9fe;
-  color: #6d28d9;
-}
-
 .gpt-subtype-pill.is-truly-unknown {
-  background: #dcfce7;
-  color: #15803d;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .gpt-subtype-pill.is-empty {
@@ -4062,10 +4086,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 .missing-action:hover { background: #f3f4f6; color: var(--text); }
 
-.missing-action-accept.active { background: #dcfce7; border-color: #86efac; color: #15803d; }
-.missing-action-map.active    { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
-.missing-action-reject.active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
-.missing-action-missing.active { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.missing-action-accept.active  { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.missing-action-map.active     { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.missing-action-reject.active  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.missing-action-missing.active { background: #fef9c3; border-color: #fcd34d; color: #a16207; }
+.missing-action-unknown.active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .missing-action:disabled       { opacity: 0.4; cursor: not-allowed; }
 
 .missing-action-map-wrap {
@@ -4193,8 +4218,9 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 .missing-decision-unreviewed { background: #f3f4f6; color: var(--text-muted); }
 .missing-decision-accepted   { background: #dcfce7; color: #15803d; }
-.missing-decision-mapped     { background: #dbeafe; color: #1d4ed8; }
+.missing-decision-mapped     { background: #fef9c3; color: #a16207; }
 .missing-decision-rejected   { background: #fee2e2; color: #b91c1c; }
+.missing-decision-unknown    { background: #fee2e2; color: #b91c1c; }
 
 .missing-empty {
   color: var(--text-muted);
