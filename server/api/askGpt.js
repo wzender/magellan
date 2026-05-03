@@ -204,13 +204,7 @@ Rules:
 - If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.
 - If uncertain between true_missing_subtype and truly_unknown, prefer truly_unknown.`;
 
-      const userPrompt = `Predicted status (from small model pipeline): ${predicted_status || stage2_subtype || 'N/A'}
-Predicted type: ${pred_type || 'N/A'}
-Predicted subtype: ${pred_subtype || 'N/A'}
-Stage-1 candidate subtype: ${candidate_subtype || 'N/A'}
-Missing subtype candidate: ${missing_subtype || 'N/A'}
-
-Allowed subtypes for this country:
+      const userPrompt = `Allowed subtypes for this country:
 ${allowedList}
 
 Nearest subtype hints from retrieval:
