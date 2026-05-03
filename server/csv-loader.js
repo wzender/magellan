@@ -8,6 +8,9 @@ const path = require('path');
 const csv  = require('csv-parse/sync');
 const XLSX = require('xlsx');
 
+const PS2_UNKNOWN = (process.env.PRED_SUBTYPE2_UNKNOWN || 'unknown').toLowerCase();
+const PS2_MISSING = (process.env.PRED_SUBTYPE2_MISSING || 'missing').toLowerCase();
+
 const DATA_DIR                    = path.join(__dirname, '../data');
 const RUNS_DIR                    = path.join(DATA_DIR, 'runs');
 const TRANSLATIONS_FILE           = path.join(DATA_DIR, 'translations.json');
@@ -176,7 +179,7 @@ function loadData() {
     if (lbEntry) {
       if (isUnknownsRun) {
         lbEntry.benchmark_length = records.filter(r =>
-          String(r.pred_subtype_2 || '').trim().toLowerCase() === 'unknown'
+          String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN
         ).length;
       } else {
         lbEntry.benchmark_length = records.length;
@@ -186,7 +189,7 @@ function loadData() {
     records.forEach((r, idx) => {
       if (isUnknownsRun) {
         const ps2 = String(r.pred_subtype_2 || '').trim().toLowerCase();
-        if (ps2 && ps2 !== 'unknown' && ps2 !== 'missing') return;
+        if (ps2 && ps2 !== PS2_UNKNOWN && ps2 !== PS2_MISSING) return;
       }
 
       const predSubtype1 = r.pred_subtype_1
@@ -195,10 +198,10 @@ function loadData() {
           ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
           : r.pred_subtype);
       const predSubtype2 = r.pred_subtype_2
-        ? String(r.pred_subtype_2).trim() || null
+        ? String(r.pred_subtype_2).trim().toLowerCase() || null
         : null;
       const missingOutput = r.missing_output ? String(r.missing_output).trim() : null;
-      const missingSubtype = predSubtype2 === 'missing' ? missingOutput : null;
+      const missingSubtype = predSubtype2 === PS2_MISSING ? missingOutput : null;
       const fewshots = unknownsMeta?.validSubtypes?.length
         ? [0, 1, 2].map(step => unknownsMeta.validSubtypes[(idx + step) % unknownsMeta.validSubtypes.length])
         : [];

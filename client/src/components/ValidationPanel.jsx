@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { PS2_UNKNOWN, PS2_MISSING } from '../config';
 
 /* ── True Subtype badge (same styling as MissingSubtypesTab) ─────────────── */
 function TrueSubtypeBadge({ verdict }) {
@@ -334,9 +335,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     if (verdictFilter === 'unreviewed') {
       filtered = filtered.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
     } else if (isRetag && verdictFilter === 'unknown') {
-      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'unknown');
+      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN);
     } else if (isRetag && verdictFilter === 'missing') {
-      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === 'missing');
+      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === PS2_MISSING);
     } else if (isRetag && verdictFilter === 'real_unknown') {
       filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
     } else if (isRetag && verdictFilter === 'real_missing') {
@@ -348,7 +349,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       });
     } else if (isRetag && verdictFilter === 'false_missing') {
       filtered = filtered.filter(r => {
-        const isPredMissing = (r.pred_subtype_2 || '') === 'missing';
+        const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
         const gptResult = gptResults[r.request_id];
         return isPredMissing && gptResult && (gptResult.decision === 'missing_but_mappable' || gptResult.decision === 'wrong_subtype');
       });

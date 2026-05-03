@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { PS2_MISSING } from '../config';
 
 /* ── GPT helpers (mirrored from ValidationPanel) ────────────────────────── */
 const GPT_VERDICT_CONFIG = {
@@ -248,10 +249,10 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           judge_mode: true,
           attributes: record.attributes,
           metadata: record.metadata,
-          predicted_status: 'missing',
+          predicted_status: PS2_MISSING,
           pred_type: record.pred_type || '',
           pred_subtype: record.pred_subtype || '',
-          stage2_subtype: 'missing',
+          stage2_subtype: PS2_MISSING,
           candidate_subtype: record.pred_subtype_1 || '',
           missing_subtype: record.missing_subtype || '',
           allowed_subtypes: allowedSubtypes,

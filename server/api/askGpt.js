@@ -16,6 +16,9 @@ const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS, 10) || 200;
 const TIMEOUT_MS        = 20000;
 const ASK_GPT_PROMPT    = (process.env.ASK_GPT_PROMPT || '').trim();
 const ASK_GPT_DOMAIN_NAME = process.env.ASK_GPT_DOMAIN_NAME || 'e-commerce product support';
+
+const PS2_UNKNOWN = (process.env.PRED_SUBTYPE2_UNKNOWN || 'unknown').toLowerCase();
+const PS2_MISSING = (process.env.PRED_SUBTYPE2_MISSING || 'missing').toLowerCase();
 const ASK_GPT_DOMAIN_INSTRUCTIONS = (process.env.ASK_GPT_DOMAIN_INSTRUCTIONS || `You are classifying customer-submitted records related to e-commerce operations.
 Each record describes a product or interaction using structured attributes (SKU, name, brand, tags, material, price, etc.) and operational metadata (region, source, status, department, data quality).
 
@@ -81,13 +84,13 @@ function normalizeJudgeDecision(value, predictedStatus = '') {
 
   // Backward-compat mapping for legacy yes/no rows.
   if (raw === 'yes') {
-    if (status === 'unknown') return 'wrong_subtype';
-    if (status === 'missing') return 'true_missing_subtype';
+    if (status === PS2_UNKNOWN) return 'wrong_subtype';
+    if (status === PS2_MISSING) return 'true_missing_subtype';
     return 'wrong_subtype';
   }
   if (raw === 'no') {
-    if (status === 'unknown') return 'truly_unknown';
-    if (status === 'missing') return 'missing_but_mappable';
+    if (status === PS2_UNKNOWN) return 'truly_unknown';
+    if (status === PS2_MISSING) return 'missing_but_mappable';
     return 'wrong_subtype';
   }
 
@@ -97,8 +100,8 @@ function normalizeJudgeDecision(value, predictedStatus = '') {
   if (/wrong|incorrect|different|other/.test(raw)) return 'wrong_subtype';
 
   // Safe fallback: if it was flagged unknown/missing by stage2, preserve conservative semantics.
-  if (status === 'unknown') return 'truly_unknown';
-  if (status === 'missing') return 'missing_but_mappable';
+  if (status === PS2_UNKNOWN) return 'truly_unknown';
+  if (status === PS2_MISSING) return 'missing_but_mappable';
   return 'wrong_subtype';
 }
 

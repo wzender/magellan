@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import './styles.css';
+import { PS2_UNKNOWN, PS2_MISSING } from '../config';
 import BenchmarkGallery from './BenchmarkGallery';
 import LeaderboardWidget from './LeaderboardWidget';
 import TypeHealthGrid from './TypeHealthGrid';
@@ -61,8 +62,8 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     ? gptResultsByRequestId
     : {};
 
-  const unknownsCount = rows.filter(r => (r.pred_subtype_2 || '') === 'unknown').length;
-  const missingCount = rows.filter(r => (r.pred_subtype_2 || '') === 'missing').length;
+  const unknownsCount = rows.filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN).length;
+  const missingCount = rows.filter(r => (r.pred_subtype_2 || '') === PS2_MISSING).length;
 
   let reviewedCount = 0;
   let realUnknownCount = 0;
@@ -75,7 +76,7 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 
   rows.forEach(r => {
     const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
-    if (status !== 'unknown') return;
+    if (status !== PS2_UNKNOWN) return;
 
     const saved = gpt[r.request_id];
     if (!saved) return;
@@ -89,12 +90,12 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     // Count reviewed when we have either a parsed subtype output or a legacy verdict.
     if (hasGptSubtype || saved.verdict) reviewedCount++;
 
-    if (status === 'unknown') {
+    if (status === PS2_UNKNOWN) {
       if (hasGptSubtype) falseUnknownCount++;
       else if (saved.verdict) realUnknownCount++;
     }
 
-    if (status === 'missing') {
+    if (status === PS2_MISSING) {
       if (suggestedSubtype) realMissingCount++;
       else if (mappedSubtype || saved.verdict) falseMissingCount++;
     }
@@ -322,7 +323,7 @@ function Dashboard() {
       const verdictData = await verdictRes.json().catch(() => ({}));
       const stats = computeUnknownsLeaderboardStats(recData.data || [], gptData || {});
       const missingStats = computeMissingSubtypeStats(Array.isArray(missingGroups) ? missingGroups : [], gptData || {});
-      const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === 'unknown').map(r => r.request_id));
+      const unknownIds = new Set((recData.data || []).filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN).map(r => r.request_id));
       const verdictValues = Object.entries(verdictData || {}).filter(([id]) => unknownIds.has(id)).map(([, v]) => v);
       const retaggedMapped    = verdictValues.filter(v => v && v !== 'Missing' && v !== 'unknown').length;
       const retaggedSuggested = verdictValues.filter(v => v === 'Missing').length;
@@ -507,7 +508,7 @@ function Dashboard() {
         const allRecs = recData.data || [];
         const hasPredSubtype2 = allRecs.some(r => r.pred_subtype_2);
         setValidationRecords(hasPredSubtype2
-          ? allRecs.filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === 'unknown')
+          ? allRecs.filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN)
           : allRecs);
         setValidationVerdicts(verdData || {});
       } finally {

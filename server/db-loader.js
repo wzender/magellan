@@ -21,6 +21,9 @@
 const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
+
+const PS2_UNKNOWN = (process.env.PRED_SUBTYPE2_UNKNOWN || 'unknown').toLowerCase();
+const PS2_MISSING = (process.env.PRED_SUBTYPE2_MISSING || 'missing').toLowerCase();
 const { query, pool } = require('./db');
 const idColumnCache = new Map();
 const SUBTYPES_FILE = path.join(__dirname, '../data/Subtypes.xlsx');
@@ -293,7 +296,7 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
       if (!run) return;
       try {
         const result = await query(
-          `SELECT COUNT(*) AS cnt FROM "${run.run_name}" WHERE LOWER(TRIM(COALESCE(pred_subtype_2,''))) = 'unknown'`
+          `SELECT COUNT(*) AS cnt FROM "${run.run_name}" WHERE LOWER(TRIM(COALESCE(pred_subtype_2,''))) = '${PS2_UNKNOWN}'`
         );
         row.benchmark_length = parseInt(result.rows[0].cnt) || 0;
       } catch (err) {
@@ -313,7 +316,7 @@ async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = f
   const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
   const unknownsClause = (run.benchmark_name || '').toLowerCase() === 'unknowns'
-    ? ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('unknown', 'missing'))`
+    ? ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('${PS2_UNKNOWN}', '${PS2_MISSING}'))`
     : '';
 
   let result;
@@ -612,7 +615,7 @@ async function getRecords(filters = {}) {
   if (filters.crossTypeOnly)  { where += ` AND pred_type != true_type`; }
 
   if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
-    where += ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('unknown', 'missing'))`;
+    where += ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('${PS2_UNKNOWN}', '${PS2_MISSING}'))`;
   }
 
   const baseSQL = `FROM "${tbl}" WHERE ${where}`;
@@ -664,9 +667,9 @@ async function getRecords(filters = {}) {
   if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
     const subtypeMeta = getUnknownsSubtypeMeta(run);
     parsedData = parsedData.map((row, idx) => {
-      const predSubtype2 = row.pred_subtype_2 ? String(row.pred_subtype_2).trim() || null : null;
+      const predSubtype2 = row.pred_subtype_2 ? String(row.pred_subtype_2).trim().toLowerCase() || null : null;
       const csvMissingSubtype = row.missing_subtype ? String(row.missing_subtype).trim() : null;
-      const missingSubtype = predSubtype2 === 'missing' ? csvMissingSubtype : null;
+      const missingSubtype = predSubtype2 === PS2_MISSING ? csvMissingSubtype : null;
 
       const predSubtype1 = row.pred_subtype_1 != null
         ? row.pred_subtype_1
@@ -1379,7 +1382,7 @@ async function getMissingSubtypeGroups(runId) {
     groups[candidate].records.push({
       request_id:     String(r.request_id),
       pred_subtype_1: r.pred_subtype_1,
-      pred_subtype_2: r.pred_subtype_2,
+      pred_subtype_2: r.pred_subtype_2 ? String(r.pred_subtype_2).trim().toLowerCase() || null : null,
       missing_subtype: r.missing_subtype,
       attributes:     attrs,
       metadata:       meta,
