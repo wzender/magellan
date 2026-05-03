@@ -1363,8 +1363,20 @@ async function getMissingSubtypeGroups(runId) {
   }
   const missingCol = colCheck.rows[0].column_name;
 
+  const columnsRes = await query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1`,
+    [tbl]
+  );
+  const columns = new Set(columnsRes.rows.map(r => r.column_name));
+  const enAttributesSelect = columns.has('en_attributes')
+    ? 'en_attributes'
+    : (columns.has('attributes_en') ? 'attributes_en AS en_attributes' : 'NULL::jsonb AS en_attributes');
+  const enMetadataSelect   = columns.has('en_metadata')
+    ? 'en_metadata'
+    : (columns.has('metadata_en') ? 'metadata_en AS en_metadata' : 'NULL::jsonb AS en_metadata');
+
   const result = await query(
-    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, ${missingCol} AS missing_subtype, attributes, metadata, true_subtype
+    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, ${missingCol} AS missing_subtype, attributes, ${enAttributesSelect}, metadata, ${enMetadataSelect}, true_subtype
      FROM "${tbl}"
      WHERE ${missingCol} IS NOT NULL AND ${missingCol} != ''`,
     []
@@ -1377,16 +1389,22 @@ async function getMissingSubtypeGroups(runId) {
     if (!candidate) return;
     if (!groups[candidate]) groups[candidate] = { candidate, records: [] };
     let attrs = r.attributes;
+    let attrsEn = r.en_attributes;
     let meta  = r.metadata;
+    let metaEn = r.en_metadata;
     try { if (typeof attrs === 'string') attrs = JSON.parse(attrs); } catch {}
+    try { if (typeof attrsEn === 'string') attrsEn = JSON.parse(attrsEn); } catch {}
     try { if (typeof meta  === 'string') meta  = JSON.parse(meta);  } catch {}
+    try { if (typeof metaEn === 'string') metaEn = JSON.parse(metaEn); } catch {}
     groups[candidate].records.push({
       request_id:     String(r.request_id),
       pred_subtype_1: r.pred_subtype_1,
       pred_subtype_2: r.pred_subtype_2 ? String(r.pred_subtype_2).trim().toLowerCase() || null : null,
       missing_subtype: r.missing_subtype,
       attributes:     attrs,
+      en_attributes:  attrsEn,
       metadata:       meta,
+      en_metadata:    metaEn,
       true_subtype:   r.true_subtype || null,
     });
   });

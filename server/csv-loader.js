@@ -1068,7 +1068,9 @@ function getMissingSubtypeGroups(runId) {
         pred_subtype_2:  r.pred_subtype_2,
         missing_subtype: r.missing_subtype,
         attributes:      r.attributes,
+        en_attributes:   r.en_attributes,
         metadata:        r.metadata,
+        en_metadata:     r.en_metadata,
         true_subtype:    r.true_subtype || null,
       });
     });

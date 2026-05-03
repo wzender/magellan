@@ -640,18 +640,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     <div className={`validation-panel row-level-table-panel row-height-${rowHeight}`} ref={panelRef}>
       {toast && <div className="copy-toast">{toast}</div>}
 
-      <div className="validation-toolbar" ref={toolbarRef}>
+      <div className={`validation-toolbar${isRetag ? ' validation-toolbar-retag' : ''}`} ref={toolbarRef}>
         {/* Progress stats */}
-        <div className="validation-stats">
-          {!isRetag && (
-            <>
-              <span className="validation-progress">{reviewed}/{total} reviewed</span>
-              <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
-              <span className="validation-stat verdict-unjustified-bg">{unjustifiedCount} not justified</span>
-              <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
-            </>
-          )}
-        </div>
+        {!isRetag && (
+          <div className="validation-stats">
+            <span className="validation-progress">{reviewed}/{total} reviewed</span>
+            <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
+            <span className="validation-stat verdict-unjustified-bg">{unjustifiedCount} not justified</span>
+            <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
+          </div>
+        )}
 
         {hasGridFilter && (
           <div className="validation-grid-filter">
@@ -723,39 +721,75 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         )}
 
         {/* Row height, export, ask gpt */}
-        <div className="validation-controls">
-          <div className="gpt-subtype-legend">
-            <span className="gpt-subtype-pill is-mapped">existing</span>
-            <span className="gpt-subtype-pill is-suggested">missing</span>
-            <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
-          </div>
-          <div className="row-height-control">
-            <span className="row-height-label">Row height:</span>
-            {ROW_HEIGHT_OPTIONS.map(opt => (
-              <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
-            ))}
-          </div>
-          <button
-            className="export-csv-btn ask-gpt-btn"
-            onClick={() => handleBulkAcceptGpt(filtered)}
-            disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
-            title="Accept GPT suggestions for all reviewed records"
-          >
-            Accept GPT
-          </button>
-          <button
-            className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
-            onClick={() => askGptAll(filtered)}
-            disabled={gptRunning}
-          >
-            {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
-          </button>
-          {gptRunning && (
-            <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
-              Cancel
+        {isRetag ? (
+          <>
+            <div className="gpt-subtype-legend">
+              <span className="gpt-subtype-pill is-mapped">existing</span>
+              <span className="gpt-subtype-pill is-suggested">missing</span>
+              <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
+            </div>
+            <div className="row-height-control">
+              <span className="row-height-label">Row height:</span>
+              {ROW_HEIGHT_OPTIONS.map(opt => (
+                <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
+              ))}
+            </div>
+            <button
+              className="export-csv-btn ask-gpt-btn"
+              onClick={() => handleBulkAcceptGpt(filtered)}
+              disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+              title="Accept GPT suggestions for all reviewed records"
+            >
+              Accept GPT
             </button>
-          )}
-        </div>
+            <button
+              className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
+              onClick={() => askGptAll(filtered)}
+              disabled={gptRunning}
+            >
+              {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
+            </button>
+            {gptRunning && (
+              <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
+                Cancel
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="validation-controls">
+            <div className="gpt-subtype-legend">
+              <span className="gpt-subtype-pill is-mapped">existing</span>
+              <span className="gpt-subtype-pill is-suggested">missing</span>
+              <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
+            </div>
+            <div className="row-height-control">
+              <span className="row-height-label">Row height:</span>
+              {ROW_HEIGHT_OPTIONS.map(opt => (
+                <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
+              ))}
+            </div>
+            <button
+              className="export-csv-btn ask-gpt-btn"
+              onClick={() => handleBulkAcceptGpt(filtered)}
+              disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+              title="Accept GPT suggestions for all reviewed records"
+            >
+              Accept GPT
+            </button>
+            <button
+              className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
+              onClick={() => askGptAll(filtered)}
+              disabled={gptRunning}
+            >
+              {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
+            </button>
+            {gptRunning && (
+              <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Table */}

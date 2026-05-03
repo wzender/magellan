@@ -190,6 +190,8 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
   const [statusFilter, setStatusFilter] = useState('all');
   const [colFilters, setColFilters]     = useState(EMPTY_COL_FILTERS);
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
+  const [attrLang, setAttrLang] = useState('original');
+  const [metaLang, setMetaLang] = useState('original');
   const [rowHeight, setRowHeight] = useState('3');
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
@@ -356,8 +358,8 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
   };
 
   return (
-    <div className="missing-subtypes-tab">
-      <div className="missing-subtypes-header">
+    <div className="missing-subtypes-tab validation-panel row-level-table-panel">
+      <div className="missing-subtypes-header validation-toolbar">
         <div className="missing-verdict-tabs">
           {tabs.map(t => (
             <button
@@ -411,8 +413,24 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           <thead>
             <tr>
               <th style={{ width: 120 }}>Request ID</th>
-              <th style={{ width: 200 }}>Attributes</th>
-              <th style={{ width: 200 }}>Metadata</th>
+              <th style={{ width: 200 }}>
+                <div className="header-cell">
+                  Attributes
+                  <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                    <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
+                    <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                  </div>
+                </div>
+              </th>
+              <th style={{ width: 200 }}>
+                <div className="header-cell">
+                  Metadata
+                  <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
+                    <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
+                    <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
+                  </div>
+                </div>
+              </th>
               <th style={{ width: 150 }}>Pred Subtype 1</th>
               <th style={{ width: 150 }}>Missing Subtype</th>
               <th style={{ width: 220 }}>GPT Verdict</th>
@@ -430,11 +448,15 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           <tbody>
             {filtered.map(r => {
               const gpt = gptResults[r.request_id];
+              const attrEn = r.en_attributes || r.attributes_en || r.enAttributes;
+              const metaEn = r.en_metadata || r.metadata_en || r.enMetadata;
+              const attrData = attrLang === 'en' ? (attrEn || r.attributes) : r.attributes;
+              const metaData = metaLang === 'en' ? (metaEn || r.metadata) : r.metadata;
               return (
                 <tr key={r.request_id}>
                   <td className="cell-request-id">{r.request_id}</td>
-                  <td className="cell-json">{renderJson(r.attributes)}</td>
-                  <td className="cell-json">{renderJson(r.metadata)}</td>
+                  <td className="cell-json">{renderJson(attrData)}</td>
+                  <td className="cell-json">{renderJson(metaData)}</td>
                   <td><strong>{r.pred_subtype_1 || '—'}</strong></td>
                   <td><strong>{r.missing_subtype || '—'}</strong></td>
                   <td className="cell-gpt-verdict">
