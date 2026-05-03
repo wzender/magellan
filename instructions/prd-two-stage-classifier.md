@@ -26,11 +26,11 @@ The system evaluates classification quality across benchmarks per country. Each 
 
 ## Two-Stage Architecture
 
-### Stage 1 — Free-form Classification + Reasoning
+### Stage 1 — Constrained Classification + Reasoning
 
-**Purpose**: Let the model reason freely and produce a candidate subtype label plus brief rationale, without being constrained to the allowed list yet.
+**Purpose**: Classify the record directly into one of the injected allowed subtypes, or flag it as `unknown` (insufficient signal) or `missing_subtype` (strong signal, no list match). Stage 2 is **not called** when Stage 1 produces a valid allowed label — it is invoked only for the flagged cases.
 
-**Prefix-cache strategy**: The system prompt is identical for all records in the same domain. No few-shots are injected into Stage 1, so the system prompt never varies — maximising vLLM prefix cache hits across the entire batch.
+**Prefix-cache strategy**: The system prompt embeds the full allowed subtype list, making it static per country/batch. Records in the same batch share the same system prompt, maximising vLLM prefix cache hits within a batch. Across countries the cache key differs (different allowed lists), which is unavoidable but acceptable since batches are already grouped by country.
 
 #### Stage 1 — System Prompt
 
@@ -41,17 +41,19 @@ You are a classification assistant specialized in {domain_name}.
 ## Domain Instructions
 {domain_instructions}
 
+## Allowed Subtypes
+{allowed_subtypes_list}
+
 ## Task
-Given a record's attributes and metadata, determine the most appropriate subtype category.
+Given a record's attributes and metadata, pick the single best label from the allowed list above.
 Respond with exactly three lines and nothing else:
-1. SUBTYPE: <your candidate label>
+1. SUBTYPE: <exact label from the allowed list | unknown | missing_subtype>
 2. REASON: <one sentence, max 50 tokens>
 3. SIGNALS: <2–4 key field=value pairs from the input that most influenced your decision, separated by " | ">
 
-If the input provides no clear signal, respond:
-SUBTYPE: unknown
-REASON: Insufficient signal to classify.
-SIGNALS: N/A
+Use "unknown" when the input provides no clear signal.
+Use "missing_subtype" when the signal is strong and clear but does NOT fit any allowed label — even as a synonym or subset. In that case, put your proposed label name after a pipe on the SUBTYPE line:
+  SUBTYPE: missing_subtype | <your proposed label>
 
 Do not output any text before SUBTYPE: or after the SIGNALS: line. No markdown formatting, no preamble, no explanation.
 """.strip()
@@ -62,6 +64,7 @@ Do not output any text before SUBTYPE: or after the SIGNALS: line. No markdown f
 |---|---|
 | `{domain_name}` | Human-readable domain label, e.g. `"e-commerce product support"` |
 | `{domain_instructions}` | Domain-specific guidance for record interpretation (see §Domain Instructions — Stage 1) |
+| `{allowed_subtypes_list}` | Newline-separated list of allowed subtypes, e.g. `"- Admin\n- Billing\n..."` |
 
 ---
 
@@ -89,9 +92,9 @@ Metadata:
 
 #### Few-shot Retrieval → Stage 2 Hints
 
-Few-shots are retrieved via Elastic KNN (cosine similarity) but are **not** injected into Stage 1. Instead, the unique subtype labels from the top-k retrieved records are passed as **nearest subtype hints** to Stage 2's user prompt. This:
-- Keeps Stage 1 unbiased — free to output novel/missing labels
-- Improves Stage 1 prefix cache hit rate (no variable few-shot block)
+Few-shots are retrieved via Elastic KNN (cosine similarity) but are **not** injected into Stage 1. Instead, the unique subtype labels from the top-k retrieved records are passed as **nearest subtype hints** to Stage 2's user prompt. Stage 2 is only called for `unknown` and `missing_subtype` records, so this retrieval step can be skipped for the majority of records that Stage 1 resolves directly. This:
+- Keeps Stage 1 user prompt clean — only record data, no retrieval noise
+- Limits retrieval cost to the flagged subset (typically a small fraction of the batch)
 - Gives Stage 2 retrieval-informed grounding guidance at minimal token cost (~10–20 tokens)
 
 ```python
@@ -111,11 +114,11 @@ def extract_nearest_subtypes(retrieved_fewshots: list, max_hints: int = 5) -> st
 
 ---
 
-### Stage 2 — Semantic Grounding to Allowed List
+### Stage 2 — Validation for Flagged Records Only
 
-**Purpose**: Map the Stage 1 candidate label (and its reasoning) onto the nearest allowed subtype from the injected list. This call is cheap — the candidate + allowed list is the only variable content.
+**Purpose**: Run a second LLM call **only** when Stage 1 outputs `unknown` or `missing_subtype`. For `unknown` records, Stage 2 acts as a second-opinion pass — checking whether Stage 1 was too conservative and the record can actually be grounded to an allowed label. For `missing_subtype` records, Stage 2 validates the proposed label and confirms the gap is genuine. Records where Stage 1 already output a valid allowed label skip Stage 2 entirely.
 
-**Prefix-cache strategy**: The system prompt is identical for all records sharing the same allowed subtype list (it embeds the full list). Only the user turn changes per record.
+**Prefix-cache strategy**: The system prompt embeds the full allowed subtype list and is identical for all flagged records in the same country batch. Only the user turn (the Stage 1 output) varies per record.
 
 #### Stage 2 — System Prompt
 
@@ -246,16 +249,16 @@ To adapt to a new domain, replace both blocks. The Stage 1 block describes the d
 
 ## Signal Strength & Output Logic
 
-| Condition | Stage 1 output | Stage 2 output | Final result |
-|---|---|---|---|
-| Clear match | Valid candidate | Allowed label | The label |
-| Strong candidate, no list match | Valid candidate | `missing_subtype` | `missing_subtype` + Stage 1 candidate preserved as `suggested_label` |
-| Weak / no signal | `unknown` | `unknown` | `unknown` |
-| Forced grounding failure | Any | `unknown` (fallback) | `unknown` |
+| Condition | Stage 1 output | Stage 2 called? | Stage 2 output | Final result |
+|---|---|---|---|---|
+| Clear match in allowed list | Allowed label | **No** | — | The label |
+| Strong signal, no list match | `missing_subtype \| <candidate>` | Yes | confirms or maps | `missing_subtype` + candidate as `suggested_label`, or an allowed label |
+| Weak / no signal | `unknown` | Yes | confirms or resolves | `unknown` or an allowed label |
+| Stage 2 fallback failure | `unknown` | Yes | `unknown` | `unknown` |
 
-**Weak signal definition**: Stage 1 outputs `unknown` OR Stage 2 outputs `unknown`. No confidence score is required; the model's explicit `unknown` declaration is the sole weak-signal gate.
+**Weak signal definition**: Stage 1 explicitly outputs `unknown`. No confidence score is required; the model's declaration is the sole gate.
 
-**Missing subtype definition**: Stage 2 outputs `missing_subtype`. The application preserves Stage 1's `candidate_subtype` as the `suggested_label` for taxonomy review.
+**Missing subtype definition**: Stage 1 outputs `missing_subtype`. Stage 2 validates whether the proposed candidate is genuine or should be grounded to an existing label. If Stage 2 confirms missing, the Stage 1 `candidate_subtype` is preserved as `suggested_label` for taxonomy review.
 
 ---
 
@@ -486,10 +489,12 @@ The Unknowns benchmark closes the loop: every run surfaces both the classifier's
 ## Prompt Rendering Helper (pseudocode)
 
 ```python
-def render_stage1(domain_name, domain_instructions_stage1, attributes, metadata):
+def render_stage1(domain_name, domain_instructions_stage1, allowed_subtypes, attributes, metadata):
+    allowed_subtypes_list = "\n".join(f"- {s}" for s in allowed_subtypes)
     system = STAGE1_SYSTEM.format(
         domain_name=domain_name,
         domain_instructions=domain_instructions_stage1,
+        allowed_subtypes_list=allowed_subtypes_list,
     )
     user = STAGE1_USER.format(
         attributes=attributes,
@@ -500,7 +505,7 @@ def render_stage1(domain_name, domain_instructions_stage1, attributes, metadata)
 
 
 def render_stage2(domain_name, domain_instructions_stage2, allowed_subtypes,
-                  candidate_subtype, candidate_reason, key_signals,
+                  stage1_subtype, candidate_label, stage1_reason, key_signals,
                   nearest_subtypes):
     allowed_subtypes_list = "\n".join(f"- {s}" for s in allowed_subtypes)
     system = STAGE2_SYSTEM.format(
@@ -509,8 +514,8 @@ def render_stage2(domain_name, domain_instructions_stage2, allowed_subtypes,
         allowed_subtypes_list=allowed_subtypes_list,
     )
     user = STAGE2_USER.format(
-        candidate_subtype=candidate_subtype,
-        candidate_reason=candidate_reason,
+        candidate_subtype=candidate_label or stage1_subtype,
+        candidate_reason=stage1_reason,
         key_signals=key_signals,
         nearest_subtypes=nearest_subtypes,
     )
@@ -523,8 +528,8 @@ def render_stage2(domain_name, domain_instructions_stage2, allowed_subtypes,
 ## vLLM Prefix Caching Notes
 
 - **Batching**: Group records by `(allowed_subtypes_fingerprint)` before sending to vLLM. Records sharing the same rendered system prompt will hit the prefix cache on the second+ call in the batch.
-- **Stage 1 cache key**: `hash(STAGE1_SYSTEM.format(domain_name, domain_instructions))` — identical for all records in a domain, maximising cache reuse.
-- **Stage 2 cache key**: `hash(STAGE2_SYSTEM.format(domain_name, domain_instructions, allowed_subtypes_list))`
+- **Stage 1 cache key**: `hash(STAGE1_SYSTEM.format(domain_name, domain_instructions, allowed_subtypes_list))` — identical for all records in the same country batch.
+- **Stage 2 cache key**: `hash(STAGE2_SYSTEM.format(domain_name, domain_instructions, allowed_subtypes_list))` — same scope as Stage 1 but only materialised for flagged records.
 - command-r context window is large enough to hold the full allowed list + instructions in the system prompt without truncation risk.
 
 ---
@@ -536,14 +541,27 @@ def render_stage2(domain_name, domain_instructions_stage2, allowed_subtypes,
 ```python
 import re
 
-def parse_stage1(response_text):
+def parse_stage1(response_text, allowed_subtypes_set):
     subtype_match  = re.search(r"^SUBTYPE:\s*(.+)$", response_text, re.MULTILINE)
     reason_match   = re.search(r"^REASON:\s*(.+)$",  response_text, re.MULTILINE)
     signals_match  = re.search(r"^SIGNALS:\s*(.+)$", response_text, re.MULTILINE)
-    subtype = subtype_match.group(1).strip()  if subtype_match  else "unknown"
-    reason  = reason_match.group(1).strip()   if reason_match   else ""
-    signals = signals_match.group(1).strip()  if signals_match  else "N/A"
-    return subtype, reason, signals
+    raw_subtype = subtype_match.group(1).strip() if subtype_match else "unknown"
+    reason      = reason_match.group(1).strip()  if reason_match  else ""
+    signals     = signals_match.group(1).strip() if signals_match else "N/A"
+
+    # Handle "missing_subtype | <proposed label>"
+    candidate_label = None
+    if raw_subtype.startswith("missing_subtype"):
+        parts = raw_subtype.split("|", 1)
+        subtype = "missing_subtype"
+        candidate_label = parts[1].strip() if len(parts) > 1 else ""
+    elif raw_subtype in allowed_subtypes_set or raw_subtype == "unknown":
+        subtype = raw_subtype
+    else:
+        # Model output something outside the list — treat as unknown for safety
+        subtype = "unknown"
+
+    return subtype, candidate_label, reason, signals
 ```
 
 ### Stage 2 parser
@@ -567,31 +585,35 @@ def parse_stage2(response_text):
 def classify(record, allowed_subtypes, retrieved_fewshots,
              domain_name, domain_instructions_stage1,
              domain_instructions_stage2, llm_client):
-    # Extract nearest subtype hints from retrieval results
-    nearest_subtypes = extract_nearest_subtypes(retrieved_fewshots)
+    allowed_set = set(allowed_subtypes)
 
-    # Stage 1 — unbiased, no few-shots
+    # Stage 1 — constrained to allowed list; Stage 2 called only if needed
     messages1 = render_stage1(domain_name, domain_instructions_stage1,
+                               allowed_subtypes,
                                record["attributes"],
                                record["metadata"])
-    # max_new_tokens=120 covers "SUBTYPE: <label>\nREASON: <text>\nSIGNALS: <pairs>" — reason capped at ~50 tokens, signals at ~40 tokens
+    # max_new_tokens=120 covers "SUBTYPE: <label>\nREASON: <text>\nSIGNALS: <pairs>"
     resp1 = llm_client.chat(messages1, max_new_tokens=120, temperature=0)
-    candidate_subtype, candidate_reason, key_signals = parse_stage1(resp1)
+    stage1_subtype, candidate_label, stage1_reason, key_signals = parse_stage1(resp1, allowed_set)
 
-    # Stage 2 — grounding with retrieval hints
+    # Fast path: Stage 1 resolved to a valid allowed label — skip Stage 2
+    if stage1_subtype not in ("unknown", "missing_subtype"):
+        return {"subtype": stage1_subtype}
+
+    # Slow path: Stage 1 flagged unknown or missing — run Stage 2 for validation
+    nearest_subtypes = extract_nearest_subtypes(retrieved_fewshots)
     messages2 = render_stage2(domain_name, domain_instructions_stage2,
                                allowed_subtypes,
-                               candidate_subtype, candidate_reason,
-                               key_signals, nearest_subtypes)
+                               stage1_subtype, candidate_label or stage1_subtype,
+                               stage1_reason, key_signals, nearest_subtypes)
     resp2 = llm_client.chat(messages2, max_new_tokens=40, temperature=0)
     final_label = parse_stage2(resp2)
 
-    # Build result with missing subtype detection
     if final_label == "missing_subtype":
         return {
             "subtype": "missing_subtype",
-            "suggested_label": candidate_subtype,
-            "reason": candidate_reason,
+            "suggested_label": candidate_label or stage1_subtype,
+            "reason": stage1_reason,
             "signals": key_signals,
         }
     return {"subtype": final_label}
@@ -604,9 +626,10 @@ def classify(record, allowed_subtypes, retrieved_fewshots,
 1. Each LLM call is a `[system, user]` message pair — no combined single-turn prompts.
 2. All prompt strings are Python `str` literals usable with `.format(**kwargs)`.
 3. Domain Instructions are split into two blocks: Stage 1 (record interpretation) and Stage 2 (label grounding). Both must be replaced when adapting to a new domain.
-4. Few-shots are NOT injected into Stage 1. Instead, retrieved nearest subtype labels are passed as hints to Stage 2.
-5. The pipeline outputs one of: an allowed subtype label, `"unknown"`, or `"missing_subtype"` (with `suggested_label` from Stage 1).
-6. Stage 1 total response budget is `max_new_tokens=120`; covers the label (~10 tokens), reason (~50 tokens), and signals (~40 tokens).
-7. Both LLM calls use `temperature=0` (greedy decoding) — recommended by Cohere for classification tasks and ensures deterministic output format.
-8. Stage 1 system prompt is fully static per domain — no per-record or per-batch variation — enabling maximum vLLM prefix cache reuse.
-9. Missing subtypes are detected via the explicit `missing_subtype` keyword from Stage 2. The original candidate label from Stage 1 is preserved as `suggested_label`.
+4. Few-shots are NOT injected into Stage 1. Retrieved nearest subtype labels are passed as hints to Stage 2 only when Stage 2 is invoked.
+5. Stage 2 is invoked **only** when Stage 1 outputs `unknown` or `missing_subtype`. Records resolved to a valid allowed label in Stage 1 skip Stage 2 entirely.
+6. The pipeline outputs one of: an allowed subtype label, `"unknown"`, or `"missing_subtype"` (with `suggested_label` from Stage 1).
+7. Stage 1 total response budget is `max_new_tokens=120`; covers the label (~10 tokens), reason (~50 tokens), and signals (~40 tokens).
+8. Both LLM calls use `temperature=0` (greedy decoding) — recommended by Cohere for classification tasks and ensures deterministic output format.
+9. Stage 1 system prompt is static per country batch (domain + allowed list) — no per-record variation — enabling vLLM prefix cache reuse within the batch.
+10. Missing subtypes are detected via the `missing_subtype` keyword from Stage 1 (and confirmed/mapped by Stage 2). The Stage 1 candidate label is preserved as `suggested_label`.
