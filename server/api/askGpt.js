@@ -10,6 +10,7 @@ const fetch = require('node-fetch');
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL      = process.env.OPENAI_MODEL      || 'gpt-4o-mini';
 const OPENAI_JUDGE_MODEL = process.env.OPENAI_JUDGE_MODEL || OPENAI_MODEL;
+const OPENAI_JUDGE_MAX_TOKENS = parseInt(process.env.OPENAI_JUDGE_MAX_TOKENS, 10) || 220;
 const OPENAI_API_URL    = process.env.OPENAI_API_URL    || 'https://api.openai.com/v1/chat/completions';
 const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS, 10) || 200;
 const TIMEOUT_MS        = 20000;
@@ -169,7 +170,7 @@ router.post('/ask-gpt', async (req, res) => {
   try {
     if (judge_mode) {
       const allowedList = Array.isArray(allowed_subtypes) && allowed_subtypes.length > 0
-        ? allowed_subtypes.map(s => `- ${s}`).join('\n')
+        ? [...new Set(allowed_subtypes)].map(s => `- ${s}`).join('\n')
         : '- N/A';
       const nearestHints = Array.isArray(nearest_subtypes) && nearest_subtypes.length > 0
         ? nearest_subtypes.join(', ')
@@ -221,10 +222,11 @@ ${JSON.stringify(attributes, null, 2)}
 Metadata:
 ${JSON.stringify(metadata, null, 2)}`;
 
+      console.log('[ask-gpt] judge prompt:\n  SYSTEM:', systemPrompt, '\n  USER:', userPrompt);
       const { data, raw } = await callChat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], 220, OPENAI_JUDGE_MODEL);
+      ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL);
 
       const parsed = parseJsonObject(raw) || {};
       const decision = normalizeJudgeDecision(parsed.decision || parsed.verdict || raw, predicted_status || stage2_subtype);

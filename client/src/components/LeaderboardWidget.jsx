@@ -215,7 +215,14 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               return (
                 <tr
                   key={row.run_id}
-                  onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
+                  onClick={() => {
+                    if (row.table_exists === false || !onRunSelect) return;
+                    console.log(`[leaderboard] row click → GET /api/records?run_id=${row.run_id}&limit=999999`);
+                    console.log(`[leaderboard] row click → GET /api/gpt-results?run_id=${row.run_id}`);
+                    console.log(`[leaderboard] row click → GET /api/missing-subtypes?run_id=${row.run_id}`);
+                    console.log(`[leaderboard] row click → GET /api/validation?run_id=${row.run_id}`);
+                    onRunSelect(row.run_id);
+                  }}
                   className={[
                     isSelected ? 'selected selected-run1' : '',
                     row.table_exists === false ? 'table-missing' : '',
@@ -291,7 +298,11 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             {sortedData.map((row) => (
               <tr
                 key={row.run_id}
-                onClick={() => row.table_exists !== false && onRunSelect && onRunSelect(row.run_id)}
+                onClick={() => {
+                  if (row.table_exists === false || !onRunSelect) return;
+                  console.log(`[leaderboard] row click → GET /api/type-health?run_id=${row.run_id}`);
+                  onRunSelect(row.run_id);
+                }}
                 className={[
                   selectedRuns[0] === row.run_id ? 'selected selected-run1' :
                   selectedRuns[1] === row.run_id ? 'selected selected-run2' : '',
@@ -313,7 +324,19 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                           title={isDisabled ? 'Uncheck one of the selected runs first — comparison is limited to 2 runs' : undefined}
                           onClick={(event) => {
                             event.stopPropagation();
-                            if (!isDisabled) onRunToggle && onRunToggle(row.run_id);
+                            if (isDisabled) return;
+                            const willSelect = !isChecked;
+                            const nextSelected = willSelect
+                              ? [...selectedRuns, row.run_id]
+                              : selectedRuns.filter(id => id !== row.run_id);
+                            if (nextSelected.length === 2) {
+                              const [id1, id2] = nextSelected;
+                              console.log(`[leaderboard] compare → GET /api/type-health?run_id=${id2}`);
+                              console.log(`[leaderboard] compare → GET /api/compare-type-health?run_id1=${id1}&run_id2=${id2}`);
+                            } else if (nextSelected.length === 1) {
+                              console.log(`[leaderboard] compare → GET /api/type-health?run_id=${nextSelected[0]}`);
+                            }
+                            onRunToggle && onRunToggle(row.run_id);
                           }}
                         >
                           <input
