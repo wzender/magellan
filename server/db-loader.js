@@ -283,9 +283,25 @@ async function getRun(id) {
 }
 
 async function getLeaderboardByBenchmarkId(benchmarkId) {
-  const { leaderboard } = await getRunIndex();
+  const { leaderboard, benchmarks, runs } = await getRunIndex();
   const rows = leaderboard.filter(l => l.benchmark_id === benchmarkId);
-  // benchmark_length already populated from nof_items; no extra query needed
+
+  const benchmark = benchmarks.find(b => b.id === benchmarkId);
+  if (benchmark && benchmark.name.toLowerCase() === 'unknowns') {
+    await Promise.all(rows.map(async (row) => {
+      const run = runs.find(r => r.id === row.run_id);
+      if (!run) return;
+      try {
+        const result = await query(
+          `SELECT COUNT(*) AS cnt FROM "${run.run_name}" WHERE LOWER(TRIM(COALESCE(pred_subtype_2,''))) = 'unknown'`
+        );
+        row.benchmark_length = parseInt(result.rows[0].cnt) || 0;
+      } catch (err) {
+        if (!isTableMissing(err)) throw err;
+      }
+    }));
+  }
+
   return rows.sort((a, b) => b.subtype_weighted_f1 - a.subtype_weighted_f1);
 }
 
@@ -296,13 +312,16 @@ async function getConfusionMatrix(runId, _matrixType = 'type', incorrectOnly = f
 
   const tbl = run.run_name;
   const incorrectClause = incorrectOnly ? ' AND pred_subtype != true_subtype' : '';
+  const unknownsClause = (run.benchmark_name || '').toLowerCase() === 'unknowns'
+    ? ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('unknown', 'missing'))`
+    : '';
 
   let result;
   try {
     result = await query(
       `SELECT true_type, pred_type, true_subtype, pred_subtype, COUNT(*) AS cnt
        FROM "${tbl}"
-       WHERE 1=1${incorrectClause}
+       WHERE 1=1${incorrectClause}${unknownsClause}
        GROUP BY true_type, pred_type, true_subtype, pred_subtype`
     );
   } catch (err) {
@@ -591,6 +610,10 @@ async function getRecords(filters = {}) {
   if (filters.correctOnly)    { where += ` AND pred_subtype = true_subtype`; }
   if (filters.sameTypeOnly)   { where += ` AND pred_subtype != true_subtype AND pred_type = true_type`; }
   if (filters.crossTypeOnly)  { where += ` AND pred_type != true_type`; }
+
+  if ((run.benchmark_name || '').toLowerCase() === 'unknowns') {
+    where += ` AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('unknown', 'missing'))`;
+  }
 
   const baseSQL = `FROM "${tbl}" WHERE ${where}`;
 
@@ -1280,31 +1303,18 @@ async function getCalibrationPerType(runId, bins = 10) {
     .sort((a, b) => a.ece - b.ece);
 }
 
-/* ── Missing Subtype Decisions (file-based, same as csv-loader) ── */
+/* ── Missing Subtype Decisions (stored in run table columns) ── */
 
-const MISSING_SUBTYPES_FILE = path.join(__dirname, '../data/missing_subtype_decisions.json');
-
-function getMissingSubtypeDecisions(runId) {
-  if (!fs.existsSync(MISSING_SUBTYPES_FILE)) return {};
-  try {
-    const raw = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8'));
-    return raw[String(runId)] || {};
-  } catch { return {}; }
-}
-
-function updateMissingSubtypeDecision(runId, requestId, status, mappedTo) {
-  let all = {};
-  if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
-    try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
-  }
-  const key = String(runId);
-  if (!all[key]) all[key] = {};
-  if (status === null || status === undefined) {
-    delete all[key][String(requestId)];
-  } else {
-    all[key][String(requestId)] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
-  }
-  fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
+async function updateMissingSubtypeDecision(runId, requestId, trueSubtype) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+  const tbl = run.run_name;
+  const idCol = await getIdColumn(tbl);
+  await query(
+    `UPDATE "${tbl}" SET true_subtype = $1 WHERE ${idCol} = $2`,
+    [trueSubtype || null, String(requestId)]
+  );
 }
 
 async function publishRetagged(runId) {
@@ -1350,13 +1360,12 @@ async function getMissingSubtypeGroups(runId) {
   const missingCol = colCheck.rows[0].column_name;
 
   const result = await query(
-    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, ${missingCol} AS missing_subtype, attributes, metadata
+    `SELECT ${idCol} AS request_id, pred_subtype_1, pred_subtype_2, ${missingCol} AS missing_subtype, attributes, metadata, true_subtype
      FROM "${tbl}"
      WHERE ${missingCol} IS NOT NULL AND ${missingCol} != ''`,
     []
   );
 
-  const decisions = getMissingSubtypeDecisions(runId);
   const groups = {};
 
   result.rows.forEach(r => {
@@ -1374,7 +1383,7 @@ async function getMissingSubtypeGroups(runId) {
       missing_subtype: r.missing_subtype,
       attributes:     attrs,
       metadata:       meta,
-      decision:       decisions[String(r.request_id)] || null,
+      true_subtype:   r.true_subtype || null,
     });
   });
 
@@ -1410,7 +1419,6 @@ module.exports = {
   getConfidenceQuality,
   getCalibrationPerType,
   getMissingSubtypeGroups,
-  getMissingSubtypeDecisions,
   updateMissingSubtypeDecision,
   exportRunCsv,
   publishRetagged,

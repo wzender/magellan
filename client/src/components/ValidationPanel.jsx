@@ -103,8 +103,8 @@ const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', me
 
 const GPT_VERDICT_CONFIG = {
   truly_unknown:        { label: 'Truly Unknown',   cls: 'gpt-verdict-truly-unknown' },
-  wrong_subtype:        { label: 'Wrong Subtype',    cls: 'gpt-verdict-wrong-subtype' },
-  missing_but_mappable: { label: 'Mappable',         cls: 'gpt-verdict-mappable' },
+  wrong_subtype:        { label: 'Valid Subtype',    cls: 'gpt-verdict-wrong-subtype' },
+  missing_but_mappable: { label: 'Close Subtype',    cls: 'gpt-verdict-mappable' },
   true_missing_subtype: { label: 'True Missing',     cls: 'gpt-verdict-true-missing' },
 };
 

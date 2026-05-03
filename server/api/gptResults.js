@@ -10,7 +10,7 @@ require('dotenv').config();
 const express = require('express');
 const router  = express.Router();
 
-const usePostgres = (process.env.DATA_SOURCE || 'postgres').toLowerCase() === 'postgres'
+const usePostgres = (process.env.DATA_SOURCE || 'csv').toLowerCase() === 'postgres'
                  && !!process.env.DATABASE_URL;
 
 const { query }                       = usePostgres ? require('../db') : {};

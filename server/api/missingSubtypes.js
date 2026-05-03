@@ -17,13 +17,13 @@ router.get('/missing-subtypes', async (req, res) => {
 });
 
 // PUT /api/missing-subtypes
-// Body: { run_id, request_id, status, mapped_to? }
-// status: 'accepted' | 'mapped' | 'rejected' | null (to clear)
-router.put('/missing-subtypes', (req, res) => {
-  const { run_id, request_id, status, mapped_to } = req.body;
+// Body: { run_id, request_id, true_subtype }
+// true_subtype: any allowed subtype string, 'Missing', or null (to clear)
+router.put('/missing-subtypes', async (req, res) => {
+  const { run_id, request_id, true_subtype } = req.body;
   if (!run_id || !request_id) return res.status(400).json({ error: 'run_id and request_id are required' });
   try {
-    dbLoader.updateMissingSubtypeDecision(parseInt(run_id, 10), request_id, status, mapped_to);
+    await dbLoader.updateMissingSubtypeDecision(parseInt(run_id, 10), request_id, true_subtype);
     res.json({ ok: true });
   } catch (error) {
     console.error('Error updating missing subtype decision:', error);

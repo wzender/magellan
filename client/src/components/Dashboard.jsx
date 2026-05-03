@@ -75,6 +75,8 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 
   rows.forEach(r => {
     const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
+    if (status !== 'unknown') return;
+
     const saved = gpt[r.request_id];
     if (!saved) return;
 
@@ -103,7 +105,7 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
   });
 
   return {
-    benchmark_length: rows.length,
+    benchmark_length: unknownsCount,
     unknowns_count: unknownsCount,
     missing_count: missingCount,
     reviewed_count: reviewedCount,
@@ -119,20 +121,20 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 
 /* ── Missing subtype leaderboard stats (client-side, from /api/missing-subtypes groups) ── */
 function computeMissingSubtypeStats(groups, gptData) {
-  let total = 0, accepted = 0, mapped = 0, gptReviewed = 0;
+  let total = 0, tagged = 0, missingTagged = 0, gptReviewed = 0;
   groups.forEach(g => {
     (g.records || []).forEach(r => {
       total++;
       if (gptData && gptData[String(r.request_id)]) gptReviewed++;
-      if (r.decision?.status === 'accepted') accepted++;
-      else if (r.decision?.status === 'mapped') mapped++;
+      if (r.true_subtype === 'Missing') missingTagged++;
+      else if (r.true_subtype) tagged++;
     });
   });
   return {
     missing_candidates_total: total,
     missing_candidates_unreviewed: total - gptReviewed,
-    missing_candidates_accepted: accepted,
-    missing_candidates_mapped: mapped,
+    missing_candidates_accepted: tagged,
+    missing_candidates_mapped: missingTagged,
   };
 }
 
@@ -581,43 +583,25 @@ function Dashboard() {
   }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Unknowns: save missing subtype decision (optimistic) ── */
-  const handleMissingSubtypeDecision = useCallback(async (requestId, status, mappedTo) => {
+  const handleMissingSubtypeDecision = useCallback(async (requestId, trueSubtype) => {
     const runId = selectedRunIds[0];
-
-    // Read old status before overwriting
-    let oldStatus = null;
-    for (const g of missingSubtypeGroups) {
-      const rec = g.records.find(r => String(r.request_id) === String(requestId));
-      if (rec) { oldStatus = rec.decision?.status || null; break; }
-    }
 
     setMissingSubtypeGroups(prev => prev.map(g => ({
       ...g,
       records: g.records.map(r =>
         String(r.request_id) === String(requestId)
-          ? { ...r, decision: status ? { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) } : null }
+          ? { ...r, true_subtype: trueSubtype || null }
           : r
       ),
     })));
 
-    // Optimistic leaderboard update
-    setLeaderboard(prev => prev.map(r => {
-      if (r.run_id !== runId) return r;
-      const newAcc = Math.max(0, (r.missing_candidates_accepted || 0)
-        - (oldStatus === 'accepted' ? 1 : 0)
-        + (status === 'accepted' ? 1 : 0));
-      const newMap = Math.max(0, (r.missing_candidates_mapped || 0)
-        - (oldStatus === 'mapped' ? 1 : 0)
-        + (status === 'mapped' ? 1 : 0));
-      return { ...r, missing_candidates_accepted: newAcc, missing_candidates_mapped: newMap };
-    }));
-
     await fetch('/api/missing-subtypes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), status, mapped_to: mappedTo }),
+      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: trueSubtype }),
     });
-  }, [selectedRunIds, missingSubtypeGroups]);
+    await refreshUnknownsRunStats(runId);
+  }, [selectedRunIds, refreshUnknownsRunStats]);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
@@ -932,7 +916,7 @@ function Dashboard() {
           )}
 
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (() => {
-            const missingCount = missingSubtypeGroups.length;
+            const missingCount = missingSubtypeGroups.reduce((sum, g) => sum + (g.records?.length || 0), 0);
             return (
               <div className="unknowns-view">
                 <div className="unknowns-view-header">

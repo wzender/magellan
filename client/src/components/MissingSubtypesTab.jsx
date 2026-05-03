@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 /* ── GPT helpers (mirrored from ValidationPanel) ────────────────────────── */
 const GPT_VERDICT_CONFIG = {
   truly_unknown:        { label: 'Truly Unknown', cls: 'gpt-verdict-truly-unknown' },
-  wrong_subtype:        { label: 'Wrong Subtype',  cls: 'gpt-verdict-wrong-subtype' },
-  missing_but_mappable: { label: 'Mappable',        cls: 'gpt-verdict-mappable' },
-  true_missing_subtype: { label: 'True Missing',    cls: 'gpt-verdict-true-missing' },
+  wrong_subtype:        { label: 'Valid Subtype',  cls: 'gpt-verdict-wrong-subtype' },
+  missing_but_mappable: { label: 'Close Subtype',  cls: 'gpt-verdict-mappable' },
+  true_missing_subtype: { label: 'True Missing',   cls: 'gpt-verdict-true-missing' },
 };
 
 function GptVerdictBadge({ gpt }) {
@@ -64,26 +64,25 @@ function getGptSubtypeSource(result) {
   return 'none';
 }
 
-/* ── Per-record decision badge ───────────────────────────────────────────── */
-const STATUS_LABELS  = { accepted: 'Accepted', mapped: 'Mapped' };
-const STATUS_CLASSES = { accepted: 'missing-decision-accepted', mapped: 'missing-decision-mapped' };
-
-function DecisionBadge({ decision }) {
-  if (!decision) return <span className="missing-decision-badge missing-decision-unreviewed">Unreviewed</span>;
-  const label = STATUS_LABELS[decision.status] || decision.status;
-  const cls   = STATUS_CLASSES[decision.status] || '';
-  const extra = decision.mapped_to ? ` → ${decision.mapped_to}` : '';
-  return <span className={`missing-decision-badge ${cls}`}>{label}{extra}</span>;
+/* ── Per-record true_subtype badge ───────────────────────────────────────── */
+function TrueSubtypeBadge({ trueSubtype }) {
+  if (!trueSubtype) return <span className="missing-decision-badge missing-decision-unreviewed">Untagged</span>;
+  if (trueSubtype === 'Missing') return <span className="missing-decision-badge missing-decision-mapped">Missing</span>;
+  return <span className="missing-decision-badge missing-decision-accepted">{trueSubtype}</span>;
 }
 
-/* ── Per-record decision controls (Accept / Map) ────────────────────────── */
-function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
+/* ── Per-record decision controls (Accept GPT / Map / Missing) ──────────── */
+function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
   const [mappingOpen, setMappingOpen] = useState(false);
   const [mapQuery, setMapQuery]       = useState('');
   const dropdownRef = useRef(null);
-  const { decision } = record;
 
-  const subtypeOptions = (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
+  const currentSubtype = record.true_subtype || null;
+  const gptProposal    = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
+  const allowedSet     = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
+  const gptIsValid     = Boolean(gptProposal && allowedSet.has(gptProposal));
+
+  const subtypeOptions  = [...allowedSet];
   const filteredOptions = mapQuery
     ? subtypeOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
     : subtypeOptions;
@@ -100,25 +99,38 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [mappingOpen]);
 
+  const handleAcceptGpt = () => {
+    onDecision(record.request_id, currentSubtype === gptProposal ? null : gptProposal);
+  };
+
   const handleMap = (subtype) => {
-    onDecision(record.request_id, 'mapped', subtype);
+    onDecision(record.request_id, subtype);
     setMappingOpen(false);
     setMapQuery('');
   };
 
+  const handleMissing = () => {
+    onDecision(record.request_id, currentSubtype === 'Missing' ? null : 'Missing');
+  };
+
+  const isGptActive     = gptIsValid && currentSubtype === gptProposal;
+  const isMissingActive = currentSubtype === 'Missing';
+  const isMappedActive  = Boolean(currentSubtype && currentSubtype !== 'Missing' && !isGptActive);
+
   return (
     <div className="missing-group-actions missing-record-actions">
       <button
-        className={`missing-action missing-action-accept${decision?.status === 'accepted' ? ' active' : ''}`}
-        onClick={() => onDecision(record.request_id, decision?.status === 'accepted' ? null : 'accepted', null)}
-        title="Accept as new subtype"
+        className={`missing-action missing-action-accept${isGptActive ? ' active' : ''}`}
+        disabled={!gptIsValid}
+        onClick={handleAcceptGpt}
+        title={gptIsValid ? `Accept GPT proposal: ${gptProposal}` : 'GPT has not proposed a valid allowed subtype'}
       >
-        Accept
+        Accept GPT
       </button>
 
       <div className="missing-action-map-wrap" ref={dropdownRef}>
         <button
-          className={`missing-action missing-action-map${decision?.status === 'mapped' ? ' active' : ''}`}
+          className={`missing-action missing-action-map${isMappedActive ? ' active' : ''}`}
           onClick={() => setMappingOpen(o => !o)}
           title="Map to existing subtype"
         >
@@ -134,16 +146,10 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
               autoFocus
             />
             <ul className="missing-map-list">
-              <li
-                className={`subtype-combobox-option subtype-combobox-unknown${decision?.mapped_to === 'unknown' ? ' selected' : ''}`}
-                onMouseDown={e => { e.preventDefault(); handleMap('unknown'); }}
-              >
-                Unknown
-              </li>
               {filteredOptions.map(s => (
                 <li
                   key={s}
-                  className={`missing-map-option${decision?.mapped_to === s ? ' selected' : ''}`}
+                  className={`missing-map-option${currentSubtype === s ? ' selected' : ''}`}
                   onMouseDown={e => { e.preventDefault(); handleMap(s); }}
                 >
                   {s}
@@ -156,6 +162,14 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
           </div>
         )}
       </div>
+
+      <button
+        className={`missing-action missing-action-missing${isMissingActive ? ' active' : ''}`}
+        onClick={handleMissing}
+        title="Tag as genuinely missing subtype"
+      >
+        Missing
+      </button>
     </div>
   );
 }
@@ -276,21 +290,23 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
   const totalRecords       = allRecords.length;
   const gptReviewedCount   = allRecords.filter(r => gptResults[r.request_id]).length;
   const gptUnreviewedCount = totalRecords - gptReviewedCount;
-  const acceptedCount      = allRecords.filter(r => r.decision?.status === 'accepted').length;
-  const mappedCount        = allRecords.filter(r => r.decision?.status === 'mapped').length;
-  const humanDecidedCount  = acceptedCount + mappedCount;
+  const taggedCount        = allRecords.filter(r => r.true_subtype && r.true_subtype !== 'Missing').length;
+  const missingTaggedCount = allRecords.filter(r => r.true_subtype === 'Missing').length;
+  const humanDecidedCount  = taggedCount + missingTaggedCount;
 
   const filtered = allRecords.filter(r => {
     if (statusFilter === 'all')        return true;
     if (statusFilter === 'unreviewed') return !gptResults[r.request_id];
-    return r.decision?.status === statusFilter;
+    if (statusFilter === 'tagged')     return r.true_subtype && r.true_subtype !== 'Missing';
+    if (statusFilter === 'missing')    return r.true_subtype === 'Missing';
+    return true;
   });
 
   const tabs = [
     { key: 'all',        label: 'All',       count: totalRecords },
     { key: 'unreviewed', label: 'Unreviewed', count: gptUnreviewedCount },
-    { key: 'accepted',   label: 'Accepted',   count: acceptedCount },
-    { key: 'mapped',     label: 'Mapped',     count: mappedCount },
+    { key: 'tagged',     label: 'Tagged',     count: taggedCount },
+    { key: 'missing',    label: 'Missing',    count: missingTaggedCount },
   ];
 
   const renderJson = (val) => {
@@ -350,7 +366,7 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               <th style={{ width: 120 }}>Pred Subtype 2</th>
               <th style={{ width: 220 }}>GPT Verdict</th>
               <th style={{ width: 140 }}>GPT Subtype</th>
-              <th style={{ width: 260 }}>Decision</th>
+              <th style={{ width: 280 }}>True Subtype</th>
             </tr>
           </thead>
           <tbody>
@@ -383,9 +399,10 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
                     )}
                   </td>
                   <td className="cell-missing-decision">
-                    <DecisionBadge decision={r.decision} />
+                    <TrueSubtypeBadge trueSubtype={r.true_subtype} />
                     <RecordDecisionControls
                       record={r}
+                      gpt={gpt}
                       countrySubtypes={countrySubtypes}
                       onDecision={onDecision}
                     />

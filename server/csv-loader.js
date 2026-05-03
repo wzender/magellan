@@ -71,6 +71,8 @@ function isCountryValidSubtype(validSubtypes, subtype) {
 
 let dataCache = null;
 
+function clearCache() { dataCache = null; }
+
 function loadTranslationsFile() {
   if (!fs.existsSync(TRANSLATIONS_FILE)) return {};
   try { return JSON.parse(fs.readFileSync(TRANSLATIONS_FILE, 'utf-8')); } catch { return {}; }
@@ -168,17 +170,31 @@ function loadData() {
     }
     const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
 
+    const unknownsMeta = unknownSubtypeMetaByRun[run.id];
+    const isUnknownsRun = run.benchmark_id === unknownsBenchmarkId;
     const lbEntry = leaderboard.find(l => l.run_id === run.id);
-    if (lbEntry) lbEntry.benchmark_length = records.length;
+    if (lbEntry) {
+      if (isUnknownsRun) {
+        lbEntry.benchmark_length = records.filter(r =>
+          String(r.pred_subtype_2 || '').trim().toLowerCase() === 'unknown'
+        ).length;
+      } else {
+        lbEntry.benchmark_length = records.length;
+      }
+    }
 
     records.forEach((r, idx) => {
-      const unknownsMeta = unknownSubtypeMetaByRun[run.id];
+      if (isUnknownsRun) {
+        const ps2 = String(r.pred_subtype_2 || '').trim().toLowerCase();
+        if (ps2 && ps2 !== 'unknown' && ps2 !== 'missing') return;
+      }
+
       const predSubtype1 = r.pred_subtype_1
         ? r.pred_subtype_1
         : (unknownsMeta?.invalidSubtypes?.length
           ? unknownsMeta.invalidSubtypes[idx % unknownsMeta.invalidSubtypes.length]
           : r.pred_subtype);
-      const predSubtype2 = unknownsMeta && r.pred_subtype_2
+      const predSubtype2 = r.pred_subtype_2
         ? String(r.pred_subtype_2).trim() || null
         : null;
       const missingOutput = r.missing_output ? String(r.missing_output).trim() : null;
@@ -1002,34 +1018,38 @@ function updateGptResults(runId, results) {
 
 /* ── Missing Subtype Decisions ───────────────────────────── */
 
-const MISSING_SUBTYPES_FILE = path.join(DATA_DIR, 'missing_subtype_decisions.json');
+function updateMissingSubtypeDecision(runId, requestId, trueSubtype) {
+  const data = loadData();
+  const run = data.runs.find(r => r.id === runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
 
-function getMissingSubtypeDecisions(runId) {
-  if (!fs.existsSync(MISSING_SUBTYPES_FILE)) return {};
-  try {
-    const raw = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8'));
-    return raw[String(runId)] || {};
-  } catch { return {}; }
-}
+  const fname = runFileName(run.benchmark_id, run.run_name);
+  const fpath = path.join(RUNS_DIR, fname);
+  if (!fs.existsSync(fpath)) throw new Error(`Run file not found: ${fname}`);
 
-function updateMissingSubtypeDecision(runId, requestId, status, mappedTo) {
-  let all = {};
-  if (fs.existsSync(MISSING_SUBTYPES_FILE)) {
-    try { all = JSON.parse(fs.readFileSync(MISSING_SUBTYPES_FILE, 'utf-8')); } catch {}
+  const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
+  const baseHeaders = Object.keys(records[0] || {});
+  const headers = baseHeaders.includes('true_subtype') ? baseHeaders : ['true_subtype', ...baseHeaders];
+
+  const updated = records.map(r => {
+    if (String(r.request_id) !== String(requestId)) return r;
+    return { ...r, true_subtype: trueSubtype || '' };
+  });
+
+  const csvContent = [
+    headers.join(','),
+    ...updated.map(r => headers.map(h => csvEscapeCell(r[h])).join(',')),
+  ].join('\n') + '\n';
+  fs.writeFileSync(fpath, csvContent, 'utf-8');
+
+  const record = data.run_results.find(r => r.run_id === runId && String(r.request_id) === String(requestId));
+  if (record) {
+    record.true_subtype = trueSubtype || null;
   }
-  const key = String(runId);
-  if (!all[key]) all[key] = {};
-  if (status === null || status === undefined) {
-    delete all[key][String(requestId)];
-  } else {
-    all[key][String(requestId)] = { status, ...(mappedTo ? { mapped_to: mappedTo } : {}) };
-  }
-  fs.writeFileSync(MISSING_SUBTYPES_FILE, JSON.stringify(all, null, 2), 'utf-8');
 }
 
 function getMissingSubtypeGroups(runId) {
   const data = loadData();
-  const decisions = getMissingSubtypeDecisions(runId);
   const groups = {};
 
   data.run_results
@@ -1038,22 +1058,18 @@ function getMissingSubtypeGroups(runId) {
       const candidate = r.missing_subtype;
       if (!groups[candidate]) groups[candidate] = { candidate, records: [] };
       groups[candidate].records.push({
-        request_id:     r.request_id,
-        pred_subtype_1: r.pred_subtype_1,
-        pred_subtype_2: r.pred_subtype_2,
+        request_id:      r.request_id,
+        pred_subtype_1:  r.pred_subtype_1,
+        pred_subtype_2:  r.pred_subtype_2,
         missing_subtype: r.missing_subtype,
-        attributes:     r.attributes,
-        metadata:       r.metadata,
-        decision:       decisions[String(r.request_id)] || null,
+        attributes:      r.attributes,
+        metadata:        r.metadata,
+        true_subtype:    r.true_subtype || null,
       });
     });
 
   return Object.values(groups)
-    .map(g => ({
-      candidate: g.candidate,
-      count:     g.records.length,
-      records:   g.records,
-    }))
+    .map(g => ({ candidate: g.candidate, count: g.records.length, records: g.records }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -1093,6 +1109,7 @@ function exportRunCsv(runId) {
 
 module.exports = {
   loadData,
+  clearCache,
   getAllBenchmarks,
   getBenchmark,
   getRunsByBenchmarkId,
@@ -1116,7 +1133,6 @@ module.exports = {
   getGptResults,
   updateGptResults,
   getMissingSubtypeGroups,
-  getMissingSubtypeDecisions,
   updateMissingSubtypeDecision,
   exportRunCsv,
   publishRetagged,

@@ -183,18 +183,16 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
           <thead>
             <tr className="unknowns-leaderboard-group-row">
               <th rowSpan={2} style={{ width: 180 }}>Country</th>
-              <th colSpan={6} className="unknowns-leaderboard-group-header unknowns-group-validation">Unknown Validation</th>
+              <th colSpan={4} className="unknowns-leaderboard-group-header unknowns-group-validation">Unknown Validation</th>
               <th colSpan={4} className="unknowns-leaderboard-group-header unknowns-group-missing">Missing Subtypes</th>
             </tr>
             <tr>
-              <th style={{ width: 70 }} title="Total records in this run">Total</th>
-              <th style={{ width: 90 }} title="Records that have received a GPT verdict">Reviewed</th>
+              <th style={{ width: 70 }} title="Total unknown-validation records in this run">Total</th>
+              <th style={{ width: 90 }} title="Records that have received a GPT verdict">GPT Reviewed</th>
+              <th style={{ width: 100 }} title="GPT judged: classifier correctly found no subtype signal — the record is genuinely unclassifiable">GPT Unknown</th>
               <th style={{ width: 90 }} title="Records where a human has assigned a true subtype">Retagged</th>
-              <th style={{ width: 100 }} title="GPT judged: classifier correctly found no subtype signal">Truly Unknown</th>
-              <th style={{ width: 100 }} title="GPT judged: a subtype exists but was predicted incorrectly">Wrong Subtype</th>
-              <th style={{ width: 90 }} title="GPT judged: subtype is not in the allowed list but can be mapped to one">Mappable</th>
               <th style={{ width: 70 }} title="Total missing-subtype records across all candidate groups">Total</th>
-              <th style={{ width: 90 }} title="Records with a human decision (accepted / mapped) out of total">Reviewed</th>
+              <th style={{ width: 90 }} title="Records with a human decision (accepted / mapped) out of total">GPT Reviewed</th>
               <th style={{ width: 80 }} title="Records accepted as a new official subtype">Accepted</th>
               <th style={{ width: 70 }} title="Records mapped to an existing allowed subtype">Mapped</th>
             </tr>
@@ -221,15 +219,13 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                     {date && <span className="unknowns-run-date">{date.toISOString().slice(0, 10)}</span>}
                   </td>
                   <td className="metric">{total}</td>
-                  <td className="metric">{reviewed}<span className="metric-of">/{total}</span></td>
-                  <td className="metric">{row.retagged_count || 0}<span className="metric-of">/{total}</span></td>
+                  <td className="metric">{reviewed}</td>
                   <td className="metric">{row.truly_unknown_count || 0}</td>
-                  <td className="metric">{row.wrong_subtype_count || 0}</td>
-                  <td className="metric">{row.mappable_count || 0}</td>
+                  <td className="metric">{row.retagged_count || 0}</td>
                   <td className="metric">{row.missing_candidates_total ?? '—'}</td>
                   <td className={`metric${(row.missing_candidates_unreviewed || 0) > 0 ? ' metric-warning' : ''}`}>
                     {row.missing_candidates_total != null
-                      ? `${(row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)}/${row.missing_candidates_total}`
+                      ? `${(row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)}`
                       : '—'}
                   </td>
                   <td className="metric">{row.missing_candidates_accepted ?? '—'}</td>
