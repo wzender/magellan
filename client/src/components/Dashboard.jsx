@@ -114,6 +114,8 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     false_unknown_count: falseUnknownCount,
     false_missing_count: falseMissingCount,
     truly_unknown_count: trulyUnknownCount,
+    gpt_unknown_agree_count: trulyUnknownCount,
+    gpt_unknown_agree_rate: unknownsCount > 0 ? (trulyUnknownCount / unknownsCount) : 0,
     wrong_subtype_count: wrongSubtypeCount,
     mappable_count: mappableCount,
   };

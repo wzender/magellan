@@ -128,6 +128,40 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
 
   const sortedData = getSortedData();
 
+  const summaryRows = isUnknowns && selectedRuns.length > 0
+    ? sortedData.filter(row => selectedRuns.includes(row.run_id))
+    : sortedData;
+
+  const unknownsSummary = isUnknowns
+    ? summaryRows.reduce((acc, row) => {
+      const unknownsTotal = row.benchmark_length || 0;
+      const missingTotal = row.missing_candidates_total ?? 0;
+      const total = unknownsTotal + missingTotal;
+      const unknownsReviewed = row.reviewed_count || 0;
+      const missingReviewed = row.missing_candidates_total != null
+        ? (row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)
+        : 0;
+      const reviewed = unknownsReviewed + missingReviewed;
+      const existing = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
+      const missingTag = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
+      const unknownTag = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
+      const untagged = Math.max(0, total - existing - missingTag - unknownTag);
+
+      acc.total += total;
+      acc.unknowns += unknownsTotal;
+      acc.gptTagged += reviewed;
+      acc.taggingRemaining += untagged;
+      acc.falseUnknown += (row.false_unknown_count ?? 0);
+      return acc;
+    }, {
+      total: 0,
+      unknowns: 0,
+      gptTagged: 0,
+      taggingRemaining: 0,
+      falseUnknown: 0,
+    })
+    : null;
+
   const moveColumn = (fromIndex, toIndex) => {
     setColumns(prev => {
       const newColumns = [...prev];
@@ -182,16 +216,17 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         <table className="leaderboard-table unknowns-leaderboard-table">
           <thead>
             <tr className="unknowns-leaderboard-group-row">
-              <th rowSpan={2} style={{ width: 180 }}>Country</th>
-              <th rowSpan={2} style={{ width: 70 }} title="Total records (unknowns + missing subtypes) in this run">Total</th>
-              <th rowSpan={2} style={{ width: 90 }} title="Records that have received a GPT verdict">GPT Reviewed</th>
-              <th rowSpan={2} style={{ width: 75 }} title="Records not yet assigned a true subtype">Untagged</th>
-              <th colSpan={3} className="unknowns-retagged-subheader">Retagged</th>
+              <th rowSpan={2} style={{ width: 180 }} title="Run country">Country</th>
+              <th rowSpan={2} style={{ width: 70 }} title="Unknown + missing records in this run">Total</th>
+              <th rowSpan={2} style={{ width: 90 }} title="Records reviewed by GPT">GPT Reviewed</th>
+              <th rowSpan={2} style={{ width: 130 }} title="Unknown-model records GPT also marked truly_unknown">GPT Unknown Agree</th>
+              <th rowSpan={2} style={{ width: 75 }} title="Records not yet retagged by a reviewer">Untagged</th>
+              <th colSpan={3} className="unknowns-retagged-subheader" title="Reviewer-applied tags">Retagged</th>
             </tr>
             <tr>
-              <th style={{ width: 70 }} title="Tagged with an existing allowed subtype" className="th-existing">Existing</th>
-              <th style={{ width: 70 }} title="Tagged as a genuinely missing subtype" className="th-missing">Missing</th>
-              <th style={{ width: 70 }} title="Tagged as truly unknown" className="th-unknown">Unknown</th>
+              <th style={{ width: 70 }} title="Retagged to an existing subtype" className="th-existing">Existing</th>
+              <th style={{ width: 70 }} title="Retagged as Missing" className="th-missing">Missing</th>
+              <th style={{ width: 70 }} title="Retagged as unknown" className="th-unknown">Unknown</th>
             </tr>
           </thead>
           <tbody>
@@ -210,6 +245,11 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
               const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
               const untagged         = total - existing - missingTag - unknownTag;
+              const gptUnknownAgreeCount = row.gpt_unknown_agree_count ?? row.truly_unknown_count ?? 0;
+              const gptUnknownAgreeBase = row.unknowns_count ?? unknownsTotal;
+              const gptUnknownAgreePct = gptUnknownAgreeBase > 0
+                ? ((gptUnknownAgreeCount / gptUnknownAgreeBase) * 100).toFixed(1)
+                : '0.0';
               const isSelected       = selectedRuns[0] === row.run_id;
               return (
                 <tr
@@ -230,6 +270,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                   </td>
                   <td className="metric">{total}</td>
                   <td className="metric">{reviewed}</td>
+                  <td className="metric" title={`${gptUnknownAgreeCount}/${gptUnknownAgreeBase} unknowns`}>{gptUnknownAgreeCount}/{gptUnknownAgreeBase} ({gptUnknownAgreePct}%)</td>
                   <td className="metric">{untagged}</td>
                   <td className="metric metric-existing">{existing}</td>
                   <td className="metric metric-missing">{missingTag}</td>
@@ -350,6 +391,27 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         </table>
       )}
       </div>
+      {isUnknowns && unknownsSummary && (
+        <div className="summary-bar">
+          <div className="summary-stat summary-stat-main" title="Records that have a GPT review">
+            <div className="summary-big-num">{unknownsSummary.gptTagged}</div>
+            <div className="summary-label">GPT Tagged</div>
+            <div className="summary-sublabel">{unknownsSummary.total > 0 ? ((unknownsSummary.gptTagged / unknownsSummary.total) * 100).toFixed(1) : '0.0'}% of total</div>
+          </div>
+          <div className="summary-divider" />
+          <div className="summary-stat summary-stat-warn" title="Records still waiting for reviewer tagging">
+            <div className="summary-big-num">{unknownsSummary.taggingRemaining}</div>
+            <div className="summary-label">Tagging Remaining</div>
+            <div className="summary-sublabel">{unknownsSummary.total > 0 ? ((unknownsSummary.taggingRemaining / unknownsSummary.total) * 100).toFixed(1) : '0.0'}% of total</div>
+          </div>
+          <div className="summary-divider" />
+          <div className="summary-stat summary-stat-danger" title="Unknown-model records GPT marked as wrong_subtype or missing_but_mappable">
+            <div className="summary-big-num">{unknownsSummary.falseUnknown}</div>
+            <div className="summary-label">False Unknown (GPT)</div>
+            <div className="summary-sublabel">{unknownsSummary.unknowns > 0 ? ((unknownsSummary.falseUnknown / unknownsSummary.unknowns) * 100).toFixed(1) : '0.0'}% of unknowns</div>
+          </div>
+        </div>
+      )}
       <div className="leaderboard-hint">
         {isUnknowns
           ? 'Click a row to review records and manage missing subtype decisions for that country.'
