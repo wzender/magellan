@@ -2345,6 +2345,13 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .badge-same-type { background: var(--warning); }
 .badge-incorrect { background: var(--danger); }
 
+.cell-request-id {
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .copy-json-btn {
   padding: 0.1rem 0.4rem;
   border: 1px solid var(--border);
@@ -2941,8 +2948,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .gpt-verdict-unreviewed     { background: #f3f4f6; color: #6b7280; }
 .gpt-verdict-error          { background: #fee2e2; color: #b91c1c; }
 .gpt-verdict-cell { display: flex; flex-direction: column; gap: 4px; }
-.gpt-verdict-reason { font-size: 11px; color: #6b7280; line-height: 1.4; }
-.cell-gpt-verdict { vertical-align: top; padding: 6px 8px; }
+.gpt-verdict-reason { font-size: 11px; color: #6b7280; line-height: 1.4; word-break: break-word; overflow-wrap: break-word; }
+.cell-gpt-verdict { vertical-align: top; padding: 6px 8px; max-width: 220px; }
 .cell-fewshots    { font-size: 12px; color: #6b7280; vertical-align: top; }
 
 .gpt-subtype-legend {

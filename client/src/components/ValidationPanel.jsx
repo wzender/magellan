@@ -336,10 +336,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   if (verdictFilter !== 'all') {
     if (verdictFilter === 'unreviewed') {
       filtered = filtered.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
-    } else if (isRetag && verdictFilter === 'unknown') {
-      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN);
-    } else if (isRetag && verdictFilter === 'missing') {
-      filtered = filtered.filter(r => (r.pred_subtype_2 || '') === PS2_MISSING);
+    } else if (isRetag && verdictFilter === 'untagged') {
+      filtered = filtered.filter(r => !verdicts[r.request_id]);
+    } else if (isRetag && verdictFilter === 'only_missing') {
+      filtered = filtered.filter(r => String(r.missing_subtype || '').trim() !== '' && String(r.missing_subtype || '').trim().toLowerCase() !== 'none');
+    } else if (isRetag && verdictFilter === 'only_unknown') {
+      filtered = filtered.filter(r => !String(r.missing_subtype || '').trim() || String(r.missing_subtype || '').trim().toLowerCase() === 'none');
     } else if (isRetag && verdictFilter === 'real_unknown') {
       filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
     } else if (isRetag && verdictFilter === 'real_missing') {
@@ -349,6 +351,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         const d = gptResults[r.request_id]?.decision;
         return d === 'wrong_subtype' || d === 'missing_but_mappable';
       });
+    } else if (isRetag && verdictFilter === 'weak_signal') {
+      filtered = filtered.filter(r =>
+        (r.pred_subtype_2 || '') === PS2_MISSING &&
+        gptResults[r.request_id]?.decision === 'truly_unknown'
+      );
     } else if (isRetag && verdictFilter === 'false_missing') {
       filtered = filtered.filter(r => {
         const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
@@ -392,9 +399,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       } else if (sortConfig.key === 'gpt_verdict') {
         aVal = gptResults[a.request_id]?.decision || '';
         bVal = gptResults[b.request_id]?.decision || '';
-      } else if (sortConfig.key === 'feshots') {
-        aVal = (a.feshots || a.fewshots || []).join(', ');
-        bVal = (b.feshots || b.fewshots || []).join(', ');
       } else if (sortConfig.key === 'ask_gpt') {
         aVal = getAskText(gptResults[a.request_id]);
         bVal = getAskText(gptResults[b.request_id]);
@@ -426,9 +430,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const gptReviewedCount  = records.filter(r => gptResults[r.request_id]).length;
   const retaggedCount     = records.filter(r => verdicts[r.request_id]).length;
   const anyReviewedCount  = records.filter(r => gptResults[r.request_id] || verdicts[r.request_id]).length;
-  const realUnknownCount  = records.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown').length;
+  const onlyMissingCount  = records.filter(r => { const v = String(r.missing_subtype || '').trim(); return v !== '' && v.toLowerCase() !== 'none'; }).length;
+  const onlyUnknownCount  = records.filter(r => { const v = String(r.missing_subtype || '').trim(); return !v || v.toLowerCase() === 'none'; }).length;
+  const untaggedCount     = records.filter(r => !verdicts[r.request_id]).length;
   const falseUnknownCount = records.filter(r => ['wrong_subtype', 'missing_but_mappable'].includes(gptResults[r.request_id]?.decision)).length;
-  const retaggedProgress  = total > 0 ? Math.round((anyReviewedCount / total) * 100) : 0;
+  const weakSignalCount   = records.filter(r =>
+    (r.pred_subtype_2 || '') === PS2_MISSING &&
+    gptResults[r.request_id]?.decision === 'truly_unknown'
+  ).length;
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
@@ -676,10 +685,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           <>
             <div className="validation-verdict-tabs">
               {[
-                { key: 'all',           label: 'All',           count: total,                       title: 'All records in this run' },
-                { key: 'unreviewed',    label: 'Unreviewed',    count: total - anyReviewedCount,     title: 'No GPT verdict and no human tag yet' },
-                { key: 'real_unknown',  label: 'Real Unknown',  count: realUnknownCount,             title: 'GPT judged truly unknown — no actionable content signal' },
-                { key: 'false_unknown', label: 'False Unknown', count: falseUnknownCount,            title: 'GPT judged wrong subtype or mappable to an existing one' },
+                { key: 'all',           label: 'All',           count: total,              title: 'All records in this run' },
+                { key: 'untagged',      label: 'Untagged',      count: untaggedCount,      title: 'Records that have not yet been assigned a true subtype by a human reviewer' },
+                { key: 'only_missing',  label: 'Only Missing',  count: onlyMissingCount,   title: 'Records that have a proposed missing subtype value' },
+                { key: 'only_unknown',  label: 'Only Unknown',  count: onlyUnknownCount,   title: 'Records without a proposed missing subtype (pure unknowns)' },
+                { key: 'false_unknown', label: 'Suspected False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
+                { key: 'weak_signal',   label: 'Suspected Weak Signal',    count: weakSignalCount,     title: 'Model proposed a specific missing subtype (suggesting a content signal), but GPT found no reliable signal and judged the record as truly unknown' },
               ].map(t => (
                 <button
                   key={t.key}
@@ -825,8 +836,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     </div>
                   </div>
                 </th>
-                <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('feshots')}>
-                  Fewshots{sortIndicator('feshots')}
+                <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('missing_subtype')}>
+                  Missing Subtype{sortIndicator('missing_subtype')}
                 </th>
                 <th style={{ width: 240, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
                   GPT Verdict{sortIndicator('gpt_verdict')}
@@ -910,7 +921,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
               const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
-              const fewshotsText = (r.feshots || r.fewshots || []).join(', ');
 
               if (isRetag) {
                 return (
@@ -918,7 +928,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <td className="cell-request-id">{r.request_id}</td>
                     <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                     <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
-                    <td className="cell-fewshots">{fewshotsText}</td>
+                    <td>{String(r.missing_subtype || '').trim() || 'None'}</td>
                     <td className="cell-gpt-verdict">
                       <GptVerdictBadge gpt={gpt} />
                       <button

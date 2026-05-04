@@ -182,24 +182,13 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         <table className="leaderboard-table unknowns-leaderboard-table">
           <thead>
             <tr className="unknowns-leaderboard-group-row">
-              <th rowSpan={3} style={{ width: 180 }}>Country</th>
-              <th colSpan={6} className="unknowns-leaderboard-group-header unknowns-group-validation">Unknown Validation</th>
-              <th colSpan={6} className="unknowns-leaderboard-group-header unknowns-group-missing">Missing Subtypes</th>
-            </tr>
-            <tr>
-              <th rowSpan={2} style={{ width: 70 }} title="Total unknown-validation records in this run">Total</th>
+              <th rowSpan={2} style={{ width: 180 }}>Country</th>
+              <th rowSpan={2} style={{ width: 70 }} title="Total records (unknowns + missing subtypes) in this run">Total</th>
               <th rowSpan={2} style={{ width: 90 }} title="Records that have received a GPT verdict">GPT Reviewed</th>
               <th rowSpan={2} style={{ width: 75 }} title="Records not yet assigned a true subtype">Untagged</th>
               <th colSpan={3} className="unknowns-retagged-subheader">Retagged</th>
-              <th rowSpan={2} style={{ width: 70 }} title="Total missing-subtype records across all candidate groups">Total</th>
-              <th rowSpan={2} style={{ width: 90 }} title="Records with a GPT verdict out of total">GPT Reviewed</th>
-              <th rowSpan={2} style={{ width: 75 }} title="Records not yet assigned a true subtype">Untagged</th>
-              <th colSpan={3} className="unknowns-retagged-subheader">Retagged</th>
             </tr>
             <tr>
-              <th style={{ width: 70 }} title="Tagged with an existing allowed subtype" className="th-existing">Existing</th>
-              <th style={{ width: 70 }} title="Tagged as a genuinely missing subtype" className="th-missing">Missing</th>
-              <th style={{ width: 70 }} title="Tagged as truly unknown" className="th-unknown">Unknown</th>
               <th style={{ width: 70 }} title="Tagged with an existing allowed subtype" className="th-existing">Existing</th>
               <th style={{ width: 70 }} title="Tagged as a genuinely missing subtype" className="th-missing">Missing</th>
               <th style={{ width: 70 }} title="Tagged as truly unknown" className="th-unknown">Unknown</th>
@@ -209,18 +198,24 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             {sortedData.map(row => {
               const date = parseRunDate(row.run_name);
               const country = extractCountryName(row.run_name);
-              const total = row.benchmark_length || 0;
-              const reviewed = row.reviewed_count || 0;
-              const isSelected = selectedRuns[0] === row.run_id;
+              const unknownsTotal    = row.benchmark_length || 0;
+              const missingTotal     = row.missing_candidates_total ?? 0;
+              const total            = unknownsTotal + missingTotal;
+              const unknownsReviewed = row.reviewed_count || 0;
+              const missingReviewed  = row.missing_candidates_total != null
+                ? (row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)
+                : 0;
+              const reviewed         = unknownsReviewed + missingReviewed;
+              const existing         = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
+              const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
+              const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
+              const untagged         = total - existing - missingTag - unknownTag;
+              const isSelected       = selectedRuns[0] === row.run_id;
               return (
                 <tr
                   key={row.run_id}
                   onClick={() => {
                     if (row.table_exists === false || !onRunSelect) return;
-                    console.log(`[leaderboard] row click → GET /api/records?run_id=${row.run_id}&limit=999999`);
-                    console.log(`[leaderboard] row click → GET /api/gpt-results?run_id=${row.run_id}`);
-                    console.log(`[leaderboard] row click → GET /api/missing-subtypes?run_id=${row.run_id}`);
-                    console.log(`[leaderboard] row click → GET /api/validation?run_id=${row.run_id}`);
                     onRunSelect(row.run_id);
                   }}
                   className={[
@@ -235,24 +230,10 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                   </td>
                   <td className="metric">{total}</td>
                   <td className="metric">{reviewed}</td>
-                  <td className="metric">{total - (row.retagged_mapped_count ?? 0) - (row.retagged_suggested_count ?? 0) - (row.retagged_unknown_count ?? 0)}</td>
-                  <td className="metric metric-existing">{row.retagged_mapped_count ?? 0}</td>
-                  <td className="metric metric-missing">{row.retagged_suggested_count ?? 0}</td>
-                  <td className="metric metric-unknown">{row.retagged_unknown_count ?? 0}</td>
-                  <td className="metric">{row.missing_candidates_total ?? '—'}</td>
-                  <td className={`metric${(row.missing_candidates_unreviewed || 0) > 0 ? ' metric-warning' : ''}`}>
-                    {row.missing_candidates_total != null
-                      ? `${(row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)}`
-                      : '—'}
-                  </td>
-                  <td className="metric">
-                    {row.missing_candidates_total != null
-                      ? (row.missing_candidates_total ?? 0) - (row.missing_candidates_accepted ?? 0) - (row.missing_candidates_mapped ?? 0) - (row.missing_candidates_unknown ?? 0)
-                      : '—'}
-                  </td>
-                  <td className="metric metric-existing">{row.missing_candidates_accepted ?? '—'}</td>
-                  <td className="metric metric-missing">{row.missing_candidates_mapped ?? '—'}</td>
-                  <td className="metric metric-unknown">{row.missing_candidates_unknown ?? '—'}</td>
+                  <td className="metric">{untagged}</td>
+                  <td className="metric metric-existing">{existing}</td>
+                  <td className="metric metric-missing">{missingTag}</td>
+                  <td className="metric metric-unknown">{unknownTag}</td>
                 </tr>
               );
             })}

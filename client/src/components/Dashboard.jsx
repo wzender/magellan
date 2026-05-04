@@ -6,7 +6,6 @@ import LeaderboardWidget from './LeaderboardWidget';
 import TypeHealthGrid from './TypeHealthGrid';
 import RowLevelTable from './RowLevelTable';
 import ValidationPanel from './ValidationPanel';
-import MissingSubtypesTab from './MissingSubtypesTab';
 
 const UNKNOWNS_BENCHMARK_NAME = 'Unknowns';
 const NOT_RETAGGED_LABEL = 'Not retagged';
@@ -319,9 +318,6 @@ function Dashboard() {
   const [unknownsCountry, setUnknownsCountry] = useState(null);
   const [publishState, setPublishState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
-  const [activeUnknownsTab, setActiveUnknownsTab] = useState('validation'); // 'validation' | 'missing'
-  const [missingSubtypeGroups, setMissingSubtypeGroups] = useState([]);
-  const [missingSubtypeGroupsLoading, setMissingSubtypeGroupsLoading] = useState(false);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
 
@@ -541,7 +537,10 @@ function Dashboard() {
         const allRecs = recData.data || [];
         const hasPredSubtype2 = allRecs.some(r => r.pred_subtype_2);
         setValidationRecords(hasPredSubtype2
-          ? allRecs.filter(r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN)
+          ? allRecs.filter(r => {
+              const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
+              return status === PS2_UNKNOWN || status === PS2_MISSING;
+            })
           : allRecs);
         setValidationVerdicts(verdData || {});
       } finally {
@@ -554,27 +553,41 @@ function Dashboard() {
   /* ── Unknowns: set single verdict ── */
   const handleSetVerdict = useCallback(async (requestId, verdict) => {
     const runId = selectedRunIds[0];
+    const record = validationRecords.find(r => String(r.request_id) === String(requestId));
+    const status = String(record?.pred_subtype_2 || '').trim().toLowerCase();
+
     setValidationVerdicts(prev => {
       const next = { ...prev };
       if (verdict) next[requestId] = verdict;
       else delete next[requestId];
       return next;
     });
-    await fetch('/api/validation', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), verdicts: { [requestId]: verdict } }),
-    });
 
-    // Keep Unknowns leaderboard derived columns fresh after local edits.
+    if (status === PS2_MISSING) {
+      await fetch('/api/missing-subtypes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: verdict || '' }),
+      });
+    } else {
+      await fetch('/api/validation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: String(runId), verdicts: { [requestId]: verdict } }),
+      });
+    }
+
     if (isUnknownsBenchmark && selectedBenchmark) {
       await refreshUnknownsRunStats(runId);
     }
-  }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
+  }, [selectedRunIds, validationRecords, isUnknownsBenchmark, selectedBenchmark, refreshUnknownsRunStats]);
 
   /* ── Unknowns: bulk verdict ── */
   const handleBulkVerdict = useCallback(async (verdictMap) => {
     const runId = selectedRunIds[0];
+    const unknownVerdicts = {};
+    const missingUpdates = [];
+
     setValidationVerdicts(prev => {
       const next = { ...prev };
       for (const [reqId, v] of Object.entries(verdictMap)) {
@@ -583,16 +596,38 @@ function Dashboard() {
       }
       return next;
     });
-    await fetch('/api/validation', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), verdicts: verdictMap }),
+
+    Object.entries(verdictMap).forEach(([requestId, verdict]) => {
+      const record = validationRecords.find(r => String(r.request_id) === String(requestId));
+      const status = String(record?.pred_subtype_2 || '').trim().toLowerCase();
+      if (status === PS2_MISSING) {
+        missingUpdates.push({ requestId, verdict: verdict || '' });
+      } else {
+        unknownVerdicts[requestId] = verdict;
+      }
     });
+
+    const requests = [];
+    if (Object.keys(unknownVerdicts).length > 0) {
+      requests.push(fetch('/api/validation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: String(runId), verdicts: unknownVerdicts }),
+      }));
+    }
+    if (missingUpdates.length > 0) {
+      requests.push(Promise.all(missingUpdates.map(({ requestId, verdict }) => fetch('/api/missing-subtypes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: verdict }),
+      }))));
+    }
+    await Promise.all(requests);
 
     if (isUnknownsBenchmark && selectedBenchmark) {
       await refreshUnknownsRunStats(runId);
     }
-  }, [selectedRunIds, isUnknownsBenchmark, selectedBenchmark, allLeaderboards, refreshUnknownsRunStats]);
+  }, [selectedRunIds, validationRecords, isUnknownsBenchmark, selectedBenchmark, refreshUnknownsRunStats]);
 
   /* ── Unknowns: drill-down from TypeHealthGrid using client-side filtered data ── */
   const handleViewRecordsForUnknowns = useCallback((trueType, trueSubtype, predSubtype) => {
@@ -603,54 +638,11 @@ function Dashboard() {
     });
   }, []);
 
-  /* ── Unknowns: reset tab when run changes ── */
+  /* ── Unknowns: reset review state when run changes ── */
   useEffect(() => {
     if (!isUnknownsBenchmark) return;
-    setActiveUnknownsTab('validation');
     setPublishState('idle');
   }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ── Unknowns: load missing subtype groups when run changes ── */
-  useEffect(() => {
-    if (!isUnknownsBenchmark || selectedRunIds.length === 0) {
-      setMissingSubtypeGroups([]);
-      return;
-    }
-    const runId = selectedRunIds[0];
-    const load = async () => {
-      setMissingSubtypeGroupsLoading(true);
-      try {
-        const res = await fetch(`/api/missing-subtypes?run_id=${runId}`);
-        const data = await res.json();
-        setMissingSubtypeGroups(Array.isArray(data) ? data : []);
-      } finally {
-        setMissingSubtypeGroupsLoading(false);
-      }
-    };
-    load();
-  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ── Unknowns: save missing subtype decision (optimistic) ── */
-  const handleMissingSubtypeDecision = useCallback(async (requestId, trueSubtype) => {
-    const runId = selectedRunIds[0];
-    const nextTrueSubtype = trueSubtype || '';
-
-    setMissingSubtypeGroups(prev => prev.map(g => ({
-      ...g,
-      records: g.records.map(r =>
-        String(r.request_id) === String(requestId)
-          ? { ...r, true_subtype: nextTrueSubtype }
-          : r
-      ),
-    })));
-
-    await fetch('/api/missing-subtypes', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: nextTrueSubtype }),
-    });
-    await refreshUnknownsRunStats(runId);
-  }, [selectedRunIds, refreshUnknownsRunStats]);
 
   /* ── compare type health: fetch when 2 runs selected, clear otherwise ── */
   useEffect(() => {
@@ -855,9 +847,16 @@ function Dashboard() {
   const run1Name  = run1Entry?.run_name ?? '';
   const run2Name  = run2Entry?.run_name ?? '';
 
+  const unknownOnlyValidationRecords = validationRecords.filter(
+    r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN
+  );
+  const missingOnlyValidationRecords = validationRecords.filter(
+    r => String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_MISSING
+  );
+
   /* derived: for Unknowns, compute live from verdicts; for others use API-fetched state */
   const displayTypeHealth = isUnknownsBenchmark
-    ? computeUnknownsTypeHealth(validationRecords, validationVerdicts, countrySubtypes)
+    ? computeUnknownsTypeHealth(unknownOnlyValidationRecords, validationVerdicts, countrySubtypes)
     : typeHealth;
 
   const recordsRef = useRef(null);
@@ -964,108 +963,71 @@ function Dashboard() {
             />
           )}
 
-          {isUnknownsBenchmark && selectedRunIds.length > 0 && (() => {
-            const missingCount = missingSubtypeGroups.reduce((sum, g) => sum + (g.records?.length || 0), 0);
-            return (
-              <div className="unknowns-view">
-                <div className="unknowns-view-header">
-                  <h2 className="unknowns-view-country">{unknownsCountry ?? run1Name}</h2>
-                  <div className="unknowns-view-tabs">                    <button
-                      className={`unknowns-tab${activeUnknownsTab === 'validation' ? ' active' : ''}`}
-                      onClick={() => setActiveUnknownsTab('validation')}
-                    >
-                      Unknown Validation
-                      <span className="unknowns-tab-count">{validationRecords.length}</span>
-                      <span className="unknowns-tab-info" title="Records where the classifier returned no confident subtype (stage 2 = unknown). Use GPT to judge whether each is truly unknown or a fixable classifier error.">ⓘ</span>
-                    </button>
-                    <button
-                      className={`unknowns-tab${activeUnknownsTab === 'missing' ? ' active' : ''}`}
-                      onClick={() => setActiveUnknownsTab('missing')}
-                    >
-                      Missing Subtypes
-                      <span className="unknowns-tab-count">{missingCount}</span>
-                      <span className="unknowns-tab-info" title="Records where the classifier suggested a subtype not in the country's allowed list. Review grouped candidates and decide: accept as a new subtype, map to an existing one, or reject.">ⓘ</span>
-                    </button>
-                  </div>
-                  <div style={{ marginLeft: 'auto', marginBottom: 6, display: 'flex', gap: 6 }}>
-                    <a
-                      className="export-csv-btn"
-                      href={`/api/export-csv?run_id=${selectedRunIds[0]}`}
-                      download
-                      title="Download full run as CSV with updated true_subtype values"
-                    >
-                      Export CSV
-                    </a>
-                    <button
-                      className={`export-csv-btn${publishState === 'loading' ? ' loading' : ''}`}
-                      disabled={publishState === 'loading'}
-                      title="Copy this run to Postgres as {name}_retagged"
-                      onClick={async () => {
-                        setPublishState('loading');
-                        try {
-                          const r = await fetch('/api/publish-retagged', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ run_id: selectedRunIds[0] }),
-                          });
-                          const d = await r.json();
-                          if (!r.ok) throw new Error(d.error || 'Failed');
-                          setPublishState('done');
-                          setTimeout(() => setPublishState('idle'), 3000);
-                        } catch (e) {
-                          setPublishState('error');
-                          setTimeout(() => setPublishState('idle'), 4000);
-                        }
-                      }}
-                    >
-                      {publishState === 'loading' ? 'Publishing…'
-                        : publishState === 'done'    ? 'Published ✓'
-                        : publishState === 'error'   ? 'Error ✗'
-                        : 'Publish Retagged'}
-                    </button>
-                  </div>
+          {isUnknownsBenchmark && selectedRunIds.length > 0 && (
+            <div className="unknowns-view">
+              <div className="unknowns-view-header">
+                <h2 className="unknowns-view-country">{unknownsCountry ?? run1Name}</h2>
+                <div className="validation-retag-stats">
+                  <span className="validation-progress">{validationRecords.length} total</span>
+                  <span className="validation-progress">{unknownOnlyValidationRecords.length} unknown</span>
+                  <span className="validation-progress">{missingOnlyValidationRecords.length} missing</span>
                 </div>
-                {activeUnknownsTab === 'validation' && (
-                  <>
-                    {validationLoading && <div className="viewer-loading">Loading records…</div>}
-                    {!validationLoading && (
-                      <ValidationPanel
-                        runId={selectedRunIds[0]}
-                        runName={run1Name}
-                        country={unknownsCountry}
-                        countrySubtypes={countrySubtypes}
-                        records={validationRecords}
-                        verdicts={validationVerdicts}
-                        gridFilter={unknownsGridFilter}
-                        onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
-                        onSetVerdict={handleSetVerdict}
-                        onBulkVerdict={handleBulkVerdict}
-                        onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
-                      />
-                    )}
-                  </>
-                )}
-
-                {activeUnknownsTab === 'missing' && (
-                  <MissingSubtypesTab
-                    runId={selectedRunIds[0]}
-                    groups={missingSubtypeGroups}
-                    loading={missingSubtypeGroupsLoading}
-                    countrySubtypes={countrySubtypes}
-                    onDecision={handleMissingSubtypeDecision}
-                    onGptResult={(requestId, isNew) => {
-                      if (!isNew) return;
-                      setLeaderboard(prev => prev.map(r =>
-                        sameRunId(r.run_id, selectedRunIds[0])
-                          ? { ...r, missing_candidates_unreviewed: Math.max(0, (r.missing_candidates_unreviewed || 0) - 1) }
-                          : r
-                      ));
+                <div style={{ marginLeft: 'auto', marginBottom: 6, display: 'flex', gap: 6 }}>
+                  <a
+                    className="export-csv-btn"
+                    href={`/api/export-csv?run_id=${selectedRunIds[0]}`}
+                    download
+                    title="Download full run as CSV with updated true_subtype values"
+                  >
+                    Export CSV
+                  </a>
+                  <button
+                    className={`export-csv-btn${publishState === 'loading' ? ' loading' : ''}`}
+                    disabled={publishState === 'loading'}
+                    title="Copy this run to Postgres as {name}_retagged"
+                    onClick={async () => {
+                      setPublishState('loading');
+                      try {
+                        const r = await fetch('/api/publish-retagged', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ run_id: selectedRunIds[0] }),
+                        });
+                        const d = await r.json();
+                        if (!r.ok) throw new Error(d.error || 'Failed');
+                        setPublishState('done');
+                        setTimeout(() => setPublishState('idle'), 3000);
+                      } catch (e) {
+                        setPublishState('error');
+                        setTimeout(() => setPublishState('idle'), 4000);
+                      }
                     }}
-                  />
-                )}
+                  >
+                    {publishState === 'loading' ? 'Publishing…'
+                      : publishState === 'done'    ? 'Published ✓'
+                      : publishState === 'error'   ? 'Error ✗'
+                      : 'Publish Retagged'}
+                  </button>
+                </div>
               </div>
-            );
-          })()}
+              {validationLoading && <div className="viewer-loading">Loading records…</div>}
+              {!validationLoading && (
+                <ValidationPanel
+                  runId={selectedRunIds[0]}
+                  runName={run1Name}
+                  country={unknownsCountry}
+                  countrySubtypes={countrySubtypes}
+                  records={validationRecords}
+                  verdicts={validationVerdicts}
+                  gridFilter={unknownsGridFilter}
+                  onClearGridFilter={() => setUnknownsGridFilter(EMPTY_UNKNOWNS_GRID_FILTER)}
+                  onSetVerdict={handleSetVerdict}
+                  onBulkVerdict={handleBulkVerdict}
+                  onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
+                />
+              )}
+            </div>
+          )}
 
           {!isUnknownsBenchmark && (recordQuery || recordsLoading) && (
             <section className={`collapsible-section records-section ${recordsExpanded ? 'is-open' : 'is-closed'}`} ref={recordsRef}>

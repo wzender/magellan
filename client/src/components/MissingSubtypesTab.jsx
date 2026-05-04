@@ -197,7 +197,7 @@ function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
 }
 
 /* ── Main component ──────────────────────────────────────────────────────── */
-const EMPTY_COL_FILTERS = { request_id: '', attributes: '', metadata: '', pred_subtype_1: '' };
+const EMPTY_COL_FILTERS = { request_id: '', attributes: '', metadata: '' };
 
 export default function MissingSubtypesTab({ runId, groups, loading, countrySubtypes, onDecision, onGptResult }) {
   const [statusFilter, setStatusFilter] = useState('all');
@@ -212,6 +212,14 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
   const [gptResults, setGptResults] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
+  const [copiedCell, setCopiedCell] = useState(null);
+
+  const copyCellJson = (obj, cellKey) => {
+    const text = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
+    navigator.clipboard.writeText(text)
+      .then(() => { setCopiedCell(cellKey); setTimeout(() => setCopiedCell(null), 1200); })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     setGptResults({});
@@ -341,7 +349,6 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     if (colFilters.request_id    && !r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase())) return false;
     if (colFilters.attributes    && !JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase())) return false;
     if (colFilters.metadata      && !JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase())) return false;
-    if (colFilters.pred_subtype_1 && !String(r.pred_subtype_1 || '').toLowerCase().includes(colFilters.pred_subtype_1.toLowerCase())) return false;
     return true;
   });
 
@@ -352,12 +359,20 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
     { key: 'missing',    label: 'Missing',    count: missingTaggedCount },
   ];
 
-  const renderJson = (val) => {
+  const renderJson = (val, cellKey) => {
     if (!val) return <span className="json-empty">(empty)</span>;
     const obj = typeof val === 'string'
       ? (() => { try { return JSON.parse(val); } catch { return val; } })()
       : val;
-    return <pre className="json-pretty">{typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj)}</pre>;
+    const display = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
+    return (
+      <div className="json-cell-wrapper">
+        <button className="copy-json-btn" onClick={e => { e.stopPropagation(); copyCellJson(obj, cellKey); }}>
+          {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
+        </button>
+        <pre className="json-pretty">{display}</pre>
+      </div>
+    );
   };
 
   return (
@@ -434,7 +449,6 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
                   </div>
                 </div>
               </th>
-              <th style={{ width: 150 }}>Pred Subtype 1</th>
               <th style={{ width: 150 }}>Missing Subtype</th>
               <th style={{ width: 220 }}>GPT Verdict</th>
               <th style={{ width: 140 }}>GPT Subtype</th>
@@ -444,7 +458,6 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id}    onChange={e => setColFilter('request_id', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes}    onChange={e => setColFilter('attributes', e.target.value)} /></th>
               <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata}      onChange={e => setColFilter('metadata', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype_1} onChange={e => setColFilter('pred_subtype_1', e.target.value)} /></th>
               <th /><th /><th /><th />
             </tr>
           </thead>
@@ -463,10 +476,11 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
               const metaData = metaLang === 'en' ? (metaEn || r.metadata) : r.metadata;
               return (
                 <tr key={r.request_id}>
-                  <td className="cell-request-id">{r.request_id}</td>
-                  <td className="cell-json">{renderJson(attrData)}</td>
-                  <td className="cell-json">{renderJson(metaData)}</td>
-                  <td><strong>{r.pred_subtype_1 || '—'}</strong></td>
+                  <td className="cell-request-id" title={r.request_id}>
+                    {String(r.request_id).length > 15 ? String(r.request_id).slice(0, 15) + '\u2026' : r.request_id}
+                  </td>
+                  <td className="cell-json">{renderJson(attrData, `${r.request_id}-attr`)}</td>
+                  <td className="cell-json">{renderJson(metaData, `${r.request_id}-meta`)}</td>
                   <td><strong>{r.missing_subtype || '—'}</strong></td>
                   <td className="cell-gpt-verdict">
                     <GptVerdictBadge gpt={gpt} />

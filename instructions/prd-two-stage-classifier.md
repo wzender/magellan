@@ -358,131 +358,145 @@ The Unknowns benchmark is a **labeling and taxonomy management tool**, not a cla
 
 #### Leaderboard — Entry Point
 
-The leaderboard is the only shared surface with other benchmarks. It shows one row per country/run and serves as the entry point.
+The leaderboard is the only shared surface with other benchmarks. It shows one row per country/run and serves as the entry point into a two-tab review workspace.
 
-| Column | Source | Description |
+In the current implementation, the Unknowns leaderboard is split into two grouped column bands.
+
+| Group | Column | Description |
 |---|---|---|
-| Run | `run_name` | Country name |
-| Unknowns | `pred_subtype2 = "unknown"` count | Records where command-r had insufficient signal |
-| Missing | `pred_subtype2 = "missing"` count | Records where command-r flagged a taxonomy gap |
-| Real Unknown | GPT verdict `no` on unknown records | Confirmed ambiguous |
-| False Unknown | GPT verdict `yes` on unknown records | command-r too conservative (orange if >20%) |
-| Reviewed | Records with any GPT verdict | Progress indicator |
+| Unknown Validation | Country | Derived from `run_name`; the row click target |
+| Unknown Validation | Total | Records in the run where `pred_subtype_2 = "unknown"` |
+| Unknown Validation | GPT Reviewed | Unknown records with a saved GPT review |
+| Unknown Validation | Untagged | Unknown records with no `true_subtype` decision yet |
+| Unknown Validation | Retagged → Existing | Unknown records retagged to an allowed subtype |
+| Unknown Validation | Retagged → Missing | Unknown records retagged to `Missing` |
+| Unknown Validation | Retagged → Unknown | Unknown records retagged to `unknown` |
+| Missing Subtypes | Total | Records returned by `/api/missing-subtypes` across all groups |
+| Missing Subtypes | GPT Reviewed | Missing-subtype records with a saved GPT review |
+| Missing Subtypes | Untagged | Missing-subtype records with no `true_subtype` decision yet |
+| Missing Subtypes | Retagged → Existing | Missing-subtype records retagged to an allowed subtype |
+| Missing Subtypes | Retagged → Missing | Missing-subtype records retagged to `Missing` |
+| Missing Subtypes | Retagged → Unknown | Missing-subtype records retagged to `unknown` |
 
-Default sort: `Missing` descending (surfaces countries with the most taxonomy gaps first).
+This differs from the earlier design draft: the shipped leaderboard tracks review and retagging progress for both tabs using the same underlying `true_subtype` decision model.
 
 #### Per-Country Validation View
 
-Clicking a run opens a dedicated full-screen view scoped to that country. The view has two tabs.
+Clicking a run opens a dedicated full-screen view scoped to that country. The current implementation keeps the original two-tab structure:
 
-```
-┌─ Spain — Unknown Validation ────────────────────────────────────┐
-│  [Unknown Validation]   [Missing Subtypes]                      │
+```text
+┌─ Spain — Unknowns Review ───────────────────────────────────────┐
+│  [Unknown Validation 120]   [Missing Subtypes 38]              │
+│  47 / 120 reviewed · 19 / 120 retagged                         │
+│  [Export CSV] [Publish Retagged]                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
 ##### Tab 1: Unknown Validation
 
-For records where `pred_subtype_2 === 'unknown'`. Goal: determine whether each unknown is genuine (Real Unknown) or a classifier recall failure (False Unknown).
+This tab shows records where `pred_subtype_2 === 'unknown'`. The operator decides whether each record is genuinely underspecified or whether the classifier should have produced a usable subtype decision.
 
-**Header bar**
+**Top-level filters**
 
-```
-Progress: 47 / 120 reviewed  ████████░░░░  39%
-Real Unknown: 23  ·  False Unknown: 24  ·  Unclear: 0
-```
-
-**Verdict filter tabs** (primary navigation):
-
-```
-[All 120]  [Unreviewed 73]  [Real Unknown 23]  [False Unknown 24]  [Unclear 0]
+```text
+[All] [Unreviewed] [Real Unknown] [False Unknown]
 ```
 
-**Record table columns**
+**Current table columns**
 
 | Column | Content |
 |---|---|
-| ID | Record identifier |
-| Attributes preview | Truncated `attributes` JSON |
-| Reason | command-r's one-sentence rationale from Stage 1 |
-| Signals | Key field=value pairs from Stage 1 |
-| GPT says | GPT verdict + correction label (if available) |
-| Verdict | Inline buttons: Real Unknown / False Unknown / Unclear |
+| Request ID | Record identifier |
+| Attributes | Full JSON cell with copy button; original/EN toggle |
+| Metadata | Full JSON cell with copy button; original/EN toggle |
+| Pred Subtype 1 | Stage-1 subtype candidate |
+| Fewshots | Nearby subtype hints supplied to GPT |
+| GPT Verdict | Structured GPT decision badge plus reasoning |
+| GPT Subtype | Suggested mapped subtype, suggested missing subtype, or `unknown` |
+| True Subtype | Searchable combobox storing the human decision |
 
-Expanding a row shows full `attributes` and `metadata` JSON (syntax-highlighted) and the country's allowed subtype list.
+The current table is dense and spreadsheet-like rather than card-based. It supports text filters, sorting, row-height toggles, and a grid drill-down from the Unknowns type-health summary.
 
 **Per-record actions**
 
 | Action | Effect |
 |---|---|
-| Ask GPT | `POST /api/ask-gpt` — GPT evaluates whether the record is truly unknown |
-| Accept GPT | Copies GPT's verdict into the record's true subtype |
-| Retag | Inline subtype combobox → `PUT /api/validation` |
+| Ask GPT | `POST /api/ask-gpt` in `judge_mode`, with `predicted_status = "unknown"` |
+| Accept GPT | Copies GPT's suggested subtype into `true_subtype` when one exists |
+| Retag | Manual searchable subtype chooser -> `PUT /api/validation` |
 
 **Bulk actions**
 
 | Action | Scope |
 |---|---|
-| Judge All Unreviewed | Batch `POST /api/ask-gpt` for all unreviewed records in filtered set |
-| Accept All GPT Yes | Batch-accept GPT corrections where verdict = yes |
-| Export | Download CSV of filtered records with verdicts |
-
----
+| Ask GPT | Runs GPT across all currently filtered, unreviewed records |
+| Accept GPT | Applies GPT suggestions for all currently filtered reviewed records |
+| Export CSV | Downloads the run CSV with updated `true_subtype` values |
+| Publish Retagged | Copies the exported run into Postgres as a `_retagged` table |
 
 ##### Tab 2: Missing Subtypes
 
-For records where `pred_subtype_2 === 'missing_subtype'`. Goal: identify genuine new subtypes that should be added to the country's taxonomy.
+This tab shows records where `pred_subtype_2 === 'missing'`. The operator reviews classifier-proposed subtype labels that are outside the country's allowed taxonomy and decides how each record should be represented in `true_subtype`.
 
-Records are **grouped by `missing_subtype` candidate** (Stage 1's `suggested_label`). Record count per group is the signal-strength indicator — a candidate appearing in 15 records is a stronger taxonomy gap signal than one appearing in 1.
+The backend still exposes these records grouped by candidate `missing_subtype`, but the current UI **flattens the groups into a record-level table**. The operator works record-by-record rather than issuing one decision per candidate label.
 
-**Group list** (sorted by record count descending):
+**Top-level filters**
 
-```
-mortgage_fraud        15 records   [unreviewed]   [Accept]  [Map to existing ▼]  [Reject]
-crypto_scam            8 records   [accepted]
-elder_abuse            3 records   [mapped → fraud_financial]
-loan_modification      1 record    [rejected]
+```text
+[All] [Unreviewed] [Tagged] [Missing]
 ```
 
-**Per-group actions**
+In the shipped UI, these filters mean:
 
-| Action | Effect | Stored as |
-|---|---|---|
-| Accept | Candidate is a genuine new subtype — add to taxonomy | `{ status: "accepted" }` |
-| Map to existing | Candidate maps to an existing allowed subtype (combobox) | `{ status: "mapped", mapped_to: "existing_subtype" }` |
-| Reject | Candidate is a classifier error — ignore | `{ status: "rejected" }` |
+- `All`: all missing-subtype records for the run
+- `Unreviewed`: no saved GPT result yet
+- `Tagged`: `true_subtype` is set to an existing subtype
+- `Missing`: `true_subtype === "Missing"`
 
-Expanding a group shows all constituent records with their attributes, metadata, reason, and signals.
+There is currently no dedicated per-candidate Accept / Map / Reject object model in the UI.
 
-**Storage**: decisions are persisted to `data/missing_subtype_decisions.json`, keyed by `run_id` → `candidate_name` → decision object. This is separate from `true_subtype` verdicts which live in the run CSV.
+**Current table columns**
 
-```json
-{
-  "42": {
-    "mortgage_fraud": { "status": "accepted" },
-    "crypto_scam":    { "status": "mapped", "mapped_to": "fraud_investment" },
-    "elder_abuse":    { "status": "rejected" }
-  }
-}
-```
+| Column | Content |
+|---|---|
+| Request ID | Record identifier |
+| Attributes | Full JSON cell with copy button; original/EN toggle |
+| Metadata | Full JSON cell with copy button; original/EN toggle |
+| Pred Subtype 1 | Stage-1 subtype candidate |
+| Missing Subtype | The classifier-proposed out-of-taxonomy label |
+| GPT Verdict | Structured GPT decision badge plus reasoning |
+| GPT Subtype | Clickable GPT suggestion pill when a suggested decision exists |
+| True Subtype | Searchable combobox storing the human decision |
+
+**Per-record actions**
+
+| Action | Effect |
+|---|---|
+| Ask GPT | `POST /api/ask-gpt` in `judge_mode`, with `predicted_status = "missing"` |
+| Accept GPT | Applies GPT's suggested mapped subtype, `Missing`, or `unknown` to the record |
+| Retag | Manual searchable subtype chooser -> `PUT /api/missing-subtypes` |
+
+**Storage**
+
+The current implementation stores missing-subtype decisions the same way as unknown-validation retagging: by writing `true_subtype` back to the source run data. There is no separate `missing_subtype_decisions.json` store in the shipped code path.
 
 **API**
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/missing-subtypes?run_id=X` | Returns grouped candidates with counts and current decision |
-| `PUT` | `/api/missing-subtypes` | Saves a decision `{ run_id, candidate, status, mapped_to? }` |
+| `GET` | `/api/missing-subtypes?run_id=X` | Returns grouped candidates, each with nested record rows |
+| `PUT` | `/api/missing-subtypes` | Saves a record-level decision `{ run_id, request_id, true_subtype }` |
+| `GET` | `/api/gpt-results?run_id=X` | Loads saved GPT review payloads for the tab |
+| `PUT` | `/api/gpt-results` | Persists GPT review payloads keyed by request ID |
 
 ### Feedback Loop
 
-The two tabs together drive **taxonomy evolution**:
+The two tabs still drive **taxonomy evolution**, but in the current implementation they do so through a shared review-and-retag workflow:
 
-- **Missing Subtypes tab**: accepted candidates graduate to `subtypes-by-country.json`, entering the allowed list for future classification runs.
-- **Unknown Validation tab**: false-unknown patterns (command-r consistently fails on a class of records) inform updates to `DOMAIN_INSTRUCTIONS_STAGE2` disambiguation rules.
+- **Unknown Validation tab**: false-unknown patterns surface recall failures and help tune stage-2 prompting and subtype mapping.
+- **Missing Subtypes tab**: repeated `Missing` decisions and repeated mapped retags identify taxonomy blindspots and candidate labels worth formalising later in `subtypes-by-country.json`.
 
-The Unknowns benchmark closes the loop: every run surfaces both the classifier's recall gaps (unknowns) and its taxonomy blindspots (missing subtypes), with human decisions feeding directly back into the system.
+The Unknowns benchmark closes the loop: every run surfaces both the classifier's recall gaps (unknowns) and its taxonomy blindspots (missing subtypes), and both tabs feed back through the same persisted artifacts: GPT review payloads plus human-written `true_subtype` values in the run data.
 
 ---
 
