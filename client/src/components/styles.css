@@ -2986,6 +2986,32 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: #6b7280;
 }
 
+.cell-gpt-subtype {
+  vertical-align: top;
+}
+
+.gpt-subtype-pill.is-clickable {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.gpt-subtype-pill.is-clickable:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 0, 0, 0.12);
+  filter: brightness(0.98);
+}
+
+.gpt-subtype-pill.is-clickable.is-applied {
+  box-shadow: inset 0 0 0 2px rgba(17, 24, 39, 0.22);
+}
+
+.gpt-subtype-pill.is-clickable:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .leaderboard-table .run-date-cell {
   white-space: nowrap;
 }
@@ -3743,7 +3769,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 /* ── SubtypeCombobox ─────────────────────────────────────────────────────── */
-.cell-retag { min-width: 200px; }
+.cell-retag {
+  min-width: 320px;
+  vertical-align: top;
+  padding-top: 6px;
+}
 
 .cell-missing-subtype {
   font-size: 0.82rem;
@@ -4124,23 +4154,220 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   padding-right: 8px;
 }
 
+/* ─ Validation Record Actions (Unknowns retag mode) ────────────────────── */
+
 /* Per-record decision controls in the table row */
+.validation-record-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* Primary action: Tag subtype */
+.validation-action-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border: 2px solid #dbeafe;
+  border-radius: 8px;
+  background: #f0f9ff;
+  padding: 10px;
+}
+
+.validation-tag-subtype-wrap {
+  position: relative;
+  display: block;
+}
+
+.validation-tag-trigger {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #ffffff, #eff6ff);
+  color: #1d4ed8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.15s;
+}
+
+.validation-tag-trigger:hover {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #ffffff, #dbeafe);
+}
+
+.validation-tag-trigger.open {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.1);
+}
+
+.validation-tag-trigger.is-mapped {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.validation-tag-trigger.is-suggested {
+  background: #fef9c3;
+  border-color: #fcd34d;
+  color: #a16207;
+}
+
+.validation-tag-trigger.is-truly-unknown {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.validation-tag-trigger.is-mapped .validation-tag-trigger-caret {
+  color: #166534;
+}
+
+.validation-tag-trigger.is-suggested .validation-tag-trigger-caret {
+  color: #92400e;
+}
+
+.validation-tag-trigger.is-truly-unknown .validation-tag-trigger-caret {
+  color: #991b1b;
+}
+
+.validation-tag-trigger-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.validation-tag-trigger-caret {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  color: #1e40af;
+}
+
+.validation-tag-search {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid #dbeafe;
+  border-radius: 0;
+  font-size: 0.82rem;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.validation-tag-search:focus {
+  border-bottom-color: #3b82f6;
+  box-shadow: none;
+  background: #fff;
+}
+
+.validation-tag-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.validation-tag-dropdown.open {
+  display: block;
+}
+
+.validation-tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.validation-tag-option {
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.1s;
+}
+
+.validation-tag-option:hover {
+  background: #f0f9ff;
+}
+
+.validation-tag-option.selected {
+  background: #dbeafe;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.validation-tag-clear-option {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.validation-tag-clear-option:hover {
+  background: #f1f5f9;
+}
+
+.validation-tag-clear-option.disabled,
+.validation-tag-clear-option.disabled:hover {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.validation-tag-option-text {
+  flex: 1;
+}
+
+.validation-tag-checkmark {
+  color: #15803d;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.validation-tag-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  cursor: default;
+  justify-content: center;
+}
+
+/* Backward compatibility for old missing-* classes */
 .missing-record-actions {
   padding-right: 0;
   flex-wrap: wrap;
 }
 
-/* Decision cell in the record table */
 .cell-missing-decision {
   vertical-align: top;
   padding-top: 6px;
 }
+
 .cell-missing-decision .missing-decision-badge {
   display: block;
   margin-bottom: 6px;
 }
 
-/* Summary text in collapsed group header */
 .missing-group-summary {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -4159,6 +4386,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: var(--text-muted);
   transition: all 0.15s;
 }
+
 .missing-action:hover { background: #f3f4f6; color: var(--text); }
 
 .missing-action-accept.active  { background: #dcfce7; border-color: #86efac; color: #15803d; }
