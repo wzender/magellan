@@ -113,6 +113,14 @@ function parseJsonObject(raw) {
   }
 }
 
+function logMalformedJson(mode, raw, errMessage = '') {
+  const preview = String(raw || '').slice(0, 1200);
+  const suffix = String(raw || '').length > 1200 ? '...(truncated)' : '';
+  console.warn(
+    `[ask-gpt] malformed JSON mode=${mode}${errMessage ? ` error=${errMessage}` : ''} raw=${preview}${suffix}`
+  );
+}
+
 async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL) {
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -225,7 +233,15 @@ ${JSON.stringify(metadata, null, 2)}`;
         { role: 'user', content: userPrompt },
       ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL);
 
-      const parsed = parseJsonObject(raw) || {};
+      const parsedOrNull = parseJsonObject(raw);
+      if (!parsedOrNull) {
+        logMalformedJson('judge', raw);
+        return res.json({
+          error: 'Malformed JSON response from GPT judge',
+          raw_response: raw,
+        });
+      }
+      const parsed = parsedOrNull;
       const decision = normalizeJudgeDecision(parsed.decision || parsed.verdict || raw, predicted_status || stage2_subtype);
       const mappedAllowedSubtypeRaw = String(parsed.mapped_allowed_subtype || parsed.corrected_subtype || '').trim();
       const allowedSet = new Set((Array.isArray(allowed_subtypes) ? allowed_subtypes : []).map(s => String(s).trim()));
@@ -240,6 +256,7 @@ ${JSON.stringify(metadata, null, 2)}`;
         mapped_allowed_subtype: mappedAllowedSubtype,
         suggested_missing_subtype: suggestedMissingSubtype,
         reasoning,
+        raw_response: raw,
       });
     }
 
@@ -261,10 +278,11 @@ Respond with a JSON object only — no markdown, no extra text:
 
       try {
         const parsed = JSON.parse(raw);
-        return res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw });
-      } catch {
+        return res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw, raw_response: raw });
+      } catch (err) {
+        logMalformedJson('verdict', raw, err?.message || 'parse error');
         const isYes = /\byes\b/i.test(raw);
-        return res.json({ verdict: isYes ? 'yes' : 'no', reasoning: raw });
+        return res.json({ verdict: isYes ? 'yes' : 'no', reasoning: raw, raw_response: raw });
       }
     }
 
@@ -280,7 +298,7 @@ Respond with a JSON object only — no markdown, no extra text:
       });
       const { data, raw } = await callChat([{ role: 'user', content: rendered }], 250);
       console.log(`[ask-gpt] mode=env-prompt model=${data.model} tokens=${data.usage?.total_tokens}`);
-      return res.json({ text: raw, subtype: null, reason: null });
+      return res.json({ text: raw, subtype: null, reason: null, raw_response: raw });
     }
 
     const stage1System = formatTemplate(STAGE1_SYSTEM, {
@@ -297,7 +315,7 @@ Respond with a JSON object only — no markdown, no extra text:
     ], 80);
     const parsed = parseStage1(raw);
     console.log(`[ask-gpt] mode=stage1 model=${data.model} tokens=${data.usage?.total_tokens}`);
-    return res.json({ subtype: parsed.subtype, reason: parsed.reason, text: raw });
+    return res.json({ subtype: parsed.subtype, reason: parsed.reason, text: raw, raw_response: raw });
   } catch (err) {
     console.error('[ask-gpt] error:', err.message);
     res.status(500).json({ error: err.message });

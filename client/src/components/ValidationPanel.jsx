@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import * as XLSX from 'xlsx';
 import { PS2_UNKNOWN, PS2_MISSING } from '../config';
 
@@ -168,12 +168,13 @@ function normalizeGptResult(value) {
   const decision = value.decision || value.subtype || parsedReasoning?.decision || value.verdict || null;
   return {
     text: value.text || '',
+    rawResponse: value.raw_response || parsedReasoning?.raw_response || '',
     subtype: decision,
     decision,
     mappedAllowedSubtype: value.mapped_allowed_subtype || parsedReasoning?.mapped_allowed_subtype || '',
     suggestedMissingSubtype: value.suggested_missing_subtype || parsedReasoning?.suggested_missing_subtype || '',
     reason: value.reason || parsedReasoning?.reasoning || value.reasoning || '',
-    error: value.error || null,
+    error: value.error || parsedReasoning?.error || null,
   };
 }
 
@@ -233,6 +234,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
   const [colFilters, setColFilters] = useState(EMPTY_COL_FILTERS);
+  const deferredColFilters = useDeferredValue(colFilters);
   const [verdictFilter, setVerdictFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [attrLang, setAttrLang] = useState('original');
@@ -250,12 +252,24 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const tb = toolbarRef.current;
     const panel = panelRef.current;
     if (!tb || !panel) return;
-    panel.style.setProperty('--table-toolbar-h', `${tb.getBoundingClientRect().height}px`);
-  });
+
+    const updateToolbarHeight = () => {
+      panel.style.setProperty('--table-toolbar-h', `${tb.getBoundingClientRect().height}px`);
+    };
+
+    updateToolbarHeight();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateToolbarHeight);
+      observer.observe(tb);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', updateToolbarHeight);
+    return () => window.removeEventListener('resize', updateToolbarHeight);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -281,7 +295,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [verdictFilter, JSON.stringify(colFilters)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    verdictFilter,
+    deferredColFilters.request_id,
+    deferredColFilters.pred_subtype,
+    deferredColFilters.attributes,
+    deferredColFilters.metadata,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -293,7 +313,21 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     return <div className="validation-empty">No records for this run.</div>;
   }
 
-  const subtypeToType = Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type]));
+  const subtypeToType = useMemo(
+    () => Object.fromEntries((countrySubtypes || []).map(o => [o.subtype, o.type])),
+    [countrySubtypes]
+  );
+  const preparedRecords = useMemo(
+    () => records.map(r => ({
+      ...r,
+      __requestIdLower: String(r.request_id || '').toLowerCase(),
+      __stage1Lower: String(r.pred_subtype_1 || r.pred_subtype || '').toLowerCase(),
+      __attributesLower: JSON.stringify(r.attributes || '').toLowerCase(),
+      __metadataLower: JSON.stringify(r.metadata || '').toLowerCase(),
+      __missingSubtypeLower: String(r.missing_subtype || '').trim().toLowerCase(),
+    })),
+    [records]
+  );
   const hasGridFilter = Boolean(
     gridFilter &&
     (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)
@@ -310,134 +344,216 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   }
   const gridFilterLabel = gridFilterParts.join(' | ');
 
-  /* ── filtering ── */
-  let filtered = records;
-  if (gridFilter && (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)) {
-    filtered = filtered.filter(r => {
-      const trueSubtype = verdicts[r.request_id] ?? '';
-      const trueType = trueSubtype === '' ? NOT_RETAGGED_LABEL : (subtypeToType[trueSubtype] || '');
+  const requestIdFilter = deferredColFilters.request_id.toLowerCase();
+  const predSubtypeFilter = deferredColFilters.pred_subtype.toLowerCase();
+  const attributesFilter = deferredColFilters.attributes.toLowerCase();
+  const metadataFilter = deferredColFilters.metadata.toLowerCase();
 
-      if (gridFilter.trueType !== null && gridFilter.trueType !== undefined && trueType !== gridFilter.trueType) return false;
-      if (gridFilter.trueSubtype !== null && gridFilter.trueSubtype !== undefined && trueSubtype !== gridFilter.trueSubtype) return false;
-      if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
-      if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
-      return true;
-    });
-  }
-  if (colFilters.request_id)   filtered = filtered.filter(r => r.request_id.toLowerCase().includes(colFilters.request_id.toLowerCase()));
-  if (colFilters.pred_subtype) {
-    filtered = filtered.filter(r => {
-      const stage1 = String(r.pred_subtype_1 || r.pred_subtype || '').toLowerCase();
-      return stage1.includes(colFilters.pred_subtype.toLowerCase());
-    });
-  }
-  if (colFilters.attributes)   filtered = filtered.filter(r => JSON.stringify(r.attributes || '').toLowerCase().includes(colFilters.attributes.toLowerCase()));
-  if (colFilters.metadata)     filtered = filtered.filter(r => JSON.stringify(r.metadata || '').toLowerCase().includes(colFilters.metadata.toLowerCase()));
-  if (verdictFilter !== 'all') {
-    if (verdictFilter === 'unreviewed') {
-      filtered = filtered.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
-    } else if (isRetag && verdictFilter === 'untagged') {
-      filtered = filtered.filter(r => !verdicts[r.request_id]);
-    } else if (isRetag && verdictFilter === 'only_missing') {
-      filtered = filtered.filter(r => String(r.missing_subtype || '').trim() !== '' && String(r.missing_subtype || '').trim().toLowerCase() !== 'none');
-    } else if (isRetag && verdictFilter === 'only_unknown') {
-      filtered = filtered.filter(r => !String(r.missing_subtype || '').trim() || String(r.missing_subtype || '').trim().toLowerCase() === 'none');
-    } else if (isRetag && verdictFilter === 'real_unknown') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
-    } else if (isRetag && verdictFilter === 'real_missing') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
-    } else if (isRetag && verdictFilter === 'false_unknown') {
-      filtered = filtered.filter(r => {
-        const d = gptResults[r.request_id]?.decision;
-        return d === 'wrong_subtype' || d === 'missing_but_mappable';
+  /* ── filtering + sorting (memoized for large datasets) ── */
+  const filtered = useMemo(() => {
+    let next = preparedRecords;
+
+    if (gridFilter && (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)) {
+      next = next.filter(r => {
+        const trueSubtype = verdicts[r.request_id] ?? '';
+        const trueType = trueSubtype === '' ? NOT_RETAGGED_LABEL : (subtypeToType[trueSubtype] || '');
+
+        if (gridFilter.trueType !== null && gridFilter.trueType !== undefined && trueType !== gridFilter.trueType) return false;
+        if (gridFilter.trueSubtype !== null && gridFilter.trueSubtype !== undefined && trueSubtype !== gridFilter.trueSubtype) return false;
+        if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
+        if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
+        return true;
       });
-    } else if (isRetag && verdictFilter === 'weak_signal') {
-      filtered = filtered.filter(r =>
-        (r.pred_subtype_2 || '') === PS2_MISSING &&
-        gptResults[r.request_id]?.decision === 'truly_unknown'
-      );
-    } else if (isRetag && verdictFilter === 'false_missing') {
-      filtered = filtered.filter(r => {
-        const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
-        const gptResult = gptResults[r.request_id];
-        return isPredMissing && gptResult && (gptResult.decision === 'missing_but_mappable' || gptResult.decision === 'wrong_subtype');
-      });
-    } else if (isRetag && verdictFilter === 'truly_unknown') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
-    } else if (isRetag && verdictFilter === 'true_missing_subtype') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
-    } else if (isRetag && verdictFilter === 'missing_but_mappable') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'missing_but_mappable');
-    } else if (isRetag && verdictFilter === 'wrong_subtype') {
-      filtered = filtered.filter(r => gptResults[r.request_id]?.decision === 'wrong_subtype');
-    } else {
-      filtered = filtered.filter(r => verdicts[r.request_id] === verdictFilter);
     }
-  }
 
-  /* ── sorting ── */
-  if (sortConfig.key) {
-    filtered = [...filtered].sort((a, b) => {
-      let aVal, bVal;
-      if (sortConfig.key === 'verdict') {
-        aVal = verdicts[a.request_id] || '';
-        bVal = verdicts[b.request_id] || '';
-      } else if (sortConfig.key === 'true_type') {
-        const aSub = verdicts[a.request_id] || '';
-        const bSub = verdicts[b.request_id] || '';
-        aVal = aSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[aSub] || 'Unknown');
-        bVal = bSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[bSub] || 'Unknown');
-      } else if (sortConfig.key === 'missing_subtype') {
-        aVal = a.missing_subtype || '';
-        bVal = b.missing_subtype || '';
-      } else if (sortConfig.key === 'pred_subtype_1') {
-        aVal = a.pred_subtype_1 || a.pred_subtype || '';
-        bVal = b.pred_subtype_1 || b.pred_subtype || '';
-      } else if (sortConfig.key === 'pred_subtype_2') {
-        aVal = a.pred_subtype_2 || '';
-        bVal = b.pred_subtype_2 || '';
-      } else if (sortConfig.key === 'gpt_verdict') {
-        aVal = gptResults[a.request_id]?.decision || '';
-        bVal = gptResults[b.request_id]?.decision || '';
-      } else if (sortConfig.key === 'ask_gpt') {
-        aVal = getAskText(gptResults[a.request_id]);
-        bVal = getAskText(gptResults[b.request_id]);
-      } else if (sortConfig.key === 'gpt_subtype') {
-        aVal = getGptSubtype(gptResults[a.request_id]);
-        bVal = getGptSubtype(gptResults[b.request_id]);
+    if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
+    if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
+    if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
+    if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+
+    if (verdictFilter !== 'all') {
+      if (verdictFilter === 'unreviewed') {
+        next = next.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
+      } else if (isRetag && verdictFilter === 'untagged') {
+        next = next.filter(r => !verdicts[r.request_id]);
+      } else if (isRetag && verdictFilter === 'only_missing') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v !== '' && v !== 'none' && v !== 'unknown';
+        });
+      } else if (isRetag && verdictFilter === 'only_unknown') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v === '' || v === 'none' || v === 'unknown';
+        });
+      } else if (isRetag && verdictFilter === 'real_unknown') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
+      } else if (isRetag && verdictFilter === 'real_missing') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
+      } else if (isRetag && verdictFilter === 'false_unknown') {
+        next = next.filter(r => {
+          const d = gptResults[r.request_id]?.decision;
+          return d === 'wrong_subtype' || d === 'missing_but_mappable';
+        });
+      } else if (isRetag && verdictFilter === 'gpt_error') {
+        next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
+      } else if (isRetag && verdictFilter === 'weak_signal') {
+        next = next.filter(r =>
+          (r.pred_subtype_2 || '') === PS2_MISSING &&
+          gptResults[r.request_id]?.decision === 'truly_unknown'
+        );
+      } else if (isRetag && verdictFilter === 'false_missing') {
+        next = next.filter(r => {
+          const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
+          const gptResult = gptResults[r.request_id];
+          return isPredMissing && gptResult && (gptResult.decision === 'missing_but_mappable' || gptResult.decision === 'wrong_subtype');
+        });
+      } else if (isRetag && verdictFilter === 'truly_unknown') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'truly_unknown');
+      } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'true_missing_subtype');
+      } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'missing_but_mappable');
+      } else if (isRetag && verdictFilter === 'wrong_subtype') {
+        next = next.filter(r => gptResults[r.request_id]?.decision === 'wrong_subtype');
       } else {
-        aVal = a[sortConfig.key] ?? '';
-        bVal = b[sortConfig.key] ?? '';
+        next = next.filter(r => verdicts[r.request_id] === verdictFilter);
       }
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
+    }
+
+    if (sortConfig.key) {
+      next = [...next].sort((a, b) => {
+        let aVal;
+        let bVal;
+        if (sortConfig.key === 'verdict') {
+          aVal = verdicts[a.request_id] || '';
+          bVal = verdicts[b.request_id] || '';
+        } else if (sortConfig.key === 'true_type') {
+          const aSub = verdicts[a.request_id] || '';
+          const bSub = verdicts[b.request_id] || '';
+          aVal = aSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[aSub] || 'Unknown');
+          bVal = bSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[bSub] || 'Unknown');
+        } else if (sortConfig.key === 'missing_subtype') {
+          aVal = a.missing_subtype || '';
+          bVal = b.missing_subtype || '';
+        } else if (sortConfig.key === 'pred_subtype_1') {
+          aVal = a.pred_subtype_1 || a.pred_subtype || '';
+          bVal = b.pred_subtype_1 || b.pred_subtype || '';
+        } else if (sortConfig.key === 'pred_subtype_2') {
+          aVal = a.pred_subtype_2 || '';
+          bVal = b.pred_subtype_2 || '';
+        } else if (sortConfig.key === 'gpt_verdict') {
+          aVal = gptResults[a.request_id]?.decision || '';
+          bVal = gptResults[b.request_id]?.decision || '';
+        } else if (sortConfig.key === 'ask_gpt') {
+          aVal = getAskText(gptResults[a.request_id]);
+          bVal = getAskText(gptResults[b.request_id]);
+        } else if (sortConfig.key === 'gpt_subtype') {
+          aVal = getGptSubtype(gptResults[a.request_id]);
+          bVal = getGptSubtype(gptResults[b.request_id]);
+        } else {
+          aVal = a[sortConfig.key] ?? '';
+          bVal = b[sortConfig.key] ?? '';
+        }
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return next;
+  }, [
+    preparedRecords,
+    gridFilter,
+    verdicts,
+    subtypeToType,
+    requestIdFilter,
+    predSubtypeFilter,
+    attributesFilter,
+    metadataFilter,
+    verdictFilter,
+    isRetag,
+    gptResults,
+    sortConfig,
+  ]);
 
   const effectivePageSize = pageSize === 'All' ? filtered.length : pageSize;
-  const pageData = filtered.slice(currentPage * effectivePageSize, (currentPage + 1) * effectivePageSize);
+  const pageData = useMemo(
+    () => filtered.slice(currentPage * effectivePageSize, (currentPage + 1) * effectivePageSize),
+    [filtered, currentPage, effectivePageSize]
+  );
+  const hasAnyGptInFiltered = useMemo(
+    () => filtered.some(r => gptResults[r.request_id]),
+    [filtered, gptResults]
+  );
   const totalPages = pageSize === 'All' ? 1 : Math.ceil(filtered.length / effectivePageSize);
 
-  /* ── stats ── */
-  const total = records.length;
-  const reviewed = records.filter(r => verdicts[r.request_id]).length;
-  const justifiedCount   = records.filter(r => verdicts[r.request_id] === 'justified').length;
-  const unjustifiedCount = records.filter(r => verdicts[r.request_id] === 'unjustified').length;
-  const unclearCount     = records.filter(r => verdicts[r.request_id] === 'unclear').length;
+  /* ── stats (single memoized pass) ── */
+  const {
+    total,
+    reviewed,
+    justifiedCount,
+    unjustifiedCount,
+    unclearCount,
+    gptReviewedCount,
+    retaggedCount,
+    anyReviewedCount,
+    onlyMissingCount,
+    onlyUnknownCount,
+    untaggedCount,
+    falseUnknownCount,
+    gptErrorCount,
+    weakSignalCount,
+  } = useMemo(() => {
+    const acc = {
+      total: preparedRecords.length,
+      reviewed: 0,
+      justifiedCount: 0,
+      unjustifiedCount: 0,
+      unclearCount: 0,
+      gptReviewedCount: 0,
+      retaggedCount: 0,
+      anyReviewedCount: 0,
+      onlyMissingCount: 0,
+      onlyUnknownCount: 0,
+      untaggedCount: 0,
+      falseUnknownCount: 0,
+      gptErrorCount: 0,
+      weakSignalCount: 0,
+    };
 
-  /* Unknowns-mode specific stats (gpt-verdict based) */
-  const gptReviewedCount  = records.filter(r => gptResults[r.request_id]).length;
-  const retaggedCount     = records.filter(r => verdicts[r.request_id]).length;
-  const anyReviewedCount  = records.filter(r => gptResults[r.request_id] || verdicts[r.request_id]).length;
-  const onlyMissingCount  = records.filter(r => { const v = String(r.missing_subtype || '').trim(); return v !== '' && v.toLowerCase() !== 'none'; }).length;
-  const onlyUnknownCount  = records.filter(r => { const v = String(r.missing_subtype || '').trim(); return !v || v.toLowerCase() === 'none'; }).length;
-  const untaggedCount     = records.filter(r => !verdicts[r.request_id]).length;
-  const falseUnknownCount = records.filter(r => ['wrong_subtype', 'missing_but_mappable'].includes(gptResults[r.request_id]?.decision)).length;
-  const weakSignalCount   = records.filter(r =>
-    (r.pred_subtype_2 || '') === PS2_MISSING &&
-    gptResults[r.request_id]?.decision === 'truly_unknown'
-  ).length;
+    preparedRecords.forEach(r => {
+      const verdict = verdicts[r.request_id];
+      const gptDecision = gptResults[r.request_id]?.decision;
+      const missing = r.__missingSubtypeLower;
+
+      if (verdict) {
+        acc.reviewed++;
+        acc.retaggedCount++;
+        if (verdict === 'justified') acc.justifiedCount++;
+        if (verdict === 'unjustified') acc.unjustifiedCount++;
+        if (verdict === 'unclear') acc.unclearCount++;
+      } else {
+        acc.untaggedCount++;
+      }
+
+      if (gptResults[r.request_id]) {
+        acc.gptReviewedCount++;
+        acc.anyReviewedCount++;
+      } else if (verdict) {
+        acc.anyReviewedCount++;
+      }
+
+      if (missing === '' || missing === 'none' || missing === 'unknown') acc.onlyUnknownCount++;
+      else acc.onlyMissingCount++;
+
+      if (gptDecision === 'wrong_subtype' || gptDecision === 'missing_but_mappable') acc.falseUnknownCount++;
+      if (gptResults[r.request_id]?.error) acc.gptErrorCount++;
+      if ((r.pred_subtype_2 || '') === PS2_MISSING && gptDecision === 'truly_unknown') acc.weakSignalCount++;
+    });
+
+    return acc;
+  }, [preparedRecords, verdicts, gptResults]);
 
   /* ── bulk ── */
   const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
@@ -485,20 +601,23 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
 
   /* ── ask GPT (filtered records only) ── */
-  const askGptForRecord = async (record) => {
+  const askGptForRecord = async (record, { quick = false } = {}) => {
     const requestId = record.request_id;
     setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
     const predictedStatus = String(record.pred_subtype_2 || '').trim().toLowerCase();
 
     let result;
     try {
-      const allowedSubtypes = (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
+      const allowedSubtypes = quick ? [] : (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
+      const attributes = quick
+        ? Object.fromEntries(Object.entries(record.attributes || {}).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== ''))
+        : record.attributes;
       const res = await fetch('/api/ask-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           judge_mode: true,
-          attributes: record.attributes,
+          attributes,
           metadata: record.metadata,
           predicted_status: predictedStatus,
           pred_type: record.pred_type || '',
@@ -507,23 +626,36 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           candidate_subtype: record.pred_subtype_1 || record.pred_subtype || '',
           missing_subtype: record.missing_subtype || '',
           allowed_subtypes: allowedSubtypes,
-          nearest_subtypes: record.fewshots || record.feshots || [],
         }),
       });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      result = {
-        text: data.text || '',
-        subtype: data.decision || data.subtype || data.verdict || null,
-        decision: data.decision || data.subtype || data.verdict || null,
-        mappedAllowedSubtype: data.mapped_allowed_subtype || '',
-        suggestedMissingSubtype: data.suggested_missing_subtype || '',
-        reason: data.reason || data.reasoning || '',
-        error: null,
-      };
+      if (data.error) {
+        result = {
+          text: '',
+          rawResponse: data.raw_response || '',
+          subtype: null,
+          decision: null,
+          mappedAllowedSubtype: '',
+          suggestedMissingSubtype: '',
+          reason: '',
+          error: data.error,
+        };
+      } else {
+        result = {
+          text: data.text || '',
+          rawResponse: data.raw_response || '',
+          subtype: data.decision || data.subtype || data.verdict || null,
+          decision: data.decision || data.subtype || data.verdict || null,
+          mappedAllowedSubtype: data.mapped_allowed_subtype || '',
+          suggestedMissingSubtype: data.suggested_missing_subtype || '',
+          reason: data.reason || data.reasoning || '',
+          error: null,
+        };
+      }
     } catch (err) {
       result = {
         text: '',
+        rawResponse: '',
         subtype: null,
         decision: null,
         mappedAllowedSubtype: '',
@@ -540,6 +672,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       mapped_allowed_subtype: result.mappedAllowedSubtype || '',
       suggested_missing_subtype: result.suggestedMissingSubtype || '',
       reasoning: result.text || result.reason || (result.error ? `Error: ${result.error}` : ''),
+      raw_response: result.rawResponse || '',
+      error: result.error || null,
     });
     fetch('/api/gpt-results', {
       method: 'PUT',
@@ -571,6 +705,34 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     for (const record of pending) {
       if (gptCancelledRef.current) break;
       await askGptForRecord(record);
+      setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
+    }
+    setGptRunning(false);
+  };
+
+  const askGptErrors = async (recordsToProcess) => {
+    gptCancelledRef.current = false;
+    const errored = recordsToProcess.filter(r => gptResults[r.request_id]?.error);
+    if (errored.length === 0) return;
+    setGptRunning(true);
+    setGptProgress({ done: 0, total: errored.length });
+    for (const record of errored) {
+      if (gptCancelledRef.current) break;
+      await askGptForRecord(record);
+      setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
+    }
+    setGptRunning(false);
+  };
+
+  const askGptAllQuick = async (recordsToProcess) => {
+    gptCancelledRef.current = false;
+    const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
+    if (pending.length === 0) return;
+    setGptRunning(true);
+    setGptProgress({ done: 0, total: pending.length });
+    for (const record of pending) {
+      if (gptCancelledRef.current) break;
+      await askGptForRecord(record, { quick: true });
       setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
     }
     setGptRunning(false);
@@ -687,10 +849,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               {[
                 { key: 'all',           label: 'All',           count: total,              title: 'All records in this run' },
                 { key: 'untagged',      label: 'Untagged',      count: untaggedCount,      title: 'Records that have not yet been assigned a true subtype by a human reviewer' },
-                { key: 'only_missing',  label: 'Only Missing',  count: onlyMissingCount,   title: 'Records that have a proposed missing subtype value' },
-                { key: 'only_unknown',  label: 'Only Unknown',  count: onlyUnknownCount,   title: 'Records without a proposed missing subtype (pure unknowns)' },
-                { key: 'false_unknown', label: 'Suspected False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
-                { key: 'weak_signal',   label: 'Suspected Weak Signal',    count: weakSignalCount,     title: 'Model proposed a specific missing subtype (suggesting a content signal), but GPT found no reliable signal and judged the record as truly unknown' },
+                { key: 'only_missing',  label: 'Missing',       count: onlyMissingCount,   title: 'Records with a concrete missing subtype value (excluding empty/None/unknown)' },
+                { key: 'only_unknown',  label: 'Unknown',       count: onlyUnknownCount,   title: 'Records with missing subtype empty, None, or unknown' },
+                { key: 'false_unknown', label: 'False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
+                { key: 'gpt_error',       label: 'GPT Errors',   count: gptErrorCount,      title: 'Records where GPT returned malformed or failed output and the review could not be parsed' },
+                { key: 'weak_signal',     label: 'Weak Signal',  count: weakSignalCount,    title: 'Model proposed a specific missing subtype (suggesting a content signal), but GPT found no reliable signal and judged the record as truly unknown' },
               ].map(t => (
                 <button
                   key={t.key}
@@ -739,11 +902,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         {/* Row height, export, ask gpt */}
         {isRetag ? (
           <>
-            <div className="gpt-subtype-legend">
-              <span className="gpt-subtype-pill is-mapped">existing</span>
-              <span className="gpt-subtype-pill is-suggested">missing</span>
-              <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
-            </div>
             <div className="row-height-control">
               <span className="row-height-label">Row height:</span>
               {ROW_HEIGHT_OPTIONS.map(opt => (
@@ -753,7 +911,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             <button
               className="export-csv-btn ask-gpt-btn"
               onClick={() => handleBulkAcceptGpt(filtered)}
-              disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+              disabled={gptRunning || !hasAnyGptInFiltered}
               title="Accept GPT suggestions for all reviewed records"
             >
               Accept GPT
@@ -765,6 +923,24 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             >
               {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
             </button>
+            <button
+              className="export-csv-btn ask-gpt-btn ask-gpt-quick-btn"
+              onClick={() => askGptAllQuick(filtered)}
+              disabled={gptRunning}
+              title="Quick GPT: no allowed-subtype list, empty attributes stripped"
+            >
+              Quick GPT
+            </button>
+            {gptErrorCount > 0 && (
+              <button
+                className="export-csv-btn ask-gpt-btn ask-gpt-errors-btn"
+                onClick={() => askGptErrors(filtered)}
+                disabled={gptRunning}
+                title={`Re-run GPT for ${gptErrorCount} errored record(s)`}
+              >
+                Re-run Errors ({gptErrorCount})
+              </button>
+            )}
             {gptRunning && (
               <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
                 Cancel
@@ -773,11 +949,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           </>
         ) : (
           <div className="validation-controls">
-            <div className="gpt-subtype-legend">
-              <span className="gpt-subtype-pill is-mapped">existing</span>
-              <span className="gpt-subtype-pill is-suggested">missing</span>
-              <span className="gpt-subtype-pill is-truly-unknown">unknown</span>
-            </div>
             <div className="row-height-control">
               <span className="row-height-label">Row height:</span>
               {ROW_HEIGHT_OPTIONS.map(opt => (
@@ -787,7 +958,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             <button
               className="export-csv-btn ask-gpt-btn"
               onClick={() => handleBulkAcceptGpt(filtered)}
-              disabled={gptRunning || !filtered.some(r => gptResults[r.request_id])}
+              disabled={gptRunning || !hasAnyGptInFiltered}
               title="Accept GPT suggestions for all reviewed records"
             >
               Accept GPT
@@ -799,6 +970,24 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             >
               {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
             </button>
+            <button
+              className="export-csv-btn ask-gpt-btn ask-gpt-quick-btn"
+              onClick={() => askGptAllQuick(filtered)}
+              disabled={gptRunning}
+              title="Quick GPT: no allowed-subtype list, empty attributes stripped"
+            >
+              Quick GPT
+            </button>
+            {gptErrorCount > 0 && (
+              <button
+                className="export-csv-btn ask-gpt-btn ask-gpt-errors-btn"
+                onClick={() => askGptErrors(filtered)}
+                disabled={gptRunning}
+                title={`Re-run GPT for ${gptErrorCount} errored record(s)`}
+              >
+                Re-run Errors ({gptErrorCount})
+              </button>
+            )}
             {gptRunning && (
               <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
                 Cancel
@@ -844,6 +1033,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
                   GPT Subtype{sortIndicator('gpt_subtype')}
+                </th>
+                <th style={{ width: 320, cursor: 'pointer' }} onClick={() => handleSort('gpt_raw_response')}>
+                  GPT Raw Response{sortIndicator('gpt_raw_response')}
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
                   True Subtype{sortIndicator('verdict')}
@@ -896,6 +1088,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 <th />
                 <th />
                 <th />
+                <th />
               </tr>
             ) : (
               <tr className="col-filter-row">
@@ -938,6 +1131,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       >
                         {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
                       </button>
+                      <button
+                        className="ask-gpt-row-btn ask-gpt-quick-btn"
+                        disabled={Boolean(askGptLoading[r.request_id])}
+                        onClick={e => { e.stopPropagation(); askGptForRecord(r, { quick: true }); }}
+                        title="Quick GPT: no allowed-subtype list, empty attributes stripped"
+                      >
+                        Quick
+                      </button>
                     </td>
                     <td className="cell-gpt-subtype">
                       {gptSubtypeText ? (
@@ -960,6 +1161,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       ) : (
                         <span className="gpt-subtype-pill is-empty">—</span>
                       )}
+                    </td>
+                    <td className="cell-gpt-raw-response">
+                      <div className="gpt-raw-response" title={String(gpt?.rawResponse || '').trim() || 'No raw GPT response available'}>
+                        {String(gpt?.rawResponse || '').trim() || '—'}
+                      </div>
                     </td>
                     <td className="cell-verdict cell-retag">
                       <ValidationRecordDecisionControls

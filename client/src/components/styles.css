@@ -2292,6 +2292,21 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   white-space: normal;
 }
 
+.gpt-raw-response {
+  max-width: 320px;
+  max-height: 6.8rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .ask-gpt-row-btn {
   align-self: flex-start;
   border: 1px solid var(--border-strong);
@@ -2312,6 +2327,26 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .ask-gpt-row-btn:disabled {
   opacity: 0.65;
   cursor: wait;
+}
+
+.ask-gpt-quick-btn {
+  border-color: #9b59b6;
+  color: #7d3c98;
+}
+
+.ask-gpt-quick-btn:hover:not(:disabled) {
+  border-color: #7d3c98;
+  color: #7d3c98;
+  background: #f5eef8;
+}
+
+.ask-gpt-errors-btn {
+  border-color: #e74c3c;
+  color: #c0392b;
+}
+
+.ask-gpt-errors-btn:hover:not(:disabled) {
+  background: #fdf2f1;
 }
 
 .json-cell-wrapper .copy-json-btn {
