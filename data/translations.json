@@ -16589,5 +16589,331 @@
     "createdDate": "2025-08-01T08:14:26.555Z",
     "description": "Red book product",
     "lastModified": "2026-02-28T13:56:09.479Z"
+  },
+  "UNK-IT-M004": {
+    "sku": "SKU-IT0104",
+    "name": "Item_ITM004",
+    "tags": [
+      "sport"
+    ],
+    "brand": "Economico",
+    "price": 365.92,
+    "description": "A sports product"
+  },
+  "UNK-IT-M002": {
+    "sku": "SKU-IT0102",
+    "name": "Item_ITM002",
+    "tags": [
+      "art"
+    ],
+    "brand": "BrandA",
+    "price": 387.67,
+    "description": "An art product"
+  },
+  "UNK-IT-M005": {
+    "sku": "SKU-IT0105",
+    "name": "Item_ITM005",
+    "tags": [
+      "furniture"
+    ],
+    "brand": "Premium",
+    "price": 118.38,
+    "description": "A furniture product"
+  },
+  "UNK-IT-M003": {
+    "sku": "SKU-IT0103",
+    "name": "Item_ITM003",
+    "tags": [
+      "fashion"
+    ],
+    "brand": "BrandB",
+    "price": 85.51,
+    "description": "A fashion product"
+  },
+  "UNK-IT-E001": {
+    "sku": "SKU-IT-E001",
+    "name": "Certified Cremona Artisan Violin",
+    "tags": [
+      "musical instrument",
+      "violin",
+      "craftsmanship"
+    ],
+    "brand": "Averna Violin Making",
+    "price": 2800,
+    "description": "Violin entirely handmade in Cremona by a certified violin maker, 10-year seasoned wood, spirit varnish, case included"
+  },
+  "UNK-IT-E004": {
+    "sku": "SKU-IT-E004",
+    "name": "Deruta Maiolica Plate 16th Century Floral Decoration",
+    "tags": [
+      "ceramics",
+      "majolica",
+      "historic",
+      "deruta"
+    ],
+    "brand": "Museum of Ceramics",
+    "price": 650,
+    "description": "16th century Deruta majolica plate, typical floral decoration, documented provenance with expertise, certificate of antiquity"
+  },
+  "UNK-IT-E002": {
+    "sku": "SKU-IT-E002",
+    "name": "Barolo DOCG 1997 Giacomo Conterno",
+    "tags": [
+      "wine",
+      "barolo",
+      "rare",
+      "vintage"
+    ],
+    "brand": "Giacomo Conterno",
+    "price": 380,
+    "description": "Barolo DOCG vintage 1997 of limited production, world-renowned winery, certificate of authenticity included, score 98 WS"
+  },
+  "UNK-IT-M006": {
+    "sku": "SKU-IT0106",
+    "name": "Item_ITM006",
+    "tags": [
+      "kitchen"
+    ],
+    "brand": "Economic",
+    "price": 438.8,
+    "description": "A kitchen product"
+  },
+  "UNK-IT-M001": {
+    "sku": "SKU-IT0101",
+    "name": "Item_ITM001",
+    "tags": [
+      "electronics"
+    ],
+    "brand": "BrandB",
+    "price": 415.56,
+    "description": "An electronic product"
+  },
+  "UNK-IT-E005": {
+    "sku": "SKU-IT-E005",
+    "name": "Handmade vegetable-tanned leather bag from Florence",
+    "tags": [
+      "craftsmanship",
+      "leather",
+      "bag",
+      "handmade"
+    ],
+    "brand": "Florentine Workshop",
+    "price": 320,
+    "description": "Bag handcrafted with Tuscan vegetable-tanned leather, saddle stitch manual sewing, customization engraving included"
+  },
+  "UNK-IT-M009": {
+    "sku": "SKU-IT0109",
+    "name": "Item_ITM009",
+    "tags": [
+      "electronics"
+    ],
+    "brand": "BrandA",
+    "price": 397.08,
+    "description": "An electronics product"
+  },
+  "UNK-IT-M007": {
+    "sku": "SKU-IT0107",
+    "name": "Item_ITM007",
+    "tags": [
+      "toys"
+    ],
+    "brand": "BrandB",
+    "price": 74.12,
+    "description": "A toy product"
+  },
+  "UNK-IT-E003": {
+    "sku": "SKU-IT-E003",
+    "name": "Original oil painting on canvas Tuscan landscape",
+    "tags": [
+      "art",
+      "painting",
+      "work of art",
+      "oil on canvas"
+    ],
+    "brand": "Uffizi Gallery Shop",
+    "price": 1200,
+    "description": "Original work signed by the artist, oil on canvas 60x80cm, certificate of authenticity with notarial authentication, handcrafted frame"
+  },
+  "UNK-IT-M008": {
+    "sku": "SKU-IT0108",
+    "name": "Item_ITM008",
+    "tags": [
+      "books"
+    ],
+    "brand": "BrandA",
+    "price": 498.68,
+    "description": "A book product"
+  },
+  "UNK-IT-M010": {
+    "sku": "SKU-IT0110",
+    "name": "Item_ITM010",
+    "tags": [
+      "art"
+    ],
+    "brand": "Economical",
+    "price": 129.45,
+    "description": "An art product"
+  },
+  "UNK-IT-N001": {
+    "sku": "SKU-IT-N001",
+    "name": "Annual RaiPlay Premium Subscription without advertisements",
+    "tags": [
+      "subscription",
+      "streaming",
+      "digital",
+      "annual"
+    ],
+    "brand": "RAI",
+    "price": 59.99,
+    "description": "Unlimited access to all RaiPlay content without advertisements for 12 months, offline downloads, 4 simultaneous profiles, 4K quality"
+  },
+  "UNK-IT-N002": {
+    "sku": "SKU-IT-N002",
+    "name": "Digital Arm Blood Pressure Monitor CE Certified Class IIa",
+    "tags": [
+      "medical device",
+      "pressure",
+      "health",
+      "CE"
+    ],
+    "brand": "Omron",
+    "price": 89,
+    "description": "CE Certified Class IIa Digital Blood Pressure Monitor with clinical validation, memory of 60 measurements, arrhythmia detection, compliant with MDR 2017/745"
+  },
+  "UNK-IT-SYN-001": {
+    "sku": "SKU-IT-SYN-001",
+    "name": "Handcrafted 925 silver earrings",
+    "tags": [
+      "jewelry",
+      "silver",
+      "craftsmanship"
+    ],
+    "brand": "Silverware Naples",
+    "price": 95,
+    "description": "Handmade 925 silver hoop earrings by a Neapolitan goldsmith, gift packaging included"
+  },
+  "UNK-IT-N004": {
+    "sku": "SKU-IT-N004",
+    "name": "Derby Shoes 100% vegan certified Vegan Society",
+    "tags": [
+      "vegan",
+      "certified",
+      "footwear",
+      "sustainable"
+    ],
+    "brand": "Will's Vegan Store",
+    "price": 135,
+    "description": "Derby shoes made from 100% vegan materials certified by the Vegan Society, carbon neutral production, 100% recycled packaging, no animal glue"
+  },
+  "UNK-IT-SYN-002": {
+    "sku": "SKU-IT-SYN-002",
+    "name": "Victorinox Professional Kitchen Knife",
+    "tags": [
+      "kitchen",
+      "knife",
+      "professional"
+    ],
+    "brand": "Victorinox",
+    "price": 120,
+    "description": "20cm chef's knife in stainless steel, ergonomic handle, professional certified"
+  },
+  "UNK-IT-N003": {
+    "sku": "SKU-IT-N003",
+    "name": "Weekly recipe box HelloFresh fresh pre-portioned ingredients",
+    "tags": [
+      "meal kit",
+      "delivery",
+      "cooking",
+      "weekly"
+    ],
+    "brand": "HelloFresh",
+    "price": 49.9,
+    "description": "Weekly box with fresh pre-portioned ingredients and step-by-step recipes for 2 people, 3 dinners included, recyclable packaging"
+  },
+  "UNK-IT-SYN-003": {
+    "sku": "SKU-IT-SYN-003",
+    "name": "Professional complete skateboard",
+    "tags": [
+      "sport",
+      "skateboard",
+      "outdoor"
+    ],
+    "brand": "Santa Cruz",
+    "price": 175,
+    "description": "Complete skateboard with 8.0 deck, Independent trucks, Spitfire wheels, Bones Reds bearings"
+  },
+  "UNK-IT-N005": {
+    "sku": "SKU-IT-N005",
+    "name": "Extended warranty 3 years washing machine total coverage",
+    "tags": [
+      "warranty",
+      "extended",
+      "service",
+      "appliances"
+    ],
+    "brand": "MediaWorld",
+    "price": 79,
+    "description": "Extension warranty 3 years for washing machine, coverage for mechanical and electronic failures, technical intervention within 48h, free replacement if not repairable"
+  },
+  "UNK-IT-U002": {
+    "sku": "SKU-IT-U002",
+    "name": "Lot recovery assortment C-12 heterogeneous",
+    "tags": [
+      "lot",
+      "various",
+      "recovery"
+    ],
+    "brand": "Unknown",
+    "price": 22,
+    "description": "Heterogeneous lot of clearance items, unlisted contents, variable conditions, no predominant product category"
+  },
+  "UNK-IT-U004": {
+    "sku": "SKU-IT-U004",
+    "name": "Hybrid conceptual design object open interpretation",
+    "tags": [
+      "design",
+      "art",
+      "functional",
+      "hybrid"
+    ],
+    "brand": "Studio Nendo",
+    "price": 875,
+    "description": "Conceptual piece that challenges classification: interpretable as sculpture, seating, or architectural element depending on the context of installation"
+  },
+  "UNK-IT-U001": {
+    "sku": "SKU-IT-U001",
+    "name": "Component Z-99 unknown origin without documentation",
+    "tags": [
+      "unknown",
+      "various"
+    ],
+    "brand": "Generic",
+    "price": 43,
+    "description": "Component of unknown origin lacking technical documentation, not compatible with known standards, possible unspecified industrial use"
+  },
+  "UNK-IT-U003": {
+    "sku": "SKU-IT-U003",
+    "name": "Composite Material Prototype RM-4 Experimental Phase",
+    "tags": [
+      "prototype",
+      "R&D",
+      "material"
+    ],
+    "brand": "PoliMI Lab",
+    "price": 1100,
+    "description": "Sample of composite material from university research in the experimental phase, physical properties not definitively established, for study only"
+  },
+  "UNK-IT-U005": {
+    "sku": "SKU-IT-U005",
+    "name": "Integrated physical-digital-service non-classifiable package",
+    "tags": [
+      "package",
+      "service",
+      "product",
+      "mixed"
+    ],
+    "brand": "ComboSolution",
+    "price": 299,
+    "description": "Offer that includes physical, digital, and service in variable proportions for the customer, legal-commercial frontier of the undetermined category"
   }
 }

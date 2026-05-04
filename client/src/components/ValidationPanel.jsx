@@ -244,6 +244,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [gptResults, setGptResults] = useState({});   // request_id -> { verdict, reasoning }
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
+  const [translateState, setTranslateState] = useState({ running: false, field: null, done: 0, total: 0 });
+  const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
   const gptCancelledRef = useRef(false);
   const toolbarRef = useRef(null);
@@ -277,6 +279,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptResults({});
     setGptRunning(false);
     setAskGptLoading({});
+    setTranslateState({ running: false, field: null, done: 0, total: 0 });
+    setTranslatedOverrides({});
     setColFilters(EMPTY_COL_FILTERS);
     if (runId) {
       fetch(`/api/gpt-results?run_id=${runId}`)
@@ -599,6 +603,80 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   /* ── col filter helper ── */
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
+
+  const translateFilteredField = async (field) => {
+    if (translateState.running) return;
+    const rows = filtered;
+    if (!rows.length) return;
+
+    if (field === 'attributes') setAttrLang('en');
+    if (field === 'metadata') setMetaLang('en');
+
+    setTranslateState({ running: true, field, done: 0, total: rows.length });
+
+    const payload = {
+      field,
+      records: rows.map(r => ({
+        request_id: r.request_id,
+        attributes: r.attributes,
+        metadata: r.metadata,
+      })),
+    };
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok || !res.body) {
+        const text = await res.text();
+        throw new Error(text || `Translate failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() || '';
+
+        for (const chunk of chunks) {
+          const line = chunk.split('\n').find(l => l.startsWith('data: '));
+          if (!line) continue;
+          const data = JSON.parse(line.slice(6));
+          const total = Number(data.total || rows.length);
+          const doneCount = Number(data.done || 0);
+
+          setTranslateState({ running: !Boolean(data.finished), field, done: doneCount, total });
+
+          if (data.request_id && data.attrsEn) {
+            setTranslatedOverrides(prev => ({
+              ...prev,
+              [data.request_id]: {
+                ...(prev[data.request_id] || {}),
+                [field === 'attributes' ? 'en_attributes' : 'en_metadata']: data.attrsEn,
+              },
+            }));
+          }
+
+          if (data.finished) {
+            setToast(`${field === 'attributes' ? 'Attributes' : 'Metadata'} translation finished (${total}/${total})`);
+          }
+        }
+      }
+    } catch (err) {
+      setToast(`Translate failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setTranslateState(prev => ({ ...prev, running: false, field: null }));
+    }
+  };
 
   /* ── ask GPT (filtered records only) ── */
   const askGptForRecord = async (record, { quick = false } = {}) => {
@@ -1013,6 +1091,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
                       <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                      <button
+                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'attributes' ? ' active' : ''}`}
+                        onClick={() => translateFilteredField('attributes')}
+                        disabled={translateState.running}
+                        title="Translate filtered Attributes with GPT"
+                      >
+                        {translateState.running && translateState.field === 'attributes'
+                          ? `GPT ${translateState.done}/${translateState.total}`
+                          : 'GPT'}
+                      </button>
                     </div>
                   </div>
                 </th>
@@ -1022,6 +1110,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
                       <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
+                      <button
+                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'metadata' ? ' active' : ''}`}
+                        onClick={() => translateFilteredField('metadata')}
+                        disabled={translateState.running}
+                        title="Translate filtered Metadata with GPT"
+                      >
+                        {translateState.running && translateState.field === 'metadata'
+                          ? `GPT ${translateState.done}/${translateState.total}`
+                          : 'GPT'}
+                      </button>
                     </div>
                   </div>
                 </th>
@@ -1058,6 +1156,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
                       <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
+                      <button
+                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'attributes' ? ' active' : ''}`}
+                        onClick={() => translateFilteredField('attributes')}
+                        disabled={translateState.running}
+                        title="Translate filtered Attributes with GPT"
+                      >
+                        {translateState.running && translateState.field === 'attributes'
+                          ? `GPT ${translateState.done}/${translateState.total}`
+                          : 'GPT'}
+                      </button>
                     </div>
                   </div>
                 </th>
@@ -1067,6 +1175,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
                       <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
+                      <button
+                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'metadata' ? ' active' : ''}`}
+                        onClick={() => translateFilteredField('metadata')}
+                        disabled={translateState.running}
+                        title="Translate filtered Metadata with GPT"
+                      >
+                        {translateState.running && translateState.field === 'metadata'
+                          ? `GPT ${translateState.done}/${translateState.total}`
+                          : 'GPT'}
+                      </button>
                     </div>
                   </div>
                 </th>
@@ -1111,8 +1229,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const isGptAccepted = canAcceptGpt && verdict === gptSuggestedVerdict;
               const gptSubtypeText = getGptSubtype(gpt);
               const gptSubtypeSource = getGptSubtypeSource(gpt);
-              const attrData = attrLang === 'en' ? (r.en_attributes || r.attributes) : r.attributes;
-              const metaData = metaLang === 'en' ? (r.en_metadata || r.metadata) : r.metadata;
+              const attrData = attrLang === 'en'
+                ? (translatedOverrides[r.request_id]?.en_attributes ?? r.en_attributes ?? null)
+                : r.attributes;
+              const metaData = metaLang === 'en'
+                ? (translatedOverrides[r.request_id]?.en_metadata ?? r.en_metadata ?? null)
+                : r.metadata;
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
 
               if (isRetag) {

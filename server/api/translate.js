@@ -24,6 +24,9 @@ const { updateTranslation, updateMetadataTranslation } = loader;
 const OPENAI_API_KEY   = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL     = process.env.OPENAI_MODEL     || 'gpt-4o-mini';
 const OPENAI_API_URL   = process.env.OPENAI_API_URL   || 'https://api.openai.com/v1/chat/completions';
+const TRANSLATE_GPT_MODEL = process.env.TRANSLATE_GPT_MODEL || OPENAI_MODEL;
+const TRANSLATE_GPT_URL = process.env.TRANSLATE_GPT_URL || OPENAI_API_URL;
+const TRANSLATE_DESTINATION_LANGUAGE = process.env.TRANSLATE_DESTINATION_LANGUAGE || 'English';
 if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
   console.warn('⚠ OPENAI_API_KEY is not set — /api/translate will fail');
 }
@@ -61,8 +64,8 @@ const CONCURRENCY = parseInt(process.env.OPENAI_CONCURRENCY) || 10;
 const TIMEOUT_MS  = 20000; // 20 s per request
 
 async function translateAttributes(attrs) {
-  const prompt = `Translate this JSON object to English.
-Translate every non-English string — both keys and string values — to English.
+  const prompt = `Translate this JSON object to ${TRANSLATE_DESTINATION_LANGUAGE}.
+Translate every non-English key key-by-key and every non-English string value value-by-value into ${TRANSLATE_DESTINATION_LANGUAGE}.
 Keep numbers, booleans, arrays, and nested object structure exactly as-is.
 Return ONLY the translated JSON object, no explanation, no markdown fences.
 
@@ -73,7 +76,7 @@ ${JSON.stringify(attrs, null, 2)}`;
 
   let response;
   try {
-    response = await fetch(OPENAI_API_URL, {
+    response = await fetch(TRANSLATE_GPT_URL, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -81,7 +84,7 @@ ${JSON.stringify(attrs, null, 2)}`;
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: TRANSLATE_GPT_MODEL,
         max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -97,7 +100,7 @@ ${JSON.stringify(attrs, null, 2)}`;
 
   const data = await response.json();
   const { usage, model, id, choices } = data;
-  console.log(`[translate] id=${id} model=${model} prompt=${usage?.prompt_tokens} completion=${usage?.completion_tokens} total=${usage?.total_tokens} finish=${choices?.[0]?.finish_reason}`);
+  console.log(`[translate] id=${id} model=${model} dst=${TRANSLATE_DESTINATION_LANGUAGE} prompt=${usage?.prompt_tokens} completion=${usage?.completion_tokens} total=${usage?.total_tokens} finish=${choices?.[0]?.finish_reason}`);
 
   const text = choices[0].message.content.trim();
   const jsonText = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();

@@ -1,0 +1,170 @@
+{
+  "UNK-IT-M004": {
+    "region": "NA",
+    "source": "Web Extraction",
+    "status": "Archived",
+    "confidence": "61.3"
+  },
+  "UNK-IT-E002": {
+    "region": "EU",
+    "source": "Web Extraction",
+    "status": "Active",
+    "confidence": "71.8"
+  },
+  "UNK-IT-M001": {
+    "region": "NA",
+    "source": "Web Extraction",
+    "status": "Archived",
+    "confidence": "25.1"
+  },
+  "UNK-IT-E005": {
+    "region": "LATAM",
+    "source": "API",
+    "status": "Active",
+    "confidence": "60.7"
+  },
+  "UNK-IT-M003": {
+    "region": "NA",
+    "source": "Manual Entry",
+    "status": "Archived",
+    "confidence": "49.5"
+  },
+  "UNK-IT-E004": {
+    "region": "EU",
+    "source": "Web Extraction",
+    "status": "Archived",
+    "confidence": "63.5"
+  },
+  "UNK-IT-M002": {
+    "region": "EU",
+    "source": "Raspatore",
+    "status": "Review",
+    "confidence": "24.5"
+  },
+  "UNK-IT-M005": {
+    "region": "LATAM",
+    "source": "API",
+    "status": "Active",
+    "confidence": "41.1"
+  },
+  "UNK-IT-E001": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "66.3"
+  },
+  "UNK-IT-E003": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "58.9"
+  },
+  "UNK-IT-M009": {
+    "region": "LATAM",
+    "source": "Raspatore",
+    "status": "Archived",
+    "confidence": "29.9"
+  },
+  "UNK-IT-M010": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Archived",
+    "confidence": "84.8"
+  },
+  "UNK-IT-M007": {
+    "region": "MENA",
+    "source": "Raspatore",
+    "status": "Archived",
+    "confidence": "49.8"
+  },
+  "UNK-IT-M006": {
+    "region": "LATAM",
+    "source": "Raspatore",
+    "status": "Archived",
+    "confidence": "33.7"
+  },
+  "UNK-IT-M008": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "46.0"
+  },
+  "UNK-IT-N003": {
+    "region": "NA",
+    "source": "API",
+    "status": "Active",
+    "confidence": "82.4"
+  },
+  "UNK-IT-N002": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "75.6"
+  },
+  "UNK-IT-N001": {
+    "region": "EU",
+    "source": "API",
+    "status": "Active",
+    "confidence": "80.1"
+  },
+  "UNK-IT-SYN-002": {
+    "region": "EU",
+    "source": "Web Extraction",
+    "status": "Active",
+    "confidence": "58.3"
+  },
+  "UNK-IT-N005": {
+    "region": "APAC",
+    "source": "Raspatore",
+    "status": "Active",
+    "confidence": "69.8"
+  },
+  "UNK-IT-SYN-003": {
+    "region": "EU",
+    "source": "Manual Input",
+    "status": "Active",
+    "confidence": "54.7"
+  },
+  "UNK-IT-SYN-001": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "62.1"
+  },
+  "UNK-IT-U002": {
+    "region": "LATAM",
+    "source": "Web Extraction",
+    "status": "Archived",
+    "confidence": "18.5"
+  },
+  "UNK-IT-U004": {
+    "region": "EU",
+    "source": "API",
+    "status": "Review",
+    "confidence": "29.4"
+  },
+  "UNK-IT-U003": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Review",
+    "confidence": "33.7"
+  },
+  "UNK-IT-U005": {
+    "region": "MENA",
+    "source": "Raspatore",
+    "status": "Review",
+    "confidence": "22.8"
+  },
+  "UNK-IT-U001": {
+    "region": "NA",
+    "source": "Raspatore",
+    "status": "Review",
+    "confidence": "26.1"
+  },
+  "UNK-IT-N004": {
+    "region": "MENA",
+    "source": "Web Extraction",
+    "status": "Active",
+    "confidence": "78.3"
+  }
+}

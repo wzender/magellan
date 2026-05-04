@@ -2442,6 +2442,18 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   color: var(--primary);
 }
 
+.attr-lang-gpt-btn {
+  border-color: #7c3aed;
+  color: #6d28d9;
+  font-weight: 600;
+}
+
+.attr-lang-gpt-btn:not(.active):hover {
+  border-color: #6d28d9;
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
 .cancel-translate-btn {
   color: var(--error) !important;
   border-color: var(--error) !important;
