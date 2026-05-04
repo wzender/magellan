@@ -207,6 +207,23 @@ function sameRunId(a, b) {
   return String(a) === String(b);
 }
 
+function pickChampionBySubtypeWeightedF1(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  let best = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  rows.forEach((row) => {
+    const score = Number(row?.subtype_weighted_f1);
+    if (Number.isFinite(score) && score > bestScore) {
+      best = row;
+      bestScore = score;
+    }
+  });
+
+  return best || rows[0];
+}
+
 /* ── SummaryBar ──────────────────────────────────────────── */
 function SummaryBar({ typeHealth, typeHealth2, run1Name, run2Name }) {
   if (!typeHealth || typeHealth.length === 0) return null;
@@ -378,7 +395,7 @@ function Dashboard() {
     setSelectedBenchmark(benchmark);
     const lb = allLeaderboards[benchmark.id] || [];
     setLeaderboard(lb);
-    const champion = lb[0];
+    const champion = pickChampionBySubtypeWeightedF1(lb);
     setTypeHealth([]);
     setConfidenceQuality(null);
     setTypeHealth2(null);
