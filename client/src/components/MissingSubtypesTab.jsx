@@ -67,43 +67,44 @@ function getGptSubtypeSource(result) {
   return 'none';
 }
 
-/* ── Per-record true_subtype badge ───────────────────────────────────────── */
-function TrueSubtypeBadge({ trueSubtype }) {
-  const raw = String(trueSubtype || '').trim();
-  const normalized = raw.toLowerCase();
-  if (!raw) return <span className="missing-decision-badge missing-decision-unreviewed">Untagged</span>;
-  if (normalized === 'missing') return <span className="missing-decision-badge missing-decision-mapped">Missing</span>;
-  if (normalized === 'unknown') return <span className="missing-decision-badge missing-decision-unknown">Unknown</span>;
-  return <span className="missing-decision-badge missing-decision-accepted">{trueSubtype}</span>;
+function getGptSuggestedVerdict(result, countrySubtypes) {
+  if (!result) return '';
+  const mapped = String(result.mappedAllowedSubtype || '').trim();
+  const allowedSet = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
+
+  if (result.decision === 'truly_unknown' || mapped.toLowerCase() === 'unknown') {
+    return 'unknown';
+  }
+  if (mapped && allowedSet.has(mapped)) {
+    return mapped;
+  }
+  if (String(result.suggestedMissingSubtype || '').trim()) {
+    return 'Missing';
+  }
+  return '';
 }
 
-/* ── Per-record decision controls (Accept GPT / Map / Missing) ──────────── */
-function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
+/* ── Per-record decision controls (manual true_subtype chooser) ─────────── */
+function RecordDecisionControls({ record, countrySubtypes, onDecision }) {
   const [mappingOpen, setMappingOpen] = useState(false);
   const [mapQuery, setMapQuery]       = useState('');
+  const searchInputRef = useRef(null);
   const dropdownRef = useRef(null);
 
-  const currentSubtype = record.true_subtype || null;
-  const currentSubtypeNorm = String(currentSubtype || '').trim().toLowerCase();
-  const gptMapped      = gpt ? String(gpt.mappedAllowedSubtype || '').trim() : '';
+  const currentSubtype = String(record.true_subtype || '').trim();
   const allowedSet     = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
-  let gptSuggestedVerdict = '';
-  if (gpt) {
-    if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
-      gptSuggestedVerdict = 'unknown';
-    } else if (gptMapped && allowedSet.has(gptMapped)) {
-      gptSuggestedVerdict = gptMapped;
-    } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
-      gptSuggestedVerdict = 'Missing';
-    }
-  }
-  const gptIsValid     = Boolean(gptSuggestedVerdict);
 
   const subtypeOptions = [...allowedSet];
   const dropdownOptions = ['unknown', 'Missing', ...subtypeOptions];
   const filteredOptions = mapQuery
     ? dropdownOptions.filter(s => s.toLowerCase().includes(mapQuery.toLowerCase()))
     : dropdownOptions;
+
+  useEffect(() => {
+    if (mappingOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [mappingOpen]);
 
   useEffect(() => {
     if (!mappingOpen) return;
@@ -117,66 +118,78 @@ function RecordDecisionControls({ record, gpt, countrySubtypes, onDecision }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [mappingOpen]);
 
-  const handleAcceptGpt = () => {
-    onDecision(record.request_id, currentSubtype === gptSuggestedVerdict ? null : gptSuggestedVerdict);
-  };
-
+  const commit = (value) => onDecision(record.request_id, value || '');
   const handleOptionPick = (value) => {
-    const valueNorm = String(value || '').trim().toLowerCase();
-    onDecision(record.request_id, currentSubtypeNorm === valueNorm ? null : value);
+    commit(currentSubtype === value ? '' : value);
     setMappingOpen(false);
     setMapQuery('');
   };
 
-  const isGptActive      = gptIsValid && currentSubtypeNorm === String(gptSuggestedVerdict || '').trim().toLowerCase();
-  const isMappedActive   = Boolean(currentSubtype && currentSubtypeNorm !== 'missing' && currentSubtypeNorm !== 'unknown' && !isGptActive);
+  const selectedLegendClass = !currentSubtype
+    ? ''
+    : currentSubtype === 'unknown'
+      ? 'is-truly-unknown'
+      : currentSubtype === 'Missing'
+        ? 'is-suggested'
+        : 'is-mapped';
 
   return (
     <div className="missing-group-actions missing-record-actions">
-      <button
-        className={`missing-action missing-action-accept${isGptActive ? ' active' : ''}`}
-        disabled={!gptIsValid}
-        onClick={handleAcceptGpt}
-        title={gptIsValid
-          ? `Accept GPT: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
-          : 'No GPT review available'}
-      >
-        Accept GPT
-      </button>
-
-      <div className="missing-action-map-wrap" ref={dropdownRef}>
+      <div className="validation-tag-subtype-wrap" ref={dropdownRef}>
         <button
-          className={`missing-action missing-action-map${isMappedActive ? ' active' : ''}`}
-          onClick={() => setMappingOpen(o => !o)}
+          type="button"
+          className={`validation-tag-trigger${mappingOpen ? ' open' : ''}${selectedLegendClass ? ` ${selectedLegendClass}` : ''}`}
+          onClick={() => setMappingOpen(v => !v)}
           title="Set true subtype (includes Unknown and Missing)"
         >
-          Choose subtype... {mappingOpen ? '▲' : '▼'}
+          <span className="validation-tag-trigger-text">
+            {currentSubtype ? (currentSubtype === 'unknown' ? 'Unknown' : currentSubtype) : 'Select subtype'}
+          </span>
+          <span className="validation-tag-trigger-caret">{mappingOpen ? '▲' : '▼'}</span>
         </button>
-        {mappingOpen && (
-          <div className="missing-map-dropdown">
+        <div className={`validation-tag-dropdown${mappingOpen ? ' open' : ''}`}>
+          {mappingOpen && (
+            <>
             <input
-              className="missing-map-search"
+              ref={searchInputRef}
+              className="validation-tag-search"
               placeholder="Search subtype…"
               value={mapQuery}
               onChange={e => setMapQuery(e.target.value)}
+              autoComplete="off"
               autoFocus
             />
-            <ul className="missing-map-list">
+            <ul className="validation-tag-list">
+              <li
+                className={`validation-tag-option validation-tag-clear-option${!currentSubtype ? ' disabled' : ''}`}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  if (!currentSubtype) return;
+                  commit('');
+                  setMappingOpen(false);
+                  setMapQuery('');
+                }}
+                title={!currentSubtype ? 'Already untagged' : 'Clear selection and return to untagged'}
+              >
+                Clear selection (Untagged)
+              </li>
               {filteredOptions.map(s => (
                 <li
                   key={s}
-                  className={`missing-map-option${currentSubtypeNorm === String(s || '').trim().toLowerCase() ? ' selected' : ''}`}
+                  className={`validation-tag-option${currentSubtype === s ? ' selected' : ''}`}
                   onMouseDown={e => { e.preventDefault(); handleOptionPick(s); }}
                 >
-                  {s === 'unknown' ? 'Unknown' : s}
+                  <span className="validation-tag-option-text">{s === 'unknown' ? 'Unknown' : s}</span>
+                  {currentSubtype === s && <span className="validation-tag-checkmark">✓</span>}
                 </li>
               ))}
               {filteredOptions.length === 0 && (
-                <li className="missing-map-option missing-map-empty">No matches</li>
+                <li className="validation-tag-option validation-tag-empty">No matches</li>
               )}
             </ul>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
     </div>
@@ -298,19 +311,9 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
   };
 
   const handleBulkAcceptGpt = (recordsToProcess) => {
-    const allowedSet = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
     recordsToProcess.forEach(r => {
       const gpt = gptResults[r.request_id];
-      if (!gpt) return;
-      const gptMapped = String(gpt.mappedAllowedSubtype || '').trim();
-      let suggested = '';
-      if (gpt.decision === 'truly_unknown' || gptMapped.toLowerCase() === 'unknown') {
-        suggested = 'unknown';
-      } else if (gptMapped && allowedSet.has(gptMapped)) {
-        suggested = gptMapped;
-      } else if (String(gpt.suggestedMissingSubtype || '').trim()) {
-        suggested = 'Missing';
-      }
+      const suggested = getGptSuggestedVerdict(gpt, countrySubtypes);
       if (suggested && r.true_subtype !== suggested) onDecision(r.request_id, suggested);
     });
   };
@@ -448,6 +451,12 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
           <tbody>
             {filtered.map(r => {
               const gpt = gptResults[r.request_id];
+              const verdict = String(r.true_subtype || '').trim();
+              const gptSuggestedVerdict = getGptSuggestedVerdict(gpt, countrySubtypes);
+              const canAcceptGpt = Boolean(gptSuggestedVerdict);
+              const isGptAccepted = canAcceptGpt && verdict === gptSuggestedVerdict;
+              const gptSubtypeText = getGptSubtype(gpt);
+              const gptSubtypeSource = getGptSubtypeSource(gpt);
               const attrEn = r.en_attributes || r.attributes_en || r.enAttributes;
               const metaEn = r.en_metadata || r.metadata_en || r.enMetadata;
               const attrData = attrLang === 'en' ? (attrEn || r.attributes) : r.attributes;
@@ -469,20 +478,31 @@ export default function MissingSubtypesTab({ runId, groups, loading, countrySubt
                       {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
                     </button>
                   </td>
-                  <td>
-                    {getGptSubtype(gpt) ? (
-                      <span className={`gpt-subtype-pill is-${getGptSubtypeSource(gpt)}`}>
-                        {getGptSubtype(gpt)}
-                      </span>
+                  <td className="cell-gpt-subtype">
+                    {gptSubtypeText ? (
+                      <button
+                        type="button"
+                        className={`gpt-subtype-pill is-${gptSubtypeSource}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
+                        disabled={!canAcceptGpt}
+                        onClick={() => {
+                          if (!canAcceptGpt) return;
+                          onDecision(r.request_id, isGptAccepted ? '' : gptSuggestedVerdict);
+                        }}
+                        title={canAcceptGpt
+                          ? isGptAccepted
+                            ? 'GPT subtype is applied. Click to clear it.'
+                            : `Click to apply GPT subtype: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt?.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
+                          : 'No GPT review available'}
+                      >
+                        {gptSubtypeText}
+                      </button>
                     ) : (
                       <span className="gpt-subtype-pill is-empty">—</span>
                     )}
                   </td>
                   <td className="cell-missing-decision">
-                    <TrueSubtypeBadge trueSubtype={r.true_subtype} />
                     <RecordDecisionControls
                       record={r}
-                      gpt={gpt}
                       countrySubtypes={countrySubtypes}
                       onDecision={onDecision}
                     />

@@ -633,12 +633,13 @@ function Dashboard() {
   /* ── Unknowns: save missing subtype decision (optimistic) ── */
   const handleMissingSubtypeDecision = useCallback(async (requestId, trueSubtype) => {
     const runId = selectedRunIds[0];
+    const nextTrueSubtype = trueSubtype || '';
 
     setMissingSubtypeGroups(prev => prev.map(g => ({
       ...g,
       records: g.records.map(r =>
         String(r.request_id) === String(requestId)
-          ? { ...r, true_subtype: trueSubtype || null }
+          ? { ...r, true_subtype: nextTrueSubtype }
           : r
       ),
     })));
@@ -646,7 +647,7 @@ function Dashboard() {
     await fetch('/api/missing-subtypes', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: trueSubtype }),
+      body: JSON.stringify({ run_id: String(runId), request_id: String(requestId), true_subtype: nextTrueSubtype }),
     });
     await refreshUnknownsRunStats(runId);
   }, [selectedRunIds, refreshUnknownsRunStats]);

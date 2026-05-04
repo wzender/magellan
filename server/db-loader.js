@@ -1317,7 +1317,7 @@ async function updateMissingSubtypeDecision(runId, requestId, trueSubtype) {
   const idCol = await getIdColumn(tbl);
   await query(
     `UPDATE "${tbl}" SET true_subtype = $1 WHERE ${idCol} = $2`,
-    [trueSubtype || null, String(requestId)]
+    [trueSubtype || '', String(requestId)]
   );
 }
 

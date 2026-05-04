@@ -4384,60 +4384,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .missing-action:hover { background: #f3f4f6; color: var(--text); }
 
 .missing-action-accept.active  { background: #dcfce7; border-color: #86efac; color: #15803d; }
-.missing-action-map            { border-color: var(--border-strong); background: var(--surface); }
-.missing-action-map.active     { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
 .missing-action-reject.active  { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .missing-action-missing.active { background: #fef9c3; border-color: #fcd34d; color: #a16207; }
 .missing-action-unknown.active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
-.missing-map-clear { color: #b91c1c; border-bottom: 1px solid #fee2e2; margin-bottom: 2px; }
-.missing-map-clear:hover { background: #fff5f5; }
-.missing-action-map:hover      { border-color: var(--primary); background: #f8faff; }
 .missing-action:disabled       { opacity: 0.4; cursor: not-allowed; }
-
-.missing-action-map-wrap {
-  position: relative;
-}
-
-.missing-map-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  width: 240px;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
-  z-index: 100;
-  overflow: hidden;
-}
-
-.missing-map-search {
-  width: 100%;
-  padding: 8px 12px;
-  border: none;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 0.82rem;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.missing-map-list {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.missing-map-option {
-  padding: 6px 12px;
-  font-size: 0.82rem;
-  cursor: pointer;
-  color: var(--text);
-}
-.missing-map-option:hover    { background: #f0f9ff; }
-.missing-map-option.selected { background: #dbeafe; font-weight: 600; }
-.missing-map-option.missing-map-empty { color: var(--text-muted); font-style: italic; cursor: default; }
 
 .missing-group-records {
   border-top: 1px solid var(--border);

@@ -1049,7 +1049,7 @@ function updateMissingSubtypeDecision(runId, requestId, trueSubtype) {
 
   const record = data.run_results.find(r => r.run_id === runId && String(r.request_id) === String(requestId));
   if (record) {
-    record.true_subtype = trueSubtype || null;
+    record.true_subtype = trueSubtype || '';
   }
 }
 
@@ -1071,7 +1071,7 @@ function getMissingSubtypeGroups(runId) {
         en_attributes:   r.en_attributes,
         metadata:        r.metadata,
         en_metadata:     r.en_metadata,
-        true_subtype:    r.true_subtype || null,
+        true_subtype:    r.true_subtype || '',
       });
     });
 
