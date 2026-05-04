@@ -1414,13 +1414,11 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
     const weightedAcc = coveredCount > 0
       ? coveredBins.reduce((sum, bin) => sum + bin.accuracy * bin.count, 0) / coveredCount
       : 0;
-    const errorRate = coveredCount > 0 ? 1 - weightedAcc : 0;
     const manualLoad = total > 0 ? 1 - (coveredCount / total) : 0;
     return {
       threshold,
       coverage: total > 0 ? coveredCount / total : 0,
       accuracy: weightedAcc,
-      errorRate,
       manualLoad,
       coveredCount,
     };
@@ -1439,12 +1437,12 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
   const y = (v) => height - padBottom - v * innerH;
 
   const pathD = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.manualLoad).toFixed(2)} ${y(p.errorRate).toFixed(2)}`)
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.manualLoad).toFixed(2)} ${y(p.accuracy).toFixed(2)}`)
     .join(' ');
 
-  // Recommended operating point: minimize combined risk (manual load + error)
+  // Recommended operating point: minimize review load while staying close to perfect accuracy.
   const recommended = points.reduce((best, p) => {
-    const score = Math.hypot(p.manualLoad, p.errorRate);
+    const score = Math.hypot(p.manualLoad, 1 - p.accuracy);
     if (!best || score < best.score) return { ...p, score };
     return best;
   }, null);
@@ -1453,36 +1451,36 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
     <div className="confq-card">
       <div className="confq-card-header">
         <span className="confq-card-title">Decision Frontier</span>
-        <span className="confq-card-subtitle">Human review % vs error slip-through — per confidence threshold</span>
+        <span className="confq-card-subtitle">Human review % vs accepted-set accuracy — per confidence threshold</span>
       </div>
       <div className="confq-plot-wrap confq-plot-wrap-fill">
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" className="confq-plot" role="img" aria-label="Threshold decision frontier chart">
           <rect
             x={x(0)}
-            y={y(0.35)}
+            y={y(1)}
             width={x(0.65) - x(0)}
-            height={y(0) - y(0.35)}
+            height={y(0.65) - y(1)}
             className="confq-zone-tradeoff"
           />
           <rect
             x={x(0)}
-            y={y(0.15)}
+            y={y(1)}
             width={x(0.4) - x(0)}
-            height={y(0) - y(0.15)}
+            height={y(0.85) - y(1)}
             className="confq-zone-good"
           />
           <rect
             x={x(0.65)}
-            y={y(1)}
+            y={y(0.7)}
             width={x(1) - x(0.65)}
-            height={y(0.3) - y(1)}
+            height={y(0) - y(0.7)}
             className="confq-zone-risk"
           />
 
           {/* Zone stamp labels — centered in each region */}
           <text
             x={(x(0) + x(0.4)) / 2}
-            y={(y(0) + y(0.15)) / 2}
+            y={(y(1) + y(0.85)) / 2}
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-good"
@@ -1490,7 +1488,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
           >Optimal</text>
           <text
             x={(x(0) + x(0.65)) / 2}
-            y={y(0.35) + 28}
+            y={y(0.72)}
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-tradeoff"
@@ -1498,7 +1496,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
           >Tradeoff</text>
           <text
             x={(x(0.65) + x(1)) / 2}
-            y={(y(0.3) + y(1)) / 2}
+            y={(y(0.7) + y(0)) / 2}
             textAnchor="middle"
             dominantBaseline="middle"
             className="confq-zone-stamp confq-zone-stamp-risk"
@@ -1522,7 +1520,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
           ))}
 
           <text x={14} y={(padTop + height - padBottom) / 2} textAnchor="middle" className="confq-axis-title" transform={`rotate(-90 14 ${(padTop + height - padBottom) / 2})`}>
-            Error rate (%)
+            Accuracy (%)
           </text>
           <text x={width / 2} y={height - 4} textAnchor="middle" className="confq-axis-title">
             Human review %
@@ -1534,16 +1532,16 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
             <g>
               <line
                 x1={x(recommended.manualLoad)}
-                y1={y(recommended.errorRate)}
+                y1={y(recommended.accuracy)}
                 x2={x(recommended.manualLoad)}
                 y2={y(0)}
                 className="confq-reco-guide"
               />
               <line
                 x1={x(0)}
-                y1={y(recommended.errorRate)}
+                y1={y(recommended.accuracy)}
                 x2={x(recommended.manualLoad)}
-                y2={y(recommended.errorRate)}
+                y2={y(recommended.accuracy)}
                 className="confq-reco-guide"
               />
             </g>
@@ -1551,6 +1549,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
 
           {points.map((p) => {
             const isRecommended = recommended && p.threshold === recommended.threshold;
+            const labelY = padTop - 6 - ((Math.round(p.threshold * 10) % 3) * 14);
             return (
               <g key={p.threshold}>
                 <line
@@ -1563,7 +1562,7 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
                 />
                 <text
                   x={x(p.manualLoad)}
-                  y={padTop - 6}
+                  y={labelY}
                   textAnchor="middle"
                   className="confq-frontier-label"
                 >
@@ -1571,32 +1570,28 @@ function ConfidenceDecisionFrontier({ confidenceQuality }) {
                 </text>
                 <circle
                   cx={x(p.manualLoad)}
-                  cy={y(p.errorRate)}
-                  r={isRecommended ? '6.5' : '5'}
-                  className={isRecommended ? 'confq-frontier-dot confq-frontier-dot-recommended' : 'confq-frontier-dot'}
+                  cy={y(p.accuracy)}
+                  r="5"
+                  className="confq-frontier-dot"
                 />
-                <title>{`Threshold ${p.threshold.toFixed(1)} | coverage ${(p.coverage * 100).toFixed(1)}% | human review ${(p.manualLoad * 100).toFixed(1)}% | accuracy ${(p.accuracy * 100).toFixed(1)}% | error ${(p.errorRate * 100).toFixed(1)}% | n=${p.coveredCount}`}</title>
+                {isRecommended && (
+                  <circle
+                    cx={x(p.manualLoad)}
+                    cy={y(p.accuracy)}
+                    r="9"
+                    className="confq-frontier-dot-recommended"
+                  />
+                )}
+                <title>{`Threshold ${p.threshold.toFixed(1)} | coverage ${(p.coverage * 100).toFixed(1)}% | human review ${(p.manualLoad * 100).toFixed(1)}% | accuracy ${(p.accuracy * 100).toFixed(1)}% | error ${((1 - p.accuracy) * 100).toFixed(1)}% | n=${p.coveredCount}`}</title>
               </g>
             );
           })}
-
-          {recommended && (
-            <text
-              x={x(recommended.manualLoad) - 20}
-              y={y(recommended.errorRate) - 15}
-              className="confq-reco-label"
-              style={{ fontSize: '11px', fill: '#10b981' }}
-            >
-              ✓ Advised
-            </text>
-          )}
         </svg>
       </div>
       <div className="confq-frontier-legend">
         <span><span className="confq-frontier-swatch confq-frontier-swatch-line" /> frontier</span>
         <span><span className="confq-frontier-swatch confq-frontier-swatch-dot" /> threshold points</span>
         <span><span className="confq-frontier-swatch confq-frontier-swatch-reco" /> recommended</span>
-        <span><span className="confq-frontier-swatch confq-frontier-swatch-zone" /> better zone</span>
       </div>
     </div>
   );
@@ -1649,13 +1644,12 @@ function ConfidenceInlineSummary({ confidenceQuality, onOpenDetails }) {
     const weightedAcc = coveredCount > 0
       ? coveredBins.reduce((sum, bin) => sum + bin.accuracy * bin.count, 0) / coveredCount
       : 0;
-    const errorRate = coveredCount > 0 ? 1 - weightedAcc : 0;
     const manualLoad = total > 0 ? 1 - (coveredCount / total) : 0;
-    return { threshold, errorRate, manualLoad };
+    return { threshold, accuracy: weightedAcc, manualLoad };
   });
 
   const advised = points.reduce((best, p) => {
-    const score = Math.hypot(p.manualLoad, p.errorRate);
+    const score = Math.hypot(p.manualLoad, 1 - p.accuracy);
     return !best || score < best.score ? { ...p, score } : best;
   }, null);
 

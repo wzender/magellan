@@ -1170,8 +1170,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .confq-frontier-dot-recommended {
-  fill: #10b981;
-  stroke: #ffffff;
+  fill: none;
+  stroke: #10b981;
   stroke-width: 2.5;
 }
 
@@ -1179,13 +1179,6 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   stroke: rgba(16, 185, 129, 0.7);
   stroke-width: 1.2;
   stroke-dasharray: 4 3;
-}
-
-.confq-reco-label {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  fill: #047857;
 }
 
 .confq-frontier-label {
@@ -1245,10 +1238,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .confq-frontier-swatch-reco {
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #10b981;
+  background: transparent;
+  border: 2px solid #10b981;
 }
 
 .confq-frontier-swatch-zone {
