@@ -967,51 +967,6 @@ function Dashboard() {
 
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (
             <div className="unknowns-view">
-              <div className="unknowns-view-header">
-                <h2 className="unknowns-view-country">{unknownsCountry ?? run1Name}</h2>
-                <div className="validation-retag-stats">
-                  <span className="validation-progress">{validationRecords.length} total</span>
-                  <span className="validation-progress">{unknownOnlyValidationRecords.length} unknown</span>
-                  <span className="validation-progress">{missingOnlyValidationRecords.length} missing</span>
-                </div>
-                <div style={{ marginLeft: 'auto', marginBottom: 6, display: 'flex', gap: 6 }}>
-                  <a
-                    className="export-csv-btn"
-                    href={`/api/export-csv?run_id=${selectedRunIds[0]}`}
-                    download
-                    title="Download full run as CSV with updated true_subtype values"
-                  >
-                    Export CSV
-                  </a>
-                  <button
-                    className={`export-csv-btn${publishState === 'loading' ? ' loading' : ''}`}
-                    disabled={publishState === 'loading'}
-                    title="Copy this run to Postgres as {name}_retagged"
-                    onClick={async () => {
-                      setPublishState('loading');
-                      try {
-                        const r = await fetch('/api/publish-retagged', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ run_id: selectedRunIds[0] }),
-                        });
-                        const d = await r.json();
-                        if (!r.ok) throw new Error(d.error || 'Failed');
-                        setPublishState('done');
-                        setTimeout(() => setPublishState('idle'), 3000);
-                      } catch (e) {
-                        setPublishState('error');
-                        setTimeout(() => setPublishState('idle'), 4000);
-                      }
-                    }}
-                  >
-                    {publishState === 'loading' ? 'Publishing…'
-                      : publishState === 'done'    ? 'Published ✓'
-                      : publishState === 'error'   ? 'Error ✗'
-                      : 'Publish Retagged'}
-                  </button>
-                </div>
-              </div>
               {validationLoading && <div className="viewer-loading">Loading records…</div>}
               {!validationLoading && (
                 <ValidationPanel
@@ -1026,6 +981,24 @@ function Dashboard() {
                   onSetVerdict={handleSetVerdict}
                   onBulkVerdict={handleBulkVerdict}
                   onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
+                  publishState={publishState}
+                  onPublishRetagged={async () => {
+                    setPublishState('loading');
+                    try {
+                      const r = await fetch('/api/publish-retagged', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ run_id: selectedRunIds[0] }),
+                      });
+                      const d = await r.json();
+                      if (!r.ok) throw new Error(d.error || 'Failed');
+                      setPublishState('done');
+                      setTimeout(() => setPublishState('idle'), 3000);
+                    } catch (e) {
+                      setPublishState('error');
+                      setTimeout(() => setPublishState('idle'), 4000);
+                    }
+                  }}
                 />
               )}
             </div>

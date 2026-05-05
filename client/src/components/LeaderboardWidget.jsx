@@ -391,27 +391,6 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         </table>
       )}
       </div>
-      {isUnknowns && unknownsSummary && (
-        <div className="summary-bar">
-          <div className="summary-stat summary-stat-main" title="Records that have a GPT review">
-            <div className="summary-big-num">{unknownsSummary.gptTagged}</div>
-            <div className="summary-label">GPT Tagged</div>
-            <div className="summary-sublabel">{unknownsSummary.total > 0 ? ((unknownsSummary.gptTagged / unknownsSummary.total) * 100).toFixed(1) : '0.0'}% of total</div>
-          </div>
-          <div className="summary-divider" />
-          <div className="summary-stat summary-stat-warn" title="Records still waiting for reviewer tagging">
-            <div className="summary-big-num">{unknownsSummary.taggingRemaining}</div>
-            <div className="summary-label">Tagging Remaining</div>
-            <div className="summary-sublabel">{unknownsSummary.total > 0 ? ((unknownsSummary.taggingRemaining / unknownsSummary.total) * 100).toFixed(1) : '0.0'}% of total</div>
-          </div>
-          <div className="summary-divider" />
-          <div className="summary-stat summary-stat-danger" title="Unknown-model records GPT marked as wrong_subtype or missing_but_mappable">
-            <div className="summary-big-num">{unknownsSummary.falseUnknown}</div>
-            <div className="summary-label">False Unknown (GPT)</div>
-            <div className="summary-sublabel">{unknownsSummary.unknowns > 0 ? ((unknownsSummary.falseUnknown / unknownsSummary.unknowns) * 100).toFixed(1) : '0.0'}% of unknowns</div>
-          </div>
-        </div>
-      )}
       <div className="leaderboard-hint">
         {isUnknowns
           ? 'Click a row to review records and manage missing subtype decisions for that country.'

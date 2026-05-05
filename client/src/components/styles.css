@@ -3960,6 +3960,19 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   white-space: nowrap;
 }
 
+.unknowns-view-header-actions {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.unknowns-view-header-actions-row {
+  display: flex;
+  gap: 6px;
+}
+
 .unknowns-view-tabs {
   display: flex;
   gap: 2px;

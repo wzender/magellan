@@ -227,7 +227,7 @@ function getGptSuggestedVerdict(result, countrySubtypes) {
   return '';
 }
 
-function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated }) {
+function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated, publishState = 'idle', onPublishRetagged }) {
   const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
@@ -943,10 +943,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 </button>
               ))}
             </div>
-            <div className="validation-retag-stats">
-              <span className="validation-progress">{anyReviewedCount}/{total} reviewed</span>
-              <span className="validation-progress">{retaggedCount}/{total} retagged</span>
-            </div>
           </>
         ) : (
           <div className="validation-filters">
@@ -986,6 +982,25 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
               ))}
             </div>
+            <a
+              className="export-csv-btn ask-gpt-btn"
+              href={`/api/export-csv?run_id=${runId}`}
+              download
+              title="Download full run as CSV with updated true_subtype values"
+            >
+              CSV
+            </a>
+            <button
+              className="export-csv-btn ask-gpt-btn"
+              disabled={publishState === 'loading'}
+              title="Copy this run to Postgres as {name}_retagged"
+              onClick={onPublishRetagged}
+            >
+              {publishState === 'loading' ? 'POSTGRES…'
+                : publishState === 'done'    ? 'POSTGRES ✓'
+                : publishState === 'error'   ? 'POSTGRES ✗'
+                : 'POSTGRES'}
+            </button>
             <button
               className="export-csv-btn ask-gpt-btn"
               onClick={() => handleBulkAcceptGpt(filtered)}
