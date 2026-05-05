@@ -78,7 +78,8 @@ function loadSubtypeVocabs() {
   const normalizedRows = [];
 
   for (const row of rows) {
-    const subtype = row.subType || row.Subtype;
+    const subtype = String(row.subType || row.Subtype || '').toLowerCase();
+    if (!subtype) continue;
     all.add(subtype);
     normalizedRows.push({ subtype, countriesText: String(row[SUBTYPES_COUNTRIES_COLUMN] || '') });
   }

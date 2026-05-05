@@ -119,6 +119,14 @@ function clipText(value, max = 1200) {
   return `${text.slice(0, max)}...(truncated ${text.length - max} chars)`;
 }
 
+function pickFirstNonEmpty(values) {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
 function summarizeJsonLike(value) {
   if (value === null || value === undefined) return { type: 'nullish' };
   if (typeof value === 'string') return { type: 'string', length: value.length };
@@ -127,18 +135,23 @@ function summarizeJsonLike(value) {
   return { type: typeof value };
 }
 
+const LOG = {
+  info:  (tid, ...args) => console.info( `[INFO][ask-gpt][${tid}]`, ...args),
+  warn:  (tid, ...args) => console.warn( `[WARN][ask-gpt][${tid}]`, ...args),
+  error: (tid, ...args) => console.error(`[ERROR][ask-gpt][${tid}]`, ...args),
+  debug: (tid, ...args) => console.debug(`[DEBUG][ask-gpt][${tid}]`, ...args),
+};
+
 function logMalformedJson(mode, raw, errMessage = '', traceId = '-') {
   const preview = String(raw || '').slice(0, 1200);
   const suffix = String(raw || '').length > 1200 ? '...(truncated)' : '';
-  console.warn(
-    `[ask-gpt][${traceId}] malformed JSON mode=${mode}${errMessage ? ` error=${errMessage}` : ''} raw=${preview}${suffix}`
-  );
+  LOG.warn(traceId, `malformed JSON mode=${mode}${errMessage ? ` error=${errMessage}` : ''} raw=${preview}${suffix}`);
 }
 
 async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL, trace = {}) {
   const traceId = trace.traceId || '-';
   const mode = trace.mode || 'unknown';
-  console.log(`[ask-gpt][${traceId}] call start mode=${mode} model=${model} max_tokens=${maxTokens} messages=${messages.length}`);
+  LOG.info(traceId, `── CALL START mode=${mode} model=${model} max_tokens=${maxTokens} messages=${messages.length}`);
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -157,15 +170,16 @@ async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_
 
   if (!response.ok) {
     const err = await response.text();
-    console.error(`[ask-gpt][${traceId}] call failed mode=${mode} status=${response.status} body=${clipText(err, 2000)}`);
+    LOG.error(traceId, `── CALL FAILED mode=${mode} status=${response.status} body=${clipText(err, 2000)}`);
     throw new Error(`OpenAI ${response.status}: ${err}`);
   }
 
   const data = await response.json();
   const raw = (data.choices?.[0]?.message?.content || '').trim();
-  console.log(
-    `[ask-gpt][${traceId}] call ok mode=${mode} response_model=${data.model || ''} total_tokens=${data.usage?.total_tokens || 0} raw=${clipText(raw)}`
+  LOG.info(traceId,
+    `── CALL OK mode=${mode} response_model=${data.model || ''} total_tokens=${data.usage?.total_tokens || 0} raw_chars=${raw.length}`
   );
+  LOG.debug(traceId, `raw response preview: ${clipText(raw)}`);
   return { data, raw };
 }
 
@@ -180,7 +194,7 @@ router.post('/ask-gpt', async (req, res) => {
   const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
-    console.error(`[ask-gpt][${traceId}] OPENAI_API_KEY is not configured`);
+    LOG.error('-', 'OPENAI_API_KEY is not configured');
     return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
   }
 
@@ -199,15 +213,16 @@ router.post('/ask-gpt', async (req, res) => {
     allowed_subtypes,
   } = req.body;
 
-  console.log(
-    `[ask-gpt][${traceId}] request received mode=${judge_mode ? 'judge' : (suggested_subtype ? 'verdict' : (ASK_GPT_PROMPT ? 'env-prompt' : 'stage1'))} ` +
-    `predicted_status=${String(predicted_status || '').trim().toLowerCase()} stage2_subtype=${String(stage2_subtype || '').trim().toLowerCase()} ` +
-    `allowed_subtypes=${Array.isArray(allowed_subtypes) ? allowed_subtypes.length : 0} ` +
-    `attributes=${JSON.stringify(summarizeJsonLike(attributes))} metadata=${JSON.stringify(summarizeJsonLike(metadata))}`
+  LOG.info(traceId,
+    `── REQUEST mode=${judge_mode ? 'judge' : (suggested_subtype ? 'verdict' : (ASK_GPT_PROMPT ? 'env-prompt' : 'stage1'))}` +
+    ` predicted_status=${String(predicted_status || '').trim().toLowerCase()}` +
+    ` stage2_subtype=${String(stage2_subtype || '').trim().toLowerCase()}` +
+    ` allowed_subtypes=${Array.isArray(allowed_subtypes) ? allowed_subtypes.length : 0}` +
+    ` attributes=${JSON.stringify(summarizeJsonLike(attributes))} metadata=${JSON.stringify(summarizeJsonLike(metadata))}`
   );
 
   if (!attributes && !metadata) {
-    console.warn(`[ask-gpt][${traceId}] request rejected: attributes or metadata required`);
+    LOG.warn(traceId, 'rejected: attributes or metadata required');
     return res.status(400).json({ error: 'attributes or metadata required' });
   }
 
@@ -254,8 +269,8 @@ ${JSON.stringify(attributes, null, 2)}
 Metadata:
 ${JSON.stringify(metadata, null, 2)}`;
 
-      console.log(`[ask-gpt][${traceId}] judge prompt prepared system_chars=${systemPrompt.length} user_chars=${userPrompt.length}`);
-      console.log(`[ask-gpt][${traceId}] judge prompt preview user=${clipText(userPrompt, 1600)}`);
+      LOG.info(traceId, `── JUDGE PROMPT system_chars=${systemPrompt.length} user_chars=${userPrompt.length}`);
+      LOG.debug(traceId, `judge user prompt preview: ${clipText(userPrompt, 1600)}`);
       const { data, raw } = await callChat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -264,7 +279,7 @@ ${JSON.stringify(metadata, null, 2)}`;
       const parsedOrNull = parseJsonObject(raw);
       if (!parsedOrNull) {
         logMalformedJson('judge', raw, '', traceId);
-        console.warn(`[ask-gpt][${traceId}] returning error response due to malformed judge JSON`);
+        LOG.warn(traceId, 'returning error response — malformed judge JSON');
         return res.json({
           error: 'Malformed JSON response from GPT judge',
           raw_response: raw,
@@ -272,18 +287,36 @@ ${JSON.stringify(metadata, null, 2)}`;
       }
       const parsed = parsedOrNull;
       const decision = normalizeJudgeDecision(parsed.decision || parsed.verdict || raw, predicted_status || stage2_subtype);
-      const mappedAllowedSubtypeRaw = String(parsed.mapped_allowed_subtype || parsed.corrected_subtype || '').trim();
-      const allowedSet = new Set((Array.isArray(allowed_subtypes) ? allowed_subtypes : []).map(s => String(s).trim()));
-      const mappedAllowedSubtype = allowedSet.has(mappedAllowedSubtypeRaw) ? mappedAllowedSubtypeRaw : '';
-      const suggestedMissingSubtype = String(parsed.suggested_missing_subtype || parsed.suggested_label || '').trim();
+      const mappedAllowedSubtypeRaw = pickFirstNonEmpty([
+        parsed.mapped_allowed_subtype,
+        parsed.corrected_subtype,
+      ]);
+      // Normalise to lowercase throughout so casing from GPT never causes a mismatch.
+      const allowedList_ = (Array.isArray(allowed_subtypes) ? allowed_subtypes : []).map(s => String(s).trim().toLowerCase());
+      const allowedSet_ = new Set(allowedList_);
+      const mappedAllowedSubtype = allowedSet_.has(mappedAllowedSubtypeRaw.toLowerCase()) ? mappedAllowedSubtypeRaw.toLowerCase() : '';
+      if (mappedAllowedSubtypeRaw && !mappedAllowedSubtype) {
+        LOG.warn(traceId, `── GPT SUBTYPE "${mappedAllowedSubtypeRaw}" not found in allowed list (${allowedList_.length} entries) — discarded`);
+      }
+      const suggestedMissingSubtype = pickFirstNonEmpty([
+        parsed.suggested_missing_subtype,
+        parsed.suggested_label,
+        parsed.suggested_subtype,
+        // Common typo variants observed in model output.
+        parsed.suggetsed_missing_subtype,
+        parsed.sugested_missing_subtype,
+      ]);
       const reasoning = String(parsed.reasoning || parsed.reason || raw).trim();
 
-      console.log(
-        `[ask-gpt][${traceId}] mode=judge parsed decision_raw=${String(parsed.decision || parsed.verdict || '').trim()} ` +
-        `decision_normalized=${decision} mapped_raw=${mappedAllowedSubtypeRaw || '(empty)'} mapped_final=${mappedAllowedSubtype || '(empty)'} ` +
-        `suggested_missing=${suggestedMissingSubtype || '(empty)'} reasoning_chars=${reasoning.length} model=${data.model} tokens=${data.usage?.total_tokens}`
+      LOG.info(traceId,
+        `── JUDGE RESULT decision_raw=${String(parsed.decision || parsed.verdict || '').trim()}` +
+        ` => decision_normalized=${decision}` +
+        ` | GPT SUBTYPE mapped_raw="${mappedAllowedSubtypeRaw || '(empty)'}" mapped_final="${mappedAllowedSubtype || '(empty)'}"` +
+        ` | GPT VERDICT suggested_missing="${suggestedMissingSubtype || '(empty)'}"` +
+        ` | GPT RAW RESPONSE chars=${raw.length} reasoning_chars=${reasoning.length}` +
+        ` | model=${data.model} tokens=${data.usage?.total_tokens}`
       );
-      console.log(`[ask-gpt][${traceId}] response payload ready`);
+      LOG.info(traceId, '── RESPONSE SENT');
 
       return res.json({
         decision,
@@ -307,18 +340,18 @@ ${JSON.stringify(metadata, null, 2)}
 Respond with a JSON object only — no markdown, no extra text:
 {"verdict": "yes" or "no", "reasoning": "1-2 sentence explanation"}`;
 
-      console.log(`[ask-gpt][${traceId}] verdict prompt prepared chars=${prompt.length}`);
+      LOG.info(traceId, `── VERDICT PROMPT chars=${prompt.length}`);
       const { data, raw } = await callChat([{ role: 'user', content: prompt }], OPENAI_MAX_TOKENS, OPENAI_MODEL, { traceId, mode: 'verdict' });
-      console.log(`[ask-gpt][${traceId}] mode=verdict model=${data.model} tokens=${data.usage?.total_tokens}`);
+      LOG.info(traceId, `── VERDICT model=${data.model} tokens=${data.usage?.total_tokens}`);
 
       try {
         const parsed = JSON.parse(raw);
-        console.log(`[ask-gpt][${traceId}] verdict parsed verdict=${parsed.verdict || '(missing)'} reasoning_chars=${String(parsed.reasoning || '').length}`);
+        LOG.info(traceId, `── VERDICT PARSED verdict=${parsed.verdict || '(missing)'} reasoning_chars=${String(parsed.reasoning || '').length}`);
         return res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw, raw_response: raw });
       } catch (err) {
         logMalformedJson('verdict', raw, err?.message || 'parse error', traceId);
         const isYes = /\byes\b/i.test(raw);
-        console.warn(`[ask-gpt][${traceId}] verdict fallback applied isYes=${isYes}`);
+        LOG.warn(traceId, `verdict fallback applied isYes=${isYes}`);
         return res.json({ verdict: isYes ? 'yes' : 'no', reasoning: raw, raw_response: raw });
       }
     }
@@ -333,9 +366,9 @@ Respond with a JSON object only — no markdown, no extra text:
         suggested_subtype: suggested_subtype || '',
         suggested_type: suggested_type || '',
       });
-      console.log(`[ask-gpt][${traceId}] env prompt prepared chars=${rendered.length}`);
+      LOG.info(traceId, `── ENV-PROMPT chars=${rendered.length}`);
       const { data, raw } = await callChat([{ role: 'user', content: rendered }], 250, OPENAI_MODEL, { traceId, mode: 'env-prompt' });
-      console.log(`[ask-gpt][${traceId}] mode=env-prompt model=${data.model} tokens=${data.usage?.total_tokens}`);
+      LOG.info(traceId, `── ENV-PROMPT RESULT model=${data.model} tokens=${data.usage?.total_tokens}`);
       return res.json({ text: raw, subtype: null, reason: null, raw_response: raw });
     }
 
@@ -352,10 +385,11 @@ Respond with a JSON object only — no markdown, no extra text:
       { role: 'user', content: stage1User },
     ], 80, OPENAI_MODEL, { traceId, mode: 'stage1' });
     const parsed = parseStage1(raw);
-    console.log(`[ask-gpt][${traceId}] mode=stage1 model=${data.model} tokens=${data.usage?.total_tokens} subtype=${parsed.subtype || '(empty)'} reason_chars=${String(parsed.reason || '').length}`);
+    LOG.info(traceId, `── STAGE1 RESULT model=${data.model} tokens=${data.usage?.total_tokens} subtype=${parsed.subtype || '(empty)'} reason_chars=${String(parsed.reason || '').length}`);
     return res.json({ subtype: parsed.subtype, reason: parsed.reason, text: raw, raw_response: raw });
   } catch (err) {
-    console.error(`[ask-gpt][${traceId}] error message=${err.message} stack=${clipText(err.stack || '', 2000)}`);
+    LOG.error(traceId, `── UNHANDLED ERROR message=${err.message}`);
+    LOG.debug(traceId, `stack: ${clipText(err.stack || '', 2000)}`);
     res.status(500).json({ error: err.message });
   }
 });

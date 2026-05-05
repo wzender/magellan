@@ -43,7 +43,8 @@ function loadSubtypeVocabs() {
   const all = new Set();
   const normalizedRows = [];
   for (const row of rows) {
-    const subtype = row.subType || row.Subtype;
+    const subtype = String(row.subType || row.Subtype || '').toLowerCase();
+    if (!subtype) continue;
     all.add(subtype);
     normalizedRows.push({ subtype, countriesText: String(row[SUBTYPES_COUNTRIES_COLUMN] || '') });
   }
@@ -229,6 +230,7 @@ function loadData() {
         en_metadata:     tryParseJson(r.en_metadata),
         gpt_verdict:     r.gpt_verdict   || null,
         gpt_reasoning:   r.gpt_reasoning || null,
+        gpt_subtype:     r.gpt_subtype   || null,
         confidence:      Number.isFinite(parsedConfidence) ? Math.max(0, Math.min(1, parsedConfidence)) : null,
       });
     });
@@ -968,20 +970,20 @@ function updateTrueSubtypes(runId, updates) {
   return changed;
 }
 
-/** Return { request_id: { verdict, reasoning } } for all records that have GPT results. */
+/** Return { request_id: { verdict, reasoning, gpt_subtype } } for all records that have GPT results. */
 function getGptResults(runId) {
   const data = loadData();
   const out = {};
   data.run_results
-    .filter(r => r.run_id === runId && r.gpt_verdict)
-    .forEach(r => { out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning }; });
+    .filter(r => r.run_id === runId && (r.gpt_verdict || r.gpt_subtype))
+    .forEach(r => { out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning, gpt_subtype: r.gpt_subtype || null }; });
   return out;
 }
 
 /**
  * Persist GPT results for a run.
- * results = { request_id: { verdict, reasoning } }
- * Updates the in-memory cache and writes gpt_verdict/gpt_reasoning back to the run CSV file.
+ * results = { request_id: { verdict, reasoning, gpt_subtype? } }
+ * Updates the in-memory cache and writes gpt_verdict/gpt_reasoning/gpt_subtype back to the run CSV file.
  */
 function updateGptResults(runId, results) {
   const data = loadData();
@@ -996,14 +998,17 @@ function updateGptResults(runId, results) {
 
   // Ensure gpt columns are present in the header
   const baseHeaders = Object.keys(records[0] || {});
-  const headers = baseHeaders.includes('gpt_verdict')
+  let headers = baseHeaders.includes('gpt_verdict')
     ? baseHeaders
     : [...baseHeaders, 'gpt_verdict', 'gpt_reasoning'];
+  if (!headers.includes('gpt_subtype')) {
+    headers = [...headers, 'gpt_subtype'];
+  }
 
   const updated = records.map(r => {
     const hit = results[r.request_id];
     if (!hit) return r;
-    return { ...r, gpt_verdict: hit.verdict, gpt_reasoning: hit.reasoning };
+    return { ...r, gpt_verdict: hit.verdict, gpt_reasoning: hit.reasoning, gpt_subtype: hit.gpt_subtype || r.gpt_subtype || '' };
   });
 
   const csvContent = [
@@ -1015,8 +1020,9 @@ function updateGptResults(runId, results) {
   // Update in-memory cache too (avoids a full reload)
   data.run_results.forEach(r => {
     if (r.run_id === runId && results[r.request_id]) {
-      r.gpt_verdict  = results[r.request_id].verdict;
+      r.gpt_verdict   = results[r.request_id].verdict;
       r.gpt_reasoning = results[r.request_id].reasoning;
+      r.gpt_subtype   = results[r.request_id].gpt_subtype || r.gpt_subtype || null;
     }
   });
 }

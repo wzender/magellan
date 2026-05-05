@@ -15,6 +15,8 @@
 
 const router = require('express').Router();
 const fetch  = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 
 const loader = process.env.DATA_SOURCE === 'postgres'
   ? require('../db-loader')
@@ -27,33 +29,69 @@ const OPENAI_API_URL   = process.env.OPENAI_API_URL   || 'https://api.openai.com
 const TRANSLATE_GPT_MODEL = process.env.TRANSLATE_GPT_MODEL || OPENAI_MODEL;
 const TRANSLATE_GPT_URL = process.env.TRANSLATE_GPT_URL || OPENAI_API_URL;
 const TRANSLATE_DESTINATION_LANGUAGE = process.env.TRANSLATE_DESTINATION_LANGUAGE || 'English';
+const VALUE_TRANSLATION_CACHE_FILE = path.join(__dirname, '../../data/value-translation-cache.json');
 if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
   console.warn('⚠ OPENAI_API_KEY is not set — /api/translate will fail');
 }
 
-/**
- * After translation, walk both the original and translated objects and restore
- * any leaf value from the original if it is not a string (booleans, numbers,
- * null, arrays of non-strings, etc.).  This prevents the LLM from flipping
- * values like `true → false` or changing numbers.
- */
-function restoreNonStrings(original, translated) {
-  // Scalar: if original isn't a string, always keep the original value
-  if (typeof original !== 'object' || original === null) {
-    return typeof original === 'string' ? translated : original;
+let valueTranslationCache = null;
+const inFlightValueTranslations = new Map();
+
+function loadValueTranslationCache() {
+  if (valueTranslationCache) return valueTranslationCache;
+  if (!fs.existsSync(VALUE_TRANSLATION_CACHE_FILE)) {
+    valueTranslationCache = {};
+    return valueTranslationCache;
   }
-  // Array: recurse element-by-element; fall back to original element if translated is shorter
-  if (Array.isArray(original)) {
-    const tArr = Array.isArray(translated) ? translated : [];
-    return original.map((item, i) => restoreNonStrings(item, i < tArr.length ? tArr[i] : item));
+  try {
+    valueTranslationCache = JSON.parse(fs.readFileSync(VALUE_TRANSLATION_CACHE_FILE, 'utf-8'));
+  } catch {
+    valueTranslationCache = {};
   }
-  // Object: recurse over keys; carry over any key the LLM dropped
-  const tObj = (translated && typeof translated === 'object' && !Array.isArray(translated)) ? translated : {};
-  const result = {};
-  for (const key of Object.keys(original)) {
-    result[key] = restoreNonStrings(original[key], key in tObj ? tObj[key] : original[key]);
-  }
-  return result;
+  return valueTranslationCache;
+}
+
+function saveValueTranslationCache(cache) {
+  fs.writeFileSync(VALUE_TRANSLATION_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+}
+
+function translationCacheKey(text) {
+  return `${String(TRANSLATE_DESTINATION_LANGUAGE).toLowerCase()}::${text}`;
+}
+
+function isUuidLike(text) {
+  return /^(?:\{)?[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?:\})?$/i.test(text)
+    || /^urn:uuid:[0-9a-f-]{36}$/i.test(text);
+}
+
+function isUrlLike(text) {
+  return /^(?:https?:\/\/|www\.)\S+$/i.test(text);
+}
+
+function isLongNumericId(text) {
+  return /^\d{7,}$/.test(text);
+}
+
+function isOpaqueMixedId(text) {
+  if (text.length < 7) return false;
+  if (/\s/.test(text)) return false;
+  if (!/^[A-Za-z0-9_-]+$/.test(text)) return false;
+  return /[A-Za-z]/.test(text) && /\d/.test(text);
+}
+
+function isHexLikeId(text) {
+  return /^[0-9a-f]{8,}$/i.test(text);
+}
+
+function shouldIgnoreForTranslation(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (text.toLowerCase() === 'none') return true;
+  return isUuidLike(text)
+    || isUrlLike(text)
+    || isLongNumericId(text)
+    || isOpaqueMixedId(text)
+    || isHexLikeId(text);
 }
 
 /**
@@ -89,6 +127,18 @@ function hasMeaningfulJson(value) {
   return true;
 }
 
+function hasExistingTranslationForInput(existing, input) {
+  const parsedInput = parseJsonIfPossible(input);
+  const sourceIsJson = parsedInput.parsed || (input !== null && typeof input === 'object');
+
+  if (sourceIsJson) {
+    // Strict validation: invalid translated JSON must be retranslated.
+    return hasMeaningfulJson(existing);
+  }
+
+  return String(existing || '').trim() !== '';
+}
+
 function parseJsonIfPossible(value) {
   if (typeof value !== 'string') return { parsed: false, value };
   const trimmed = value.trim();
@@ -100,51 +150,48 @@ function parseJsonIfPossible(value) {
   }
 }
 
-async function translateAttributes(attrs) {
-  const prompt = `Translate this JSON value to ${TRANSLATE_DESTINATION_LANGUAGE}.
-Translate only string values into ${TRANSLATE_DESTINATION_LANGUAGE}.
-Keep every key name exactly unchanged.
-Keep numbers, booleans, arrays, and nested object structure exactly as-is.
-Leave empty strings as empty strings.
-Return ONLY the translated JSON object, no explanation, no markdown fences.
+async function translateStringValue(text) {
+  const source = String(text || '');
+  if (!source.trim()) return source;
+  if (shouldIgnoreForTranslation(source)) return source;
 
-${JSON.stringify(attrs, null, 2)}`;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let response;
-  try {
-    response = await fetch(TRANSLATE_GPT_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: TRANSLATE_GPT_MODEL,
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-  } finally {
-    clearTimeout(timer);
+  const cache = loadValueTranslationCache();
+  const key = translationCacheKey(source);
+  if (Object.prototype.hasOwnProperty.call(cache, key)) {
+    return cache[key];
+  }
+  if (inFlightValueTranslations.has(key)) {
+    return inFlightValueTranslations.get(key);
   }
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI ${response.status}: ${err}`);
+  const promise = (async () => {
+    const translated = await translatePlainText(source);
+    cache[key] = translated;
+    saveValueTranslationCache(cache);
+    return translated;
+  })().finally(() => {
+    inFlightValueTranslations.delete(key);
+  });
+
+  inFlightValueTranslations.set(key, promise);
+  return promise;
+}
+
+async function translateJsonValuePerLeaf(value) {
+  if (typeof value === 'string') {
+    return translateStringValue(value);
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map(item => translateJsonValuePerLeaf(item)));
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
   }
 
-  const data = await response.json();
-  const { usage, model, id, choices } = data;
-  console.log(`[translate] id=${id} model=${model} dst=${TRANSLATE_DESTINATION_LANGUAGE} prompt=${usage?.prompt_tokens} completion=${usage?.completion_tokens} total=${usage?.total_tokens} finish=${choices?.[0]?.finish_reason}`);
-
-  const text = choices[0].message.content.trim();
-  const jsonText = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-  const translated = JSON.parse(jsonText);
-  return restoreNonStrings(attrs, translated);
+  const entries = await Promise.all(
+    Object.entries(value).map(async ([key, child]) => [key, await translateJsonValuePerLeaf(child)])
+  );
+  return Object.fromEntries(entries);
 }
 
 async function translatePlainText(text) {
@@ -231,7 +278,7 @@ router.post('/translate', async (req, res) => {
       const input = field === 'metadata' ? record.metadata : record.attributes;
       const existing = field === 'metadata' ? record.en_metadata : record.en_attributes;
 
-      if (hasMeaningfulJson(existing)) {
+      if (hasExistingTranslationForInput(existing, input)) {
         return { request_id, skipped: true, reason: 'already_translated' };
       }
 
@@ -242,11 +289,11 @@ router.post('/translate', async (req, res) => {
       let translated;
       const parsedInput = parseJsonIfPossible(input);
       if (parsedInput.parsed) {
-        translated = await translateAttributes(parsedInput.value);
+        translated = await translateJsonValuePerLeaf(parsedInput.value);
       } else if (typeof input === 'string') {
-        translated = await translatePlainText(input);
+        translated = await translateStringValue(input);
       } else {
-        translated = await translateAttributes(input);
+        translated = await translateJsonValuePerLeaf(input);
       }
 
       if (field === 'metadata') {

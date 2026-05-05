@@ -1,9 +1,9 @@
 /**
  * GPT Results API
- * Persists GPT verdict + reasoning directly into the run's own storage.
+ * Persists GPT verdict + reasoning + subtype directly into the run's own storage.
  *
  * CSV mode      → gpt_verdict / gpt_reasoning columns written into the run CSV file
- * Postgres mode → gpt_verdict / gpt_reasoning columns in the per-run table (added if missing)
+ * Postgres mode → gpt_verdict / gpt_reasoning / gpt_subtype columns in the per-run table (added if missing)
  */
 
 require('dotenv').config();
@@ -20,9 +20,10 @@ const { getGptResults, updateGptResults } = usePostgres ? {} : require('../csv-l
 async function ensureGptColumns(tbl) {
   await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_verdict TEXT`);
   await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_reasoning TEXT`);
+  await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_subtype TEXT`);
 }
 
-/** GET /api/gpt-results?run_id=X — returns { request_id: { verdict, reasoning } } */
+/** GET /api/gpt-results?run_id=X — returns { request_id: { verdict, reasoning, gpt_subtype } } */
 router.get('/gpt-results', async (req, res) => {
   const run_id = parseInt(req.query.run_id, 10);
   if (!run_id) return res.status(400).json({ error: 'run_id is required' });
@@ -35,13 +36,14 @@ router.get('/gpt-results', async (req, res) => {
       const idCol = await getIdColumn(tbl);
       await ensureGptColumns(tbl);
       const result = await query(
-        `SELECT ${idCol} AS request_id, gpt_verdict, gpt_reasoning
+        `SELECT ${idCol} AS request_id, gpt_verdict, gpt_reasoning, gpt_subtype
          FROM "${tbl}"
-         WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> ''`
+         WHERE (gpt_verdict IS NOT NULL AND gpt_verdict <> '')
+            OR (gpt_subtype IS NOT NULL AND gpt_subtype <> '')`
       );
       const out = {};
       result.rows.forEach(r => {
-        out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning };
+        out[r.request_id] = { verdict: r.gpt_verdict, reasoning: r.gpt_reasoning, gpt_subtype: r.gpt_subtype };
       });
       return res.json(out);
     } else {
@@ -53,7 +55,7 @@ router.get('/gpt-results', async (req, res) => {
   }
 });
 
-/** PUT /api/gpt-results — body: { run_id, results: { request_id: { verdict, reasoning } } } */
+/** PUT /api/gpt-results — body: { run_id, results: { request_id: { verdict, reasoning, gpt_subtype? } } } */
 router.put('/gpt-results', async (req, res) => {
   const run_id  = parseInt(req.body.run_id, 10);
   const results = req.body.results;
@@ -67,10 +69,13 @@ router.put('/gpt-results', async (req, res) => {
       const tbl   = run.run_name;
       const idCol = await getIdColumn(tbl);
       await ensureGptColumns(tbl);
-      for (const [request_id, { verdict, reasoning }] of Object.entries(results)) {
+      for (const [request_id, payload] of Object.entries(results)) {
+        const verdict = payload?.verdict || '';
+        const reasoning = payload?.reasoning || '';
+        const gptSubtype = payload?.gpt_subtype || null;
         await query(
-          `UPDATE "${tbl}" SET gpt_verdict = $1, gpt_reasoning = $2 WHERE ${idCol} = $3`,
-          [verdict, reasoning, request_id]
+          `UPDATE "${tbl}" SET gpt_verdict = $1, gpt_reasoning = $2, gpt_subtype = $3 WHERE ${idCol} = $4`,
+          [verdict, reasoning, gptSubtype, request_id]
         );
       }
     } else {

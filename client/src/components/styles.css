@@ -4289,6 +4289,51 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.1);
 }
 
+.validation-tag-trigger.validation-tag-trigger-compact {
+  width: auto;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 5px 6px;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  justify-content: center;
+  gap: 4px;
+}
+
+.validation-tag-trigger.validation-tag-trigger-compact:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.validation-tag-trigger.validation-tag-trigger-compact.is-filter-active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.validation-filter-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.validation-filter-badge {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .validation-tag-trigger.is-mapped {
   background: #dcfce7;
   border-color: #86efac;
@@ -4367,6 +4412,12 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .validation-tag-dropdown.open {
   display: block;
+}
+
+.validation-tag-dropdown.validation-tag-dropdown-compact {
+  left: auto;
+  right: 0;
+  min-width: 240px;
 }
 
 .validation-tag-list {
