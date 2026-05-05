@@ -235,7 +235,10 @@ const GPT_VERDICT_CONFIG = {
 
 function GptVerdictBadge({ gpt }) {
   if (!gpt) return <span className="gpt-verdict-badge gpt-verdict-unreviewed">Unreviewed</span>;
-  if (gpt.error) return <span className="gpt-verdict-badge gpt-verdict-error" title={gpt.error}>Error</span>;
+  if (gpt.error) {
+    const friendly = explainGptError(gpt.error);
+    return <span className="gpt-verdict-badge gpt-verdict-error" title={`${friendly}${gpt.error ? ` | raw: ${gpt.error}` : ''}`}>Error</span>;
+  }
   const cfg = GPT_VERDICT_CONFIG[getGptResponseKind(gpt)];
   const badge = cfg
     ? <span className={`gpt-verdict-badge ${cfg.cls}`}>{cfg.label}</span>
@@ -260,6 +263,31 @@ function getAskText(result) {
     return [subtype, reason].filter(Boolean).join(' | ');
   }
   return 'No response text';
+}
+
+function explainGptError(rawError) {
+  const error = String(rawError || '').trim();
+  const lower = error.toLowerCase();
+  if (!error) return 'GPT returned an error';
+  if (lower.includes('error_parse')) {
+    return 'GPT response could not be validated (invalid JSON or missing required fields)';
+  }
+  if (lower.includes('malformed json')) {
+    return 'GPT returned malformed JSON';
+  }
+  if (lower.includes('unsupported response_kind')) {
+    return 'GPT returned an unsupported response_kind';
+  }
+  if (lower.includes('without concrete suggested_subtype')) {
+    return 'GPT marked missing but did not provide a concrete subtype';
+  }
+  if (lower.includes('without allowed suggested_subtype')) {
+    return 'GPT marked existing but did not provide an allowed subtype';
+  }
+  if (lower.includes('error_fetch')) {
+    return 'Network/API request failed while calling GPT';
+  }
+  return error;
 }
 
 function pickFirstNonEmpty(...values) {
@@ -335,7 +363,7 @@ function normalizeGptResult(value) {
     mappedAllowedSubtype,
     suggestedMissingSubtype,
     reason: value.reason || parsedReasoning?.reasoning || value.reasoning || '',
-    error: value.error || parsedReasoning?.error || null,
+    error: value.error || parsedReasoning?.error || (suggestedSubtype.startsWith('ERROR_') ? suggestedSubtype : null),
   };
   LOG.debug(`[normalizeGptResult]: exiting with {decision="${decision}", responseKind="${responseKind}", suggestedSubtype="${suggestedSubtype}", gptSubtype="${gptSubtype}", mappedAllowedSubtype="${mappedAllowedSubtype}", suggestedMissingSubtype="${suggestedMissingSubtype}", error=${JSON.stringify(result.error)}}`);
   return result;
@@ -1409,11 +1437,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   const askGptAll = async (recordsToProcess) => {
     gptCancelledRef.current = false;
-    const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
-    if (pending.length === 0) return;
+    if (!recordsToProcess || recordsToProcess.length === 0) return;
     setGptRunning(true);
-    setGptProgress({ done: 0, total: pending.length });
-    for (const record of pending) {
+    setGptProgress({ done: 0, total: recordsToProcess.length });
+    for (const record of recordsToProcess) {
       if (gptCancelledRef.current) break;
       await askGptForRecord(record);
       setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
@@ -1437,11 +1464,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   const askGptAllQuick = async (recordsToProcess) => {
     gptCancelledRef.current = false;
-    const pending = recordsToProcess.filter(r => !gptResults[r.request_id]);
-    if (pending.length === 0) return;
+    if (!recordsToProcess || recordsToProcess.length === 0) return;
     setGptRunning(true);
-    setGptProgress({ done: 0, total: pending.length });
-    for (const record of pending) {
+    setGptProgress({ done: 0, total: recordsToProcess.length });
+    for (const record of recordsToProcess) {
       if (gptCancelledRef.current) break;
       await askGptForRecord(record, { quick: true });
       setGptProgress(prev => ({ ...prev, done: prev.done + 1 }));
@@ -1509,6 +1535,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
     const responseKind = String(raw.response_kind || raw.responseKind || '').trim();
     const suggestedSubtype = String(raw.suggested_subtype || raw.suggestedSubtype || raw.gptSubtype || '').trim();
+    const rawError = String(raw.error || '').trim();
+    const friendlyError = rawError ? explainGptError(rawError) : '';
     const summaryParts = [responseKind, suggestedSubtype].filter(Boolean);
 
     return (
@@ -1518,6 +1546,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           <span className="gpt-result-summary-meta">{entries.length} field{entries.length === 1 ? '' : 's'}</span>
         </summary>
         <div className="gpt-result-fields">
+          {friendlyError && (
+            <div className="gpt-result-row">
+              <div className="gpt-result-key">error_message</div>
+              <div className="gpt-result-value">{friendlyError}</div>
+            </div>
+          )}
           {entries.map(([key, value]) => {
             let displayValue;
             if (value === null) {

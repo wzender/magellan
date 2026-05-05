@@ -182,7 +182,14 @@ function buildJudgeOutcome(parsed, raw, allowedSubtypes, predictedStatus) {
   if (responseKind === 'missing') {
     const suggestedSubtype = String(missingSuggestion || '').trim();
     if (!suggestedSubtype || suggestedSubtype.toLowerCase() === 'unknown' || suggestedSubtype.toLowerCase() === 'missing') {
-      return buildJudgeErrorResponse('PARSE', raw, 'Missing response_kind without concrete suggested_subtype');
+      // Graceful downgrade: model chose "missing" but did not provide a concrete label.
+      // Treat this as unknown instead of a hard parse error.
+      return {
+        suggested_subtype: 'unknown',
+        reasoning,
+        response_kind: 'unknown',
+        raw_response: raw,
+      };
     }
     if (allowedSet.has(suggestedSubtype.toLowerCase())) {
       return {
@@ -455,6 +462,7 @@ router.post('/ask-gpt', async (req, res) => {
   3) unknown
     Use ONLY when the record is truly empty, contains only identifiers, or has absolutely no descriptive content.
     If there is ANY descriptive signal (tags, description, category, brand, etc.), you MUST classify as existing or missing — never unknown.
+    Placeholder/test-like content with no domain meaning (e.g., generic words like "test", "sample", "example", "item", or synthetic labels) should be treated as unknown.
     suggested_subtype must be exactly "unknown".
 
 Output JSON only with this schema:
