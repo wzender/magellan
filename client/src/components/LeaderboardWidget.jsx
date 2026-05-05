@@ -34,6 +34,31 @@ function timeAgo(date) {
   return `${years} year${years !== 1 ? 's' : ''} ago`;
 }
 
+function ProgressBars({ gptReviewed, humanTagged, total }) {
+  const safeTotal = total || 1;
+  const gptPct = Math.min(100, Math.round((gptReviewed / safeTotal) * 100));
+  const humanPct = Math.min(100, Math.round((humanTagged / safeTotal) * 100));
+
+  return (
+    <div className="leaderboard-progress-bars">
+      <div className="leaderboard-progress-row">
+        <span className="leaderboard-progress-label">GPT</span>
+        <div className="leaderboard-progress-track">
+          <div className="leaderboard-progress-fill leaderboard-progress-fill-gpt" style={{ width: `${gptPct}%` }} />
+        </div>
+        <span className="leaderboard-progress-count">{gptReviewed}/{total}</span>
+      </div>
+      <div className="leaderboard-progress-row">
+        <span className="leaderboard-progress-label">Human</span>
+        <div className="leaderboard-progress-track">
+          <div className="leaderboard-progress-fill leaderboard-progress-fill-human" style={{ width: `${humanPct}%` }} />
+        </div>
+        <span className="leaderboard-progress-count">{humanTagged}/{total}</span>
+      </div>
+    </div>
+  );
+}
+
 function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], isUnknowns = false }) {
   // Define columns based on benchmark type
   const getDefaultColumns = () => {
@@ -218,9 +243,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             <tr className="unknowns-leaderboard-group-row">
               <th rowSpan={2} style={{ width: 180 }} title="Run country">Country</th>
               <th rowSpan={2} style={{ width: 70 }} title="Unknown + missing records in this run">Total</th>
-              <th rowSpan={2} style={{ width: 90 }} title="Records reviewed by GPT">GPT Reviewed</th>
+              <th rowSpan={2} style={{ width: 250 }} title="Blue = GPT reviewed, green = human retagged">Progress</th>
               <th rowSpan={2} style={{ width: 130 }} title="Unknown-model records GPT also marked truly_unknown">GPT Unknown Agree</th>
-              <th rowSpan={2} style={{ width: 75 }} title="Records not yet retagged by a reviewer">Untagged</th>
               <th colSpan={3} className="unknowns-retagged-subheader" title="Reviewer-applied tags">Retagged</th>
             </tr>
             <tr>
@@ -244,6 +268,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               const existing         = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
               const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
               const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
+              const humanTagged      = existing + missingTag + unknownTag;
               const untagged         = total - existing - missingTag - unknownTag;
               const gptUnknownAgreeCount = row.gpt_unknown_agree_count ?? row.truly_unknown_count ?? 0;
               const gptUnknownAgreeBase = row.unknowns_count ?? unknownsTotal;
@@ -269,9 +294,14 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                     {date && <span className="unknowns-run-date">{date.toISOString().slice(0, 10)}</span>}
                   </td>
                   <td className="metric">{total}</td>
-                  <td className="metric">{reviewed}</td>
+                  <td className="leaderboard-progress-cell">
+                    <ProgressBars
+                      gptReviewed={reviewed}
+                      humanTagged={humanTagged}
+                      total={total}
+                    />
+                  </td>
                   <td className="metric" title={`${gptUnknownAgreeCount}/${gptUnknownAgreeBase} unknowns`}>{gptUnknownAgreeCount}/{gptUnknownAgreeBase} ({gptUnknownAgreePct}%)</td>
-                  <td className="metric">{untagged}</td>
                   <td className="metric metric-existing">{existing}</td>
                   <td className="metric metric-missing">{missingTag}</td>
                   <td className="metric metric-unknown">{unknownTag}</td>

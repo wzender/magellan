@@ -306,6 +306,28 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
     }));
   }
 
+  // Add tagging progress counts per run table
+  await Promise.all(rows.map(async (row) => {
+    const run = runs.find(r => r.id === row.run_id);
+    row.human_tagged = 0;
+    row.gpt_reviewed = 0;
+    if (!run || !row.table_exists) return;
+    try {
+      const result = await query(
+        `SELECT
+           COUNT(*) FILTER (WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> '') AS human_tagged,
+           COUNT(*) FILTER (WHERE gpt_subtype IS NOT NULL AND gpt_subtype <> '') AS gpt_reviewed
+         FROM "${run.run_name}"`
+      );
+      row.human_tagged = parseInt(result.rows[0].human_tagged) || 0;
+      row.gpt_reviewed = parseInt(result.rows[0].gpt_reviewed) || 0;
+    } catch (err) {
+      if (!isTableMissing(err)) {
+        console.warn(`⚠ Could not get progress counts for ${run.run_name}: ${err.message}`);
+      }
+    }
+  }));
+
   return rows.sort((a, b) => b.subtype_weighted_f1 - a.subtype_weighted_f1);
 }
 

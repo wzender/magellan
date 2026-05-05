@@ -2832,11 +2832,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .unknowns-group-missing    { background: #faf5ff; color: #6d28d9; border-bottom: 2px solid #c4b5fd; border-left: 1px solid #cbd5e1; }
 /* Second header row: 1st th = Total (Unknown Validation), 5th th = Total (Missing Subtypes) */
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(1) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table thead tr:last-child th:nth-child(1) { border-left: 1px solid #cbd5e1; }
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(4) { border-left: 1px solid #cbd5e1; }
-/* Data rows: 2nd td = first Unknown Validation col, 8th td = first Missing Subtypes col */
-.unknowns-leaderboard-table tbody td:nth-child(2) { border-left: 1px solid #cbd5e1; }
-.unknowns-leaderboard-table tbody td:nth-child(8) { border-left: 1px solid #cbd5e1; }
 
+.unknowns-leaderboard-table tbody td:nth-child(2) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table tbody td:nth-child(7) { border-left: 1px solid #cbd5e1; }
 .unknowns-retagged-subheader {
   font-size: 10px;
   font-weight: 600;
@@ -2998,6 +2998,62 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .leaderboard-table .benchmark-size {
   color: var(--text-muted);
+}
+
+.leaderboard-progress-cell {
+  min-width: 240px;
+}
+
+.leaderboard-progress-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.leaderboard-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.leaderboard-progress-label {
+  width: 42px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.leaderboard-progress-track {
+  flex: 1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.leaderboard-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.leaderboard-progress-fill-gpt {
+  background: #4a90d9;
+}
+
+.leaderboard-progress-fill-human {
+  background: #27ae60;
+}
+
+.leaderboard-progress-count {
+  min-width: 46px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .gpt-verdict-badge {
