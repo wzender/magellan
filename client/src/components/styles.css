@@ -2269,6 +2269,17 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .json-cell-wrapper { position: relative; }
 
+.json-cell-actions {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.4rem;
+  z-index: 1;
+  display: flex;
+  gap: 0.3rem;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
 .ask-gpt-td {
   min-width: 240px;
   vertical-align: top;
@@ -2349,17 +2360,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   background: #fdf2f1;
 }
 
-.json-cell-wrapper .copy-json-btn {
-  position: absolute;
-  top: 0.35rem;
-  right: 0.4rem;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.json-td:hover .copy-json-btn,
-.cell-json:hover .copy-json-btn { opacity: 1; }
+.json-td:hover .json-cell-actions,
+.cell-json:hover .json-cell-actions { opacity: 1; }
 
 /* Correctness badge */
 .record-id-cell {
@@ -2399,6 +2401,23 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .copy-json-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.toggle-json-btn {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.toggle-json-btn:hover {
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);

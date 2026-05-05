@@ -9,6 +9,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
+  const [expandedJsonCells, setExpandedJsonCells] = useState({});
   const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
 
@@ -96,6 +97,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setSortConfig({ key: null, direction: 'asc' });
     setPageSize(20);
     setColumnFilters({});
+    setExpandedJsonCells({});
   }, [data]);
 
   useEffect(() => {
@@ -260,26 +262,79 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const renderPrettyJson = (raw, cellKey, label) => {
-    let obj = raw;
-    if (typeof raw === 'string') {
-      try { obj = JSON.parse(raw); } catch {
-        try { obj = JSON.parse(raw.replace(/'/g, '"')); } catch { /* leave as string */ }
+  const parseJsonValue = (raw) => {
+    if (typeof raw !== 'string') return raw;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      try {
+        return JSON.parse(raw.replace(/'/g, '"'));
+      } catch {
+        return raw;
       }
     }
+  };
+
+  const isEmptyJsonValue = (value) => {
+    if (value == null) return true;
+    if (typeof value === 'string') return value.trim() === '';
+    if (Array.isArray(value)) return value.every(isEmptyJsonValue);
+    if (typeof value === 'object') return Object.keys(value).length === 0;
+    return false;
+  };
+
+  const filterEmptyJsonValues = (value) => {
+    if (Array.isArray(value)) {
+      const filtered = value
+        .map(filterEmptyJsonValues)
+        .filter(item => !isEmptyJsonValue(item));
+      return filtered;
+    }
+    if (value && typeof value === 'object') {
+      return Object.entries(value).reduce((acc, [key, entryValue]) => {
+        const filteredValue = filterEmptyJsonValues(entryValue);
+        if (!isEmptyJsonValue(filteredValue)) {
+          acc[key] = filteredValue;
+        }
+        return acc;
+      }, {});
+    }
+    return value;
+  };
+
+  const renderPrettyJson = (raw, cellKey, label, options = {}) => {
+    const { filterEmpty = false } = options;
+    const obj = parseJsonValue(raw);
     const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
     if (isEmpty) {
       return <div className="json-empty">(empty)</div>;
     }
-    const display = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
+    const filteredObj = filterEmpty ? filterEmptyJsonValues(obj) : obj;
+    const hasFilteredValues = filterEmpty && typeof obj === 'object' && JSON.stringify(filteredObj) !== JSON.stringify(obj);
+    const isExpanded = !!expandedJsonCells[cellKey];
+    const displayValue = hasFilteredValues && !isExpanded ? filteredObj : obj;
+    const display = typeof displayValue === 'object' ? JSON.stringify(displayValue, null, 2) : String(displayValue);
     return (
       <div className="json-cell-wrapper">
-        <button
-          className="copy-json-btn"
-          onClick={e => { e.stopPropagation(); copyCellJson(obj, label, cellKey); }}
-        >
-          {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
-        </button>
+        <div className="json-cell-actions">
+          {hasFilteredValues && (
+            <button
+              className="toggle-json-btn"
+              onClick={e => {
+                e.stopPropagation();
+                setExpandedJsonCells(prev => ({ ...prev, [cellKey]: !prev[cellKey] }));
+              }}
+            >
+              {isExpanded ? 'Show less' : 'Show all'}
+            </button>
+          )}
+          <button
+            className="copy-json-btn"
+            onClick={e => { e.stopPropagation(); copyCellJson(obj, label, cellKey); }}
+          >
+            {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
+          </button>
+        </div>
         <pre className="json-pretty">{display}</pre>
       </div>
     );
@@ -600,11 +655,11 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'run2_pred_subtype': return <td key={`${record.id}-run2_pred_subtype`}>{record.run2_pred_subtype || '-'}</td>;
                     case 'attributes': {
                       const attrsObj = attrLang === 'en' ? record.en_attributes : record.attributes;
-                      return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(attrsObj, `${record.id}-attributes`, 'Attributes')}</td>;
+                      return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(attrsObj, `${record.id}-attributes`, 'Attributes', { filterEmpty: true })}</td>;
                     }
                     case 'metadata': {
                       const metaObj = metaLang === 'en' ? record.en_metadata : record.metadata;
-                      return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(metaObj, `${record.id}-metadata`, 'Metadata')}</td>;
+                      return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(metaObj, `${record.id}-metadata`, 'Metadata', { filterEmpty: true })}</td>;
                     }
                     case 'ask_gpt': {
                       const loading = !!askGptLoading[record.request_id];
