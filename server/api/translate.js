@@ -7,7 +7,7 @@
  *     data: { done, total, request_id, attrsEn }   — progress per record
  *     data: { done, total, finished: true }         — final event
  *
- * Translates each record's attributes JSON (keys + string values) from the
+ * Translates each record's attributes JSON string values from the
  * original language to English using Claude.  Results are persisted to
  * data/translations.json and merged into the in-memory cache immediately,
  * so subsequent /api/records calls return the translated en_attributes.
@@ -57,16 +57,26 @@ function restoreNonStrings(original, translated) {
 }
 
 /**
- * Translate all non-English string keys and values in an attributes object
- * to English using OpenAI chat completions, preserving the JSON structure.
+ * Translate string values in an object to English using OpenAI chat
+ * completions, preserving keys and JSON structure exactly as-is.
  */
 const CONCURRENCY = parseInt(process.env.OPENAI_CONCURRENCY) || 10;
 const TIMEOUT_MS  = 20000; // 20 s per request
 
+function hasMeaningfulJson(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
 async function translateAttributes(attrs) {
   const prompt = `Translate this JSON object to ${TRANSLATE_DESTINATION_LANGUAGE}.
-Translate every non-English key key-by-key and every non-English string value value-by-value into ${TRANSLATE_DESTINATION_LANGUAGE}.
+Translate only string values into ${TRANSLATE_DESTINATION_LANGUAGE}.
+Keep every key name exactly unchanged.
 Keep numbers, booleans, arrays, and nested object structure exactly as-is.
+Leave empty strings as empty strings.
 Return ONLY the translated JSON object, no explanation, no markdown fences.
 
 ${JSON.stringify(attrs, null, 2)}`;
@@ -150,8 +160,14 @@ router.post('/translate', async (req, res) => {
     const { request_id } = record;
     try {
       const input = field === 'metadata' ? record.metadata : record.attributes;
+      const existing = field === 'metadata' ? record.en_metadata : record.en_attributes;
+
+      if (hasMeaningfulJson(existing)) {
+        return { request_id, skipped: true, reason: 'already_translated' };
+      }
+
       if (!input || (typeof input === 'object' && Object.keys(input).length === 0)) {
-        return { request_id, skipped: true };
+        return { request_id, skipped: true, reason: 'empty_source' };
       }
       const translated = await translateAttributes(input);
       if (field === 'metadata') {

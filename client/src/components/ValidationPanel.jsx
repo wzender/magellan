@@ -182,6 +182,8 @@ function toLegacyYesNo(decision, predictedStatus) {
   const d = String(decision || '').trim();
   const status = String(predictedStatus || '').trim().toLowerCase();
 
+  if (!d) return '';
+
   if (d === 'yes' || d === 'no') return d;
 
   if (status === 'unknown') {
@@ -196,12 +198,14 @@ function toLegacyYesNo(decision, predictedStatus) {
 
 function getGptSubtype(result) {
   if (!result) return '';
+  if (result.error) return 'Error';
   if (result.decision === 'truly_unknown') return 'unknown';
   return String(result.mappedAllowedSubtype || result.suggestedMissingSubtype || '').trim();
 }
 
 function getGptSubtypeSource(result) {
   if (!result) return 'none';
+  if (result.error) return 'error';
   if (result.decision === 'truly_unknown') return 'truly-unknown';
   const mapped = String(result.mappedAllowedSubtype || '').trim();
   if (mapped.toLowerCase() === 'unknown') return 'truly-unknown';
@@ -212,6 +216,7 @@ function getGptSubtypeSource(result) {
 
 function getGptSuggestedVerdict(result, countrySubtypes) {
   if (!result) return '';
+  if (result.error) return '';
   const mapped = String(result.mappedAllowedSubtype || '').trim();
   const allowedSet = new Set((countrySubtypes || []).map(o => o.subtype).filter(Boolean));
 
@@ -225,6 +230,60 @@ function getGptSuggestedVerdict(result, countrySubtypes) {
     return 'Missing';
   }
   return '';
+}
+
+function parseJsonLike(raw) {
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+function pruneEmptyJsonValue(value) {
+  if (value === null || value === undefined) return undefined;
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : value;
+  }
+
+  if (Array.isArray(value)) {
+    const next = value
+      .map(item => pruneEmptyJsonValue(item))
+      .filter(item => item !== undefined);
+    return next.length > 0 ? next : undefined;
+  }
+
+  if (typeof value === 'object') {
+    const next = Object.entries(value).reduce((acc, [key, item]) => {
+      const pruned = pruneEmptyJsonValue(item);
+      if (pruned !== undefined) acc[key] = pruned;
+      return acc;
+    }, {});
+    return Object.keys(next).length > 0 ? next : undefined;
+  }
+
+  return value;
+}
+
+function getJsonCellState(raw) {
+  const fullValue = parseJsonLike(raw);
+  const prunedValue = pruneEmptyJsonValue(fullValue);
+  const fullDisplay = fullValue === undefined ? '' : JSON.stringify(fullValue, null, 2);
+  const prunedDisplay = prunedValue === undefined ? '' : JSON.stringify(prunedValue, null, 2);
+
+  return {
+    fullValue,
+    prunedValue,
+    fullDisplay,
+    prunedDisplay,
+    isEmpty: prunedValue === undefined,
+    hasHiddenValues: fullDisplay !== '' && fullDisplay !== prunedDisplay,
+  };
 }
 
 function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated, publishState = 'idle', onPublishRetagged }) {
@@ -241,6 +300,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [metaLang, setMetaLang] = useState('original');
   const [toast, setToast] = useState(null);
   const [copiedCell, setCopiedCell] = useState(null);
+  const [expandedJsonCells, setExpandedJsonCells] = useState({});
   const [gptResults, setGptResults] = useState({});   // request_id -> { verdict, reasoning }
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
@@ -279,6 +339,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptResults({});
     setGptRunning(false);
     setAskGptLoading({});
+    setExpandedJsonCells({});
     setTranslateState({ running: false, field: null, done: 0, total: 0 });
     setTranslatedOverrides({});
     setColFilters(EMPTY_COL_FILTERS);
@@ -604,22 +665,44 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── col filter helper ── */
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
 
+  const hasMeaningfulJson = (value) => {
+    const parsed = parseJsonLike(value);
+    const pruned = pruneEmptyJsonValue(parsed);
+    return pruned !== undefined;
+  };
+
+  const hasExistingTranslation = (record, field) => {
+    const override = translatedOverrides[record.request_id] || {};
+    const translatedValue = field === 'attributes'
+      ? (override.en_attributes ?? record.en_attributes)
+      : (override.en_metadata ?? record.en_metadata);
+    return hasMeaningfulJson(translatedValue);
+  };
+
   const translateFilteredField = async (field) => {
     if (translateState.running) return;
     const rows = filtered;
     if (!rows.length) return;
+    const rowsToTranslate = rows.filter(r => !hasExistingTranslation(r, field));
 
     if (field === 'attributes') setAttrLang('en');
     if (field === 'metadata') setMetaLang('en');
 
-    setTranslateState({ running: true, field, done: 0, total: rows.length });
+    if (!rowsToTranslate.length) {
+      setToast(`${field === 'attributes' ? 'Attributes' : 'Metadata'} already translated for current rows`);
+      return;
+    }
+
+    setTranslateState({ running: true, field, done: 0, total: rowsToTranslate.length });
 
     const payload = {
       field,
-      records: rows.map(r => ({
+      records: rowsToTranslate.map(r => ({
         request_id: r.request_id,
         attributes: r.attributes,
         metadata: r.metadata,
+        en_attributes: translatedOverrides[r.request_id]?.en_attributes ?? r.en_attributes,
+        en_metadata: translatedOverrides[r.request_id]?.en_metadata ?? r.en_metadata,
       })),
     };
 
@@ -651,7 +734,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           const line = chunk.split('\n').find(l => l.startsWith('data: '));
           if (!line) continue;
           const data = JSON.parse(line.slice(6));
-          const total = Number(data.total || rows.length);
+          const total = Number(data.total || rowsToTranslate.length);
           const doneCount = Number(data.done || 0);
 
           setTranslateState({ running: !Boolean(data.finished), field, done: doneCount, total });
@@ -687,16 +770,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     let result;
     try {
       const allowedSubtypes = quick ? [] : (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
-      const attributes = quick
-        ? Object.fromEntries(Object.entries(record.attributes || {}).filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== ''))
-        : record.attributes;
+      const attributes = getJsonCellState(record.attributes).prunedValue;
+      const metadata = getJsonCellState(record.metadata).prunedValue;
       const res = await fetch('/api/ask-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           judge_mode: true,
           attributes,
-          metadata: record.metadata,
+          metadata,
           predicted_status: predictedStatus,
           pred_type: record.pred_type || '',
           pred_subtype: record.pred_subtype || '',
@@ -744,7 +826,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     setGptResults(prev => ({ ...prev, [requestId]: result }));
-    const legacyVerdict = toLegacyYesNo(result.decision || result.subtype, predictedStatus);
+    const legacyVerdict = result.error ? '' : toLegacyYesNo(result.decision || result.subtype, predictedStatus);
     const structuredReasoning = JSON.stringify({
       decision: result.decision || result.subtype || '',
       mapped_allowed_subtype: result.mappedAllowedSubtype || '',
@@ -835,19 +917,34 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }).catch(() => setToast(`Failed to copy ${label}`));
   };
 
+  const toggleJsonCell = (cellKey) => {
+    setExpandedJsonCells(prev => ({ ...prev, [cellKey]: !prev[cellKey] }));
+  };
+
   const renderPrettyJson = (raw, cellKey, label) => {
-    let obj = raw;
-    if (typeof raw === 'string') {
-      try { obj = JSON.parse(raw); } catch { /* leave as string */ }
-    }
-    const isEmpty = !obj || (typeof obj === 'object' ? Object.keys(obj).length === 0 : String(obj).trim() === '');
+    const { fullValue, prunedValue, fullDisplay, prunedDisplay, isEmpty, hasHiddenValues } = getJsonCellState(raw);
+    const isExpanded = Boolean(expandedJsonCells[cellKey]);
+    const display = isExpanded ? fullDisplay : prunedDisplay;
+    const valueToCopy = isExpanded ? fullValue : prunedValue;
+
     if (isEmpty) return <div className="json-empty">(empty)</div>;
-    const display = typeof obj === 'object' ? JSON.stringify(obj, null, 2) : String(obj);
+
     return (
       <div className="json-cell-wrapper">
-        <button className="copy-json-btn" onClick={e => { e.stopPropagation(); copyCellJson(obj, label, cellKey); }}>
-          {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
-        </button>
+        <div className="json-cell-actions">
+          {hasHiddenValues && (
+            <button
+              className="toggle-json-btn"
+              onClick={e => { e.stopPropagation(); toggleJsonCell(cellKey); }}
+              title={isExpanded ? `Show only non-empty ${label.toLowerCase()}` : `Show full ${label.toLowerCase()} JSON`}
+            >
+              {isExpanded ? 'Show filtered JSON' : 'Show full JSON'}
+            </button>
+          )}
+          <button className="copy-json-btn" onClick={e => { e.stopPropagation(); copyCellJson(valueToCopy, label, cellKey); }}>
+            {copiedCell === cellKey ? 'Copied ✔' : 'Copy'}
+          </button>
+        </div>
         <pre className="json-pretty">{display}</pre>
       </div>
     );
