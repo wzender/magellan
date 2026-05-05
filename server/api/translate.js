@@ -63,7 +63,25 @@ function restoreNonStrings(original, translated) {
 const CONCURRENCY = parseInt(process.env.OPENAI_CONCURRENCY) || 10;
 const TIMEOUT_MS  = 20000; // 20 s per request
 
+function parseExistingTranslation(value) {
+  if (value === null || value === undefined) return { parsed: null, valid: false };
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return { parsed: null, valid: false };
+    try {
+      return { parsed: JSON.parse(trimmed), valid: true };
+    } catch {
+      return { parsed: null, valid: false };
+    }
+  }
+  return { parsed: value, valid: true };
+}
+
 function hasMeaningfulJson(value) {
+  const { parsed, valid } = parseExistingTranslation(value);
+  if (!valid) return false;
+
+  value = parsed;
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim() !== '';
   if (Array.isArray(value)) return value.length > 0;
@@ -71,8 +89,19 @@ function hasMeaningfulJson(value) {
   return true;
 }
 
+function parseJsonIfPossible(value) {
+  if (typeof value !== 'string') return { parsed: false, value };
+  const trimmed = value.trim();
+  if (!trimmed) return { parsed: false, value };
+  try {
+    return { parsed: true, value: JSON.parse(trimmed) };
+  } catch {
+    return { parsed: false, value };
+  }
+}
+
 async function translateAttributes(attrs) {
-  const prompt = `Translate this JSON object to ${TRANSLATE_DESTINATION_LANGUAGE}.
+  const prompt = `Translate this JSON value to ${TRANSLATE_DESTINATION_LANGUAGE}.
 Translate only string values into ${TRANSLATE_DESTINATION_LANGUAGE}.
 Keep every key name exactly unchanged.
 Keep numbers, booleans, arrays, and nested object structure exactly as-is.
@@ -116,6 +145,46 @@ ${JSON.stringify(attrs, null, 2)}`;
   const jsonText = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
   const translated = JSON.parse(jsonText);
   return restoreNonStrings(attrs, translated);
+}
+
+async function translatePlainText(text) {
+  const prompt = `Translate the following text to ${TRANSLATE_DESTINATION_LANGUAGE}.
+Return ONLY the translated text, with no markdown, no quotes, and no explanation.
+
+${String(text)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(TRANSLATE_GPT_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: TRANSLATE_GPT_MODEL,
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI ${response.status}: ${err}`);
+  }
+
+  const data = await response.json();
+  const { usage, model, id, choices } = data;
+  console.log(`[translate] id=${id} model=${model} dst=${TRANSLATE_DESTINATION_LANGUAGE} mode=text prompt=${usage?.prompt_tokens} completion=${usage?.completion_tokens} total=${usage?.total_tokens} finish=${choices?.[0]?.finish_reason}`);
+
+  return String(choices?.[0]?.message?.content || '').trim();
 }
 
 /** Run tasks with a bounded concurrency pool, calling onDone after each. */
@@ -169,7 +238,17 @@ router.post('/translate', async (req, res) => {
       if (!input || (typeof input === 'object' && Object.keys(input).length === 0)) {
         return { request_id, skipped: true, reason: 'empty_source' };
       }
-      const translated = await translateAttributes(input);
+
+      let translated;
+      const parsedInput = parseJsonIfPossible(input);
+      if (parsedInput.parsed) {
+        translated = await translateAttributes(parsedInput.value);
+      } else if (typeof input === 'string') {
+        translated = await translatePlainText(input);
+      } else {
+        translated = await translateAttributes(input);
+      }
+
       if (field === 'metadata') {
         updateMetadataTranslation(request_id, translated);
       } else {

@@ -232,6 +232,20 @@ function getGptSuggestedVerdict(result, countrySubtypes) {
   return '';
 }
 
+function clipLogText(value, max = 900) {
+  const text = String(value || '');
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}...(truncated ${text.length - max} chars)`;
+}
+
+function summarizePayloadShape(value) {
+  if (value === null || value === undefined) return { type: 'nullish' };
+  if (typeof value === 'string') return { type: 'string', length: value.length };
+  if (Array.isArray(value)) return { type: 'array', length: value.length };
+  if (typeof value === 'object') return { type: 'object', keys: Object.keys(value).length };
+  return { type: typeof value };
+}
+
 function parseJsonLike(raw) {
   if (typeof raw === 'string') {
     try {
@@ -665,8 +679,23 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── col filter helper ── */
   const setColFilter = (col, val) => setColFilters(prev => ({ ...prev, [col]: val }));
 
+  const parseExistingTranslation = (value) => {
+    if (value === null || value === undefined) return { parsed: null, valid: false };
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return { parsed: null, valid: false };
+      try {
+        return { parsed: JSON.parse(trimmed), valid: true };
+      } catch {
+        return { parsed: null, valid: false };
+      }
+    }
+    return { parsed: value, valid: true };
+  };
+
   const hasMeaningfulJson = (value) => {
-    const parsed = parseJsonLike(value);
+    const { parsed, valid } = parseExistingTranslation(value);
+    if (!valid) return false;
     const pruned = pruneEmptyJsonValue(parsed);
     return pruned !== undefined;
   };
@@ -764,14 +793,24 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── ask GPT (filtered records only) ── */
   const askGptForRecord = async (record, { quick = false } = {}) => {
     const requestId = record.request_id;
+    const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
     const predictedStatus = String(record.pred_subtype_2 || '').trim().toLowerCase();
+
+    console.log(
+      `[ask-gpt-ui][${traceId}] start request_id=${requestId} run_id=${runId} quick=${quick} predicted_status=${predictedStatus} ` +
+      `attributes=${JSON.stringify(summarizePayloadShape(record.attributes))} metadata=${JSON.stringify(summarizePayloadShape(record.metadata))}`
+    );
 
     let result;
     try {
       const allowedSubtypes = quick ? [] : (countrySubtypes || []).map(o => o.subtype).filter(Boolean);
       const attributes = getJsonCellState(record.attributes).prunedValue;
       const metadata = getJsonCellState(record.metadata).prunedValue;
+      console.log(
+        `[ask-gpt-ui][${traceId}] request payload allowed_subtypes=${allowedSubtypes.length} ` +
+        `attributes=${JSON.stringify(summarizePayloadShape(attributes))} metadata=${JSON.stringify(summarizePayloadShape(metadata))}`
+      );
       const res = await fetch('/api/ask-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -788,7 +827,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           allowed_subtypes: allowedSubtypes,
         }),
       });
+      console.log(`[ask-gpt-ui][${traceId}] /api/ask-gpt status=${res.status} ok=${res.ok}`);
       const data = await res.json();
+      console.log(`[ask-gpt-ui][${traceId}] /api/ask-gpt body=${clipLogText(JSON.stringify(data))}`);
       if (data.error) {
         result = {
           text: '',
@@ -813,6 +854,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         };
       }
     } catch (err) {
+      console.error(`[ask-gpt-ui][${traceId}] request failed message=${err.message} stack=${clipLogText(err.stack || '', 1500)}`);
       result = {
         text: '',
         rawResponse: '',
@@ -825,7 +867,22 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       };
     }
 
+    console.log(
+      `[ask-gpt-ui][${traceId}] mapped result decision=${String(result.decision || '').trim() || '(empty)'} ` +
+      `mapped=${String(result.mappedAllowedSubtype || '').trim() || '(empty)'} ` +
+      `suggested=${String(result.suggestedMissingSubtype || '').trim() || '(empty)'} error=${result.error || '(none)'}`
+    );
+
     setGptResults(prev => ({ ...prev, [requestId]: result }));
+    console.log(`[ask-gpt-ui][${traceId}] setGptResults request_id=${requestId}`);
+
+    const gptSubtype = getGptSubtype(result);
+    const gptSuggested = getGptSuggestedVerdict(result, countrySubtypes);
+    console.log(
+      `[ask-gpt-ui][${traceId}] derived subtype_text=${gptSubtype || '(empty)'} suggested_verdict=${gptSuggested || '(empty)'} ` +
+      `source=${getGptSubtypeSource(result)}`
+    );
+
     const legacyVerdict = result.error ? '' : toLegacyYesNo(result.decision || result.subtype, predictedStatus);
     const structuredReasoning = JSON.stringify({
       decision: result.decision || result.subtype || '',
@@ -835,6 +892,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       raw_response: result.rawResponse || '',
       error: result.error || null,
     });
+    console.log(`[ask-gpt-ui][${traceId}] persist start legacy_verdict=${legacyVerdict || '(empty)'} reasoning_chars=${structuredReasoning.length}`);
     fetch('/api/gpt-results', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -849,11 +907,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       }),
     })
       .then(() => {
+        console.log(`[ask-gpt-ui][${traceId}] persist success request_id=${requestId}`);
         if (onGptResultsUpdated) onGptResultsUpdated();
       })
-      .catch(() => {});
+      .catch((persistErr) => {
+        console.error(`[ask-gpt-ui][${traceId}] persist failed message=${persistErr?.message || '(unknown)'}`);
+      });
 
     setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
+    console.log(`[ask-gpt-ui][${traceId}] done request_id=${requestId}`);
   };
 
   const askGptAll = async (recordsToProcess) => {

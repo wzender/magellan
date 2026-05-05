@@ -113,15 +113,33 @@ function parseJsonObject(raw) {
   }
 }
 
-function logMalformedJson(mode, raw, errMessage = '') {
+function clipText(value, max = 1200) {
+  const text = String(value || '');
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}...(truncated ${text.length - max} chars)`;
+}
+
+function summarizeJsonLike(value) {
+  if (value === null || value === undefined) return { type: 'nullish' };
+  if (typeof value === 'string') return { type: 'string', length: value.length };
+  if (Array.isArray(value)) return { type: 'array', length: value.length };
+  if (typeof value === 'object') return { type: 'object', keys: Object.keys(value).length };
+  return { type: typeof value };
+}
+
+function logMalformedJson(mode, raw, errMessage = '', traceId = '-') {
   const preview = String(raw || '').slice(0, 1200);
   const suffix = String(raw || '').length > 1200 ? '...(truncated)' : '';
   console.warn(
-    `[ask-gpt] malformed JSON mode=${mode}${errMessage ? ` error=${errMessage}` : ''} raw=${preview}${suffix}`
+    `[ask-gpt][${traceId}] malformed JSON mode=${mode}${errMessage ? ` error=${errMessage}` : ''} raw=${preview}${suffix}`
   );
 }
 
-async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL) {
+async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL, trace = {}) {
+  const traceId = trace.traceId || '-';
+  const mode = trace.mode || 'unknown';
+  console.log(`[ask-gpt][${traceId}] call start mode=${mode} model=${model} max_tokens=${maxTokens} messages=${messages.length}`);
+
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     timeout: TIMEOUT_MS,
@@ -139,11 +157,15 @@ async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_
 
   if (!response.ok) {
     const err = await response.text();
+    console.error(`[ask-gpt][${traceId}] call failed mode=${mode} status=${response.status} body=${clipText(err, 2000)}`);
     throw new Error(`OpenAI ${response.status}: ${err}`);
   }
 
   const data = await response.json();
   const raw = (data.choices?.[0]?.message?.content || '').trim();
+  console.log(
+    `[ask-gpt][${traceId}] call ok mode=${mode} response_model=${data.model || ''} total_tokens=${data.usage?.total_tokens || 0} raw=${clipText(raw)}`
+  );
   return { data, raw };
 }
 
@@ -155,7 +177,10 @@ async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_
  * - classify mode (Record Details): { subtype: "...", reason: "...", text: "..." }
  */
 router.post('/ask-gpt', async (req, res) => {
+  const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
   if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
+    console.error(`[ask-gpt][${traceId}] OPENAI_API_KEY is not configured`);
     return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
   }
 
@@ -172,9 +197,17 @@ router.post('/ask-gpt', async (req, res) => {
     pred_subtype,
     missing_subtype,
     allowed_subtypes,
-    nearest_subtypes,
   } = req.body;
+
+  console.log(
+    `[ask-gpt][${traceId}] request received mode=${judge_mode ? 'judge' : (suggested_subtype ? 'verdict' : (ASK_GPT_PROMPT ? 'env-prompt' : 'stage1'))} ` +
+    `predicted_status=${String(predicted_status || '').trim().toLowerCase()} stage2_subtype=${String(stage2_subtype || '').trim().toLowerCase()} ` +
+    `allowed_subtypes=${Array.isArray(allowed_subtypes) ? allowed_subtypes.length : 0} ` +
+    `attributes=${JSON.stringify(summarizeJsonLike(attributes))} metadata=${JSON.stringify(summarizeJsonLike(metadata))}`
+  );
+
   if (!attributes && !metadata) {
+    console.warn(`[ask-gpt][${traceId}] request rejected: attributes or metadata required`);
     return res.status(400).json({ error: 'attributes or metadata required' });
   }
 
@@ -183,9 +216,6 @@ router.post('/ask-gpt', async (req, res) => {
       const allowedList = Array.isArray(allowed_subtypes) && allowed_subtypes.length > 0
         ? [...new Set(allowed_subtypes)].map(s => `- ${s}`).join('\n')
         : '- N/A';
-      const nearestHints = Array.isArray(nearest_subtypes) && nearest_subtypes.length > 0
-        ? nearest_subtypes.join(', ')
-        : 'N/A';
 
       const systemPrompt = `You are an expert audit judge for a two-stage subtype classifier.
 
@@ -218,24 +248,23 @@ Rules:
       const userPrompt = `Allowed subtypes for this country:
 ${allowedList}
 
-Nearest subtype hints from retrieval:
-${nearestHints}
-
 Attributes:
 ${JSON.stringify(attributes, null, 2)}
 
 Metadata:
 ${JSON.stringify(metadata, null, 2)}`;
 
-      console.log('[ask-gpt] judge prompt:\n  SYSTEM:', systemPrompt, '\n  USER:', userPrompt);
+      console.log(`[ask-gpt][${traceId}] judge prompt prepared system_chars=${systemPrompt.length} user_chars=${userPrompt.length}`);
+      console.log(`[ask-gpt][${traceId}] judge prompt preview user=${clipText(userPrompt, 1600)}`);
       const { data, raw } = await callChat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL);
+      ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL, { traceId, mode: 'judge' });
 
       const parsedOrNull = parseJsonObject(raw);
       if (!parsedOrNull) {
-        logMalformedJson('judge', raw);
+        logMalformedJson('judge', raw, '', traceId);
+        console.warn(`[ask-gpt][${traceId}] returning error response due to malformed judge JSON`);
         return res.json({
           error: 'Malformed JSON response from GPT judge',
           raw_response: raw,
@@ -249,7 +278,12 @@ ${JSON.stringify(metadata, null, 2)}`;
       const suggestedMissingSubtype = String(parsed.suggested_missing_subtype || parsed.suggested_label || '').trim();
       const reasoning = String(parsed.reasoning || parsed.reason || raw).trim();
 
-      console.log(`[ask-gpt] mode=judge model=${data.model} tokens=${data.usage?.total_tokens}`);
+      console.log(
+        `[ask-gpt][${traceId}] mode=judge parsed decision_raw=${String(parsed.decision || parsed.verdict || '').trim()} ` +
+        `decision_normalized=${decision} mapped_raw=${mappedAllowedSubtypeRaw || '(empty)'} mapped_final=${mappedAllowedSubtype || '(empty)'} ` +
+        `suggested_missing=${suggestedMissingSubtype || '(empty)'} reasoning_chars=${reasoning.length} model=${data.model} tokens=${data.usage?.total_tokens}`
+      );
+      console.log(`[ask-gpt][${traceId}] response payload ready`);
 
       return res.json({
         decision,
@@ -273,15 +307,18 @@ ${JSON.stringify(metadata, null, 2)}
 Respond with a JSON object only — no markdown, no extra text:
 {"verdict": "yes" or "no", "reasoning": "1-2 sentence explanation"}`;
 
-      const { data, raw } = await callChat([{ role: 'user', content: prompt }]);
-      console.log(`[ask-gpt] mode=verdict model=${data.model} tokens=${data.usage?.total_tokens}`);
+      console.log(`[ask-gpt][${traceId}] verdict prompt prepared chars=${prompt.length}`);
+      const { data, raw } = await callChat([{ role: 'user', content: prompt }], OPENAI_MAX_TOKENS, OPENAI_MODEL, { traceId, mode: 'verdict' });
+      console.log(`[ask-gpt][${traceId}] mode=verdict model=${data.model} tokens=${data.usage?.total_tokens}`);
 
       try {
         const parsed = JSON.parse(raw);
+        console.log(`[ask-gpt][${traceId}] verdict parsed verdict=${parsed.verdict || '(missing)'} reasoning_chars=${String(parsed.reasoning || '').length}`);
         return res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw, raw_response: raw });
       } catch (err) {
-        logMalformedJson('verdict', raw, err?.message || 'parse error');
+        logMalformedJson('verdict', raw, err?.message || 'parse error', traceId);
         const isYes = /\byes\b/i.test(raw);
+        console.warn(`[ask-gpt][${traceId}] verdict fallback applied isYes=${isYes}`);
         return res.json({ verdict: isYes ? 'yes' : 'no', reasoning: raw, raw_response: raw });
       }
     }
@@ -296,8 +333,9 @@ Respond with a JSON object only — no markdown, no extra text:
         suggested_subtype: suggested_subtype || '',
         suggested_type: suggested_type || '',
       });
-      const { data, raw } = await callChat([{ role: 'user', content: rendered }], 250);
-      console.log(`[ask-gpt] mode=env-prompt model=${data.model} tokens=${data.usage?.total_tokens}`);
+      console.log(`[ask-gpt][${traceId}] env prompt prepared chars=${rendered.length}`);
+      const { data, raw } = await callChat([{ role: 'user', content: rendered }], 250, OPENAI_MODEL, { traceId, mode: 'env-prompt' });
+      console.log(`[ask-gpt][${traceId}] mode=env-prompt model=${data.model} tokens=${data.usage?.total_tokens}`);
       return res.json({ text: raw, subtype: null, reason: null, raw_response: raw });
     }
 
@@ -312,12 +350,12 @@ Respond with a JSON object only — no markdown, no extra text:
     const { data, raw } = await callChat([
       { role: 'system', content: stage1System },
       { role: 'user', content: stage1User },
-    ], 80);
+    ], 80, OPENAI_MODEL, { traceId, mode: 'stage1' });
     const parsed = parseStage1(raw);
-    console.log(`[ask-gpt] mode=stage1 model=${data.model} tokens=${data.usage?.total_tokens}`);
+    console.log(`[ask-gpt][${traceId}] mode=stage1 model=${data.model} tokens=${data.usage?.total_tokens} subtype=${parsed.subtype || '(empty)'} reason_chars=${String(parsed.reason || '').length}`);
     return res.json({ subtype: parsed.subtype, reason: parsed.reason, text: raw, raw_response: raw });
   } catch (err) {
-    console.error('[ask-gpt] error:', err.message);
+    console.error(`[ask-gpt][${traceId}] error message=${err.message} stack=${clipText(err.stack || '', 2000)}`);
     res.status(500).json({ error: err.message });
   }
 });
