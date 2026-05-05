@@ -159,19 +159,8 @@ function buildJudgeOutcome(parsed, raw, allowedSubtypes, predictedStatus) {
   ]);
 
   if (responseKind === 'unknown') {
-    const bestGuess = pickFirstNonEmpty([
-      parsed.suggested_subtype,
-      parsed.suggested_missing_subtype,
-      parsed.suggested_label,
-      parsed.suggetsed_missing_subtype,
-      parsed.sugested_missing_subtype,
-    ]).trim();
-    // Always use a concrete label even for unknown; fall back only if model gave nothing
-    const subtype = (bestGuess && bestGuess.toLowerCase() !== 'unknown' && bestGuess.toLowerCase() !== 'missing')
-      ? bestGuess
-      : 'unknown';
     return {
-      suggested_subtype: subtype,
+      suggested_subtype: 'unknown',
       reasoning,
       response_kind: 'unknown',
       raw_response: raw,
@@ -464,22 +453,23 @@ router.post('/ask-gpt', async (req, res) => {
     Use when the record has enough signal to classify, but the best subtype is not in the allowed list.
     The suggested_subtype must be a short English label describing the concrete classification.
   3) unknown
-    Use when the record does not contain enough actionable information to classify.
-    Even then, suggested_subtype must still be your best-effort concrete classification label.
+    Use ONLY when the record is truly empty, contains only identifiers, or has absolutely no descriptive content.
+    If there is ANY descriptive signal (tags, description, category, brand, etc.), you MUST classify as existing or missing — never unknown.
+    suggested_subtype must be exactly "unknown".
 
 Output JSON only with this schema:
-{"suggested_subtype":"<concrete subtype label>","reasoning":"1-2 concise sentences","response_kind":"existing|missing|unknown"}
+{"suggested_subtype":"<concrete subtype label or unknown>","reasoning":"1-2 concise sentences","response_kind":"existing|missing|unknown"}
 
 Rules:
 - Never output markdown.
 - The attributes and metadata may be in any language — ignore their language and respond entirely in English.
-- suggested_subtype must ALWAYS be a concrete descriptive classification label (e.g. "handcrafted instrument", "electric guitar"). It must NEVER be the word "missing", "unknown", "none", or any enum/placeholder.
 - If response_kind is existing, suggested_subtype must be copied verbatim from the allowed subtype list.
-- If response_kind is missing, suggested_subtype must be the best classification label that is NOT in the allowed subtype list.
-- If response_kind is unknown, suggested_subtype must still be your best guess at a concrete classification label.
+- If response_kind is missing, suggested_subtype must be a concrete descriptive classification label (e.g. "handcrafted instrument", "electric guitar") that is NOT in the allowed subtype list. It must NEVER be the word "missing", "none", or any enum/placeholder.
+- If response_kind is unknown, suggested_subtype must be exactly "unknown".
 - If the best natural subtype label is not literally present in the allowed subtype list, use response_kind=missing and return that natural subtype label.
 - Do not replace a missing subtype with the closest allowed subtype just because it is semantically similar.
-- If uncertain between missing and unknown, prefer unknown but still provide a concrete suggested_subtype.`;
+- unknown is ONLY for records with no descriptive content at all (empty, identifier-only). If a record has tags, a description, a category, or any textual signal, it must be existing or missing.
+- If uncertain between existing and missing, prefer missing with your best-guess label.`;
 
       const userPrompt = `Allowed subtypes for this country:
 ${allowedList}

@@ -13,7 +13,7 @@ A single-page dashboard for evaluating and exploring classification model perfor
 
 - **Backend**: Node.js 21 / Express, PostgreSQL (or CSV fallback)
 - **Frontend**: React, CSS3
-- **Data**: CSV files in `data/` (default) or PostgreSQL via `DATA_SOURCE=postgres`
+- **Data**: CSV files in `data/` (default) or PostgreSQL via `DATA_SOURCE=postgres` (case-insensitive)
 
 ---
 
@@ -60,7 +60,7 @@ If PostgreSQL is running on the host machine and the app container needs to conn
 docker run --rm --network host \
   -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/classification_eval \
   -e DB_SCHEMA=magellan \
-  -e DATA_SOURCE=postgres \
+  -e DATA_SOURCE=POSTGRES \
   magellan
 ```
 
@@ -79,7 +79,7 @@ docker run --rm -p 5000:5000 \
   --add-host=host.docker.internal:host-gateway \
   -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/classification_eval \
   -e DB_SCHEMA=magellan \
-  -e DATA_SOURCE=postgres \
+  -e DATA_SOURCE=POSTGRES \
   magellan
 ```
 
@@ -96,7 +96,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/classification_eval
       DB_SCHEMA: magellan
-      DATA_SOURCE: postgres
+      DATA_SOURCE: POSTGRES
   db:
     image: postgres:16
     environment:
@@ -157,7 +157,7 @@ service:
   port: 5000
 
 env:
-  DATA_SOURCE: postgres
+  DATA_SOURCE: POSTGRES
   DB_SCHEMA: magellan
   PORT: "5000"
   NODE_ENV: production
@@ -326,7 +326,7 @@ The connection string is read from the `DATABASE_URL` environment variable. Set 
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/classification_eval
 DB_SCHEMA=magellan
-DATA_SOURCE=postgres
+DATA_SOURCE=POSTGRES
 ```
 
 `DB_SCHEMA` controls which PostgreSQL schema is searched (defaults to `magellan`). The app sets `search_path` to that schema on every connection, so all table names below are relative to it.

@@ -18,7 +18,7 @@ const fetch  = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 
-const loader = process.env.DATA_SOURCE === 'postgres'
+const loader = (process.env.DATA_SOURCE || 'csv').toLowerCase() === 'postgres'
   ? require('../db-loader')
   : require('../csv-loader');
 const { updateTranslation, updateMetadataTranslation } = loader;
@@ -29,6 +29,7 @@ const OPENAI_API_URL   = process.env.OPENAI_API_URL   || 'https://api.openai.com
 const TRANSLATE_GPT_MODEL = process.env.TRANSLATE_GPT_MODEL || OPENAI_MODEL;
 const TRANSLATE_GPT_URL = process.env.TRANSLATE_GPT_URL || OPENAI_API_URL;
 const TRANSLATE_DESTINATION_LANGUAGE = process.env.TRANSLATE_DESTINATION_LANGUAGE || 'English';
+const TRANSLATION_CACHE_MAX_SIZE = parseInt(process.env.TRANSLATION_CACHE_MAX_SIZE, 10) || 100000;
 const VALUE_TRANSLATION_CACHE_FILE = path.join(__dirname, '../../data/value-translation-cache.json');
 if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-key-here') {
   console.warn('⚠ OPENAI_API_KEY is not set — /api/translate will fail');
@@ -166,8 +167,10 @@ async function translateStringValue(text) {
 
   const promise = (async () => {
     const translated = await translatePlainText(source);
-    cache[key] = translated;
-    saveValueTranslationCache(cache);
+    if (Object.keys(cache).length < TRANSLATION_CACHE_MAX_SIZE) {
+      cache[key] = translated;
+      saveValueTranslationCache(cache);
+    }
     return translated;
   })().finally(() => {
     inFlightValueTranslations.delete(key);
@@ -279,6 +282,15 @@ router.post('/translate', async (req, res) => {
       const existing = field === 'metadata' ? record.en_metadata : record.en_attributes;
 
       if (hasExistingTranslationForInput(existing, input)) {
+        // Persist to DB even if already translated (may only be in memory/cache)
+        const parsedExisting = (typeof existing === 'string') ? parseJsonIfPossible(existing).value : existing;
+        if (parsedExisting && typeof parsedExisting === 'object') {
+          if (field === 'metadata') {
+            await updateMetadataTranslation(request_id, parsedExisting);
+          } else {
+            await updateTranslation(request_id, parsedExisting);
+          }
+        }
         return { request_id, skipped: true, reason: 'already_translated' };
       }
 
@@ -297,9 +309,9 @@ router.post('/translate', async (req, res) => {
       }
 
       if (field === 'metadata') {
-        updateMetadataTranslation(request_id, translated);
+        await updateMetadataTranslation(request_id, translated);
       } else {
-        updateTranslation(request_id, translated);
+        await updateTranslation(request_id, translated);
       }
       return { request_id, attrsEn: translated };
     } catch (err) {

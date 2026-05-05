@@ -37,7 +37,7 @@
   },
   "UNK-IT-M002": {
     "region": "EU",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Review",
     "confidence": "24.5"
   },
@@ -61,7 +61,7 @@
   },
   "UNK-IT-M009": {
     "region": "LATAM",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Archived",
     "confidence": "29.9"
   },
@@ -73,13 +73,13 @@
   },
   "UNK-IT-M007": {
     "region": "MENA",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Archived",
     "confidence": "49.8"
   },
   "UNK-IT-M006": {
     "region": "LATAM",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Archived",
     "confidence": "33.7"
   },
@@ -115,13 +115,13 @@
   },
   "UNK-IT-N005": {
     "region": "APAC",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Active",
     "confidence": "69.8"
   },
   "UNK-IT-SYN-003": {
     "region": "EU",
-    "source": "Manual Input",
+    "source": "Manual Entry",
     "status": "Active",
     "confidence": "54.7"
   },
@@ -151,13 +151,13 @@
   },
   "UNK-IT-U005": {
     "region": "MENA",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Review",
     "confidence": "22.8"
   },
   "UNK-IT-U001": {
     "region": "NA",
-    "source": "Raspatore",
+    "source": "Grater",
     "status": "Review",
     "confidence": "26.1"
   },
@@ -166,5 +166,341 @@
     "source": "Web Extraction",
     "status": "Active",
     "confidence": "78.3"
+  },
+  "UNK-IT-ENUM-001": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-IT-ENUM-002": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-IT-ENUM-003": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-IT-ENUM-004": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-IT-ENUM-005": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-IT-ENUM-006": {
+    "region": "EU",
+    "source": "Test",
+    "status": "Active",
+    "confidence": "50.0"
+  },
+  "UNK-FR-M004": {
+    "region": "EU",
+    "source": "API",
+    "status": "Active",
+    "confidence": "34.3"
+  },
+  "UNK-FR-E003": {
+    "region": "MENA",
+    "source": "API",
+    "status": "Active",
+    "confidence": "59.3"
+  },
+  "UNK-FR-E001": {
+    "region": "EU",
+    "source": "User Submission",
+    "status": "Active",
+    "confidence": "58.4"
+  },
+  "UNK-FR-E005": {
+    "region": "NA",
+    "source": "User Submission",
+    "status": "Active",
+    "confidence": "64.9"
+  },
+  "UNK-FR-M003": {
+    "region": "MENA",
+    "source": "User Submission",
+    "status": "Under Review",
+    "confidence": "49.4"
+  },
+  "UNK-FR-M001": {
+    "region": "APAC",
+    "source": "User Submission",
+    "status": "Under Review",
+    "confidence": "62.9"
+  },
+  "UNK-FR-M009": {
+    "region": "EU",
+    "source": "User Submission",
+    "status": "Active",
+    "confidence": "48.8"
+  },
+  "UNK-FR-M007": {
+    "region": "LATAM",
+    "source": "Extractor",
+    "status": "Active",
+    "confidence": "50.4"
+  },
+  "UNK-FR-N001": {
+    "region": "EU",
+    "source": "API",
+    "status": "Active",
+    "confidence": "77.3"
+  },
+  "UNK-FR-M008": {
+    "region": "APAC",
+    "source": "User Submission",
+    "status": "Active",
+    "confidence": "32.5"
+  },
+  "UNK-FR-E004": {
+    "region": "LATAM",
+    "source": "Extractor",
+    "status": "Under Review",
+    "confidence": "61.2"
+  },
+  "UNK-FR-N002": {
+    "region": "EU",
+    "source": "API",
+    "status": "Active",
+    "confidence": "81.2"
+  },
+  "UNK-FR-N004": {
+    "region": "APAC",
+    "source": "User Submission",
+    "status": "Active",
+    "confidence": "72.1"
+  },
+  "UNK-FR-U001": {
+    "region": "APAC",
+    "source": "Extractor",
+    "status": "Under Review",
+    "confidence": "28.3"
+  },
+  "UNK-FR-N005": {
+    "region": "NA",
+    "source": "API",
+    "status": "Active",
+    "confidence": "79.5"
+  },
+  "UNK-FR-U002": {
+    "region": "LATAM",
+    "source": "Extractor",
+    "status": "Archived",
+    "confidence": "19.7"
+  },
+  "UNK-FR-U003": {
+    "region": "EU",
+    "source": "User Submission",
+    "status": "Under Review",
+    "confidence": "31.4"
+  },
+  "UNK-FR-U004": {
+    "region": "NA",
+    "source": "API",
+    "status": "Under Review",
+    "confidence": "35.9"
+  },
+  "UNK-FR-E002": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "67.1"
+  },
+  "UNK-FR-M002": {
+    "region": "LATAM",
+    "source": "Manual Entry",
+    "status": "Under Review",
+    "confidence": "69.1"
+  },
+  "UNK-FR-M005": {
+    "region": "MENA",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "53.4"
+  },
+  "UNK-FR-M006": {
+    "region": "LATAM",
+    "source": "Manual Entry",
+    "status": "Archived",
+    "confidence": "71.0"
+  },
+  "UNK-FR-M010": {
+    "region": "NA",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "46.4"
+  },
+  "UNK-FR-N003": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "76.4"
+  },
+  "UNK-FR-U005": {
+    "region": "MENA",
+    "source": "Manual Entry",
+    "status": "Under Review",
+    "confidence": "24.2"
+  },
+  "UNK-ES-E003": {
+    "region": "APAC",
+    "source": "API",
+    "status": "Active",
+    "confidence": "61.3"
+  },
+  "UNK-ES-E004": {
+    "region": "LATAM",
+    "source": "Extractor",
+    "status": "Active",
+    "confidence": "65.8"
+  },
+  "UNK-ES-E005": {
+    "region": "NA",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "62.9"
+  },
+  "UNK-ES-M001": {
+    "region": "NA",
+    "source": "Extractor",
+    "status": "Archived",
+    "confidence": "63.5"
+  },
+  "UNK-ES-M003": {
+    "region": "MENA",
+    "source": "Manual Entry",
+    "status": "Archived",
+    "confidence": "33.9"
+  },
+  "UNK-ES-M005": {
+    "region": "MENA",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "73.1"
+  },
+  "UNK-ES-M009": {
+    "region": "MENA",
+    "source": "API",
+    "status": "Archived",
+    "confidence": "48.7"
+  },
+  "UNK-ES-M010": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "57.9"
+  },
+  "UNK-ES-N001": {
+    "region": "EU",
+    "source": "API",
+    "status": "Active",
+    "confidence": "83.6"
+  },
+  "UNK-ES-E002": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "72.4"
+  },
+  "UNK-ES-N002": {
+    "region": "EU",
+    "source": "Scraper",
+    "status": "Active",
+    "confidence": "79.2"
+  },
+  "UNK-ES-N004": {
+    "region": "NA",
+    "source": "Manual Entry",
+    "status": "Active",
+    "confidence": "85.1"
+  },
+  "UNK-ES-N003": {
+    "region": "APAC",
+    "source": "Extractor",
+    "status": "Active",
+    "confidence": "76.5"
+  },
+  "UNK-ES-N005": {
+    "region": "MENA",
+    "source": "API",
+    "status": "Active",
+    "confidence": "74.7"
+  },
+  "UNK-ES-M002": {
+    "region": "EU",
+    "source": "API",
+    "status": "Under Review",
+    "confidence": "80.4"
+  },
+  "UNK-ES-M004": {
+    "region": "APAC",
+    "source": "API",
+    "status": "Under Review",
+    "confidence": "30.2"
+  },
+  "UNK-ES-M006": {
+    "region": "NA",
+    "source": "Scraper",
+    "status": "Under Review",
+    "confidence": "77.8"
+  },
+  "UNK-ES-M007": {
+    "region": "EU",
+    "source": "API",
+    "status": "Under Review",
+    "confidence": "61.2"
+  },
+  "UNK-ES-M008": {
+    "region": "NA",
+    "source": "Scraper",
+    "status": "Under Review",
+    "confidence": "47.5"
+  },
+  "UNK-ES-U001": {
+    "region": "APAC",
+    "source": "Scraper",
+    "status": "Under Review",
+    "confidence": "27.4"
+  },
+  "UNK-ES-U003": {
+    "region": "EU",
+    "source": "Manual Entry",
+    "status": "Under Review",
+    "confidence": "31.8"
+  },
+  "UNK-ES-U002": {
+    "region": "LATAM",
+    "source": "Extractor",
+    "status": "Archived",
+    "confidence": "20.3"
+  },
+  "UNK-ES-U004": {
+    "region": "MENA",
+    "source": "Scraper",
+    "status": "Under Review",
+    "confidence": "25.6"
+  },
+  "UNK-ES-U005": {
+    "region": "NA",
+    "source": "Manual Entry",
+    "status": "Under Review",
+    "confidence": "23.9"
+  },
+  "UNK-ES-E001": {
+    "region": "EU",
+    "source": "Extractor",
+    "status": "Active",
+    "confidence": "67.2"
   }
 }

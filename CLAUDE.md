@@ -29,19 +29,30 @@ npx jest server/api/__tests__/endpoints.test.js
 
 This is a single-page classification evaluation dashboard. The server serves the built React client as static files; in production there is one process on port 5000.
 
-### Data layer: CSV not PostgreSQL
+### Data layer: CSV or PostgreSQL
 
-Despite the presence of `server/db.js` and `server/db-loader.js`, **the app currently uses `server/csv-loader.js`** which reads four CSV files from `data/` into an in-memory cache at startup. All API route files (`server/api/*.js`) `require('../csv-loader')`. The PostgreSQL code is unused.
+The app supports two data backends selected by `DATA_SOURCE`:
 
-`csv-loader.js` parses `attributes` and `metadata` columns with `JSON.parse` at load time so they arrive at the client as objects.
+- `DATA_SOURCE=csv` → uses `server/csv-loader.js`, which reads the run CSVs under `data/` into an in-memory cache.
+- `DATA_SOURCE=postgres` → uses `server/db-loader.js` / `server/db.js` against the schema configured by `DB_SCHEMA`.
+
+The main selector lives in `server/loader.js` and normalizes `DATA_SOURCE` case-insensitively. Most read APIs go through that loader abstraction. Some write-oriented routes choose their backend directly:
+
+- `server/api/translate.js`
+- `server/api/gptResults.js`
+
+Both backends parse `attributes` / `metadata` payloads into objects before returning records to the client.
 
 ### Request flow
 
-```
+```text
 Browser → GET /api/...
   → server/index.js (Express)
   → server/api/{leaderboard,runs,confusionMatrix,transitionMatrix,records}.js
-  → server/csv-loader.js (in-memory data, filtered in JS)
+  → server/loader.js
+    → server/csv-loader.js (CSV mode)
+    or
+    → server/db-loader.js (Postgres mode)
   → JSON response
 ```
 
