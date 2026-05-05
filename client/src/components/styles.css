@@ -3016,8 +3016,77 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .gpt-verdict-error          { background: #fee2e2; color: #b91c1c; }
 .gpt-verdict-cell { display: flex; flex-direction: column; gap: 4px; }
 .gpt-verdict-reason { font-size: 11px; color: #6b7280; line-height: 1.4; word-break: break-word; overflow-wrap: break-word; }
-.cell-gpt-verdict { vertical-align: top; padding: 6px 8px; max-width: 220px; }
+.cell-gpt-verdict { vertical-align: top; padding: 6px 8px; max-width: 380px; min-width: 320px; }
 .cell-fewshots    { font-size: 12px; color: #6b7280; vertical-align: top; }
+
+.gpt-result-viewer {
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.gpt-result-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #eef4fb;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gpt-result-summary::-webkit-details-marker {
+  display: none;
+}
+
+.gpt-result-summary-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gpt-result-summary-meta {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gpt-result-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.gpt-result-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.gpt-result-key {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #475569;
+  text-transform: none;
+  overflow-wrap: anywhere;
+}
+
+.gpt-result-value {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #1e293b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 
 .gpt-subtype-legend {
   display: flex;
@@ -3032,6 +3101,11 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 120px;
+  text-align: left;
 }
 
 .gpt-subtype-pill.is-mapped {
@@ -3056,6 +3130,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .cell-gpt-subtype {
   vertical-align: top;
+  width: 110px;
+  max-width: 110px;
 }
 
 .gpt-subtype-pill.is-clickable {

@@ -14,6 +14,7 @@ const OPENAI_JUDGE_MAX_TOKENS = parseInt(process.env.OPENAI_JUDGE_MAX_TOKENS, 10
 const OPENAI_API_URL    = process.env.OPENAI_API_URL    || 'https://api.openai.com/v1/chat/completions';
 const OPENAI_MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS, 10) || 200;
 const TIMEOUT_MS        = 20000;
+const ASK_GPT_USE_JSON_MODE = String(process.env.ASK_GPT_USE_JSON_MODE || 'true').toLowerCase() === 'true';
 const ASK_GPT_PROMPT    = (process.env.ASK_GPT_PROMPT || '').trim();
 const ASK_GPT_DOMAIN_NAME = process.env.ASK_GPT_DOMAIN_NAME || 'e-commerce product support';
 
@@ -76,6 +77,8 @@ const VALID_JUDGE_DECISIONS = new Set([
   'wrong_subtype',
 ]);
 
+const VALID_RESPONSE_KINDS = new Set(['existing', 'missing', 'unknown', 'error']);
+
 function normalizeJudgeDecision(value, predictedStatus = '') {
   const status = String(predictedStatus || '').trim().toLowerCase();
   const raw = String(value || '').trim().toLowerCase();
@@ -105,12 +108,200 @@ function normalizeJudgeDecision(value, predictedStatus = '') {
   return 'wrong_subtype';
 }
 
+function normalizeResponseKind(value, predictedStatus = '') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (VALID_RESPONSE_KINDS.has(raw)) return raw;
+
+  const legacyDecision = normalizeJudgeDecision(value, predictedStatus);
+  if (legacyDecision === 'truly_unknown') return 'unknown';
+  if (legacyDecision === 'true_missing_subtype') return 'missing';
+  if (legacyDecision === 'missing_but_mappable' || legacyDecision === 'wrong_subtype') return 'existing';
+  return 'error';
+}
+
+function parseHttpStatusCode(message) {
+  const match = /OpenAI\s+(\d{3})/.exec(String(message || ''));
+  return match ? match[1] : '';
+}
+
+function buildJudgeErrorResponse(code, rawResponse = '', errorMessage = '') {
+  const suffix = String(code || 'UNKNOWN').trim().toUpperCase();
+  return {
+    suggested_subtype: `ERROR_${suffix}`,
+    reasoning: null,
+    response_kind: 'error',
+    raw_response: rawResponse,
+    error: errorMessage || `ERROR_${suffix}`,
+  };
+}
+
+function buildJudgeOutcome(parsed, raw, allowedSubtypes, predictedStatus) {
+  const responseKind = normalizeResponseKind(
+    parsed.response_kind || parsed.kind || parsed.decision || parsed.verdict || '',
+    predictedStatus,
+  );
+  const allowedList = (Array.isArray(allowedSubtypes) ? allowedSubtypes : []).map(s => String(s).trim().toLowerCase());
+  const allowedSet = new Set(allowedList);
+  const reasoning = String(parsed.reasoning || parsed.reason || '').trim() || null;
+
+  const normalizedAllowedSuggestion = pickFirstNonEmpty([
+    parsed.suggested_subtype,
+    parsed.mapped_allowed_subtype,
+    parsed.corrected_subtype,
+  ]).toLowerCase();
+
+  const missingSuggestion = pickFirstNonEmpty([
+    parsed.suggested_subtype,
+    parsed.suggested_missing_subtype,
+    parsed.suggested_label,
+    parsed.suggetsed_missing_subtype,
+    parsed.sugested_missing_subtype,
+  ]);
+
+  if (responseKind === 'unknown') {
+    const bestGuess = pickFirstNonEmpty([
+      parsed.suggested_subtype,
+      parsed.suggested_missing_subtype,
+      parsed.suggested_label,
+      parsed.suggetsed_missing_subtype,
+      parsed.sugested_missing_subtype,
+    ]).trim();
+    // Always use a concrete label even for unknown; fall back only if model gave nothing
+    const subtype = (bestGuess && bestGuess.toLowerCase() !== 'unknown' && bestGuess.toLowerCase() !== 'missing')
+      ? bestGuess
+      : 'unknown';
+    return {
+      suggested_subtype: subtype,
+      reasoning,
+      response_kind: 'unknown',
+      raw_response: raw,
+    };
+  }
+
+  if (responseKind === 'existing') {
+    if (!normalizedAllowedSuggestion || !allowedSet.has(normalizedAllowedSuggestion)) {
+      return buildJudgeErrorResponse('PARSE', raw, 'Existing response_kind without allowed suggested_subtype');
+    }
+    return {
+      suggested_subtype: normalizedAllowedSuggestion,
+      reasoning,
+      response_kind: 'existing',
+      raw_response: raw,
+    };
+  }
+
+  if (responseKind === 'missing') {
+    const suggestedSubtype = String(missingSuggestion || '').trim();
+    if (!suggestedSubtype || suggestedSubtype.toLowerCase() === 'unknown' || suggestedSubtype.toLowerCase() === 'missing') {
+      return buildJudgeErrorResponse('PARSE', raw, 'Missing response_kind without concrete suggested_subtype');
+    }
+    if (allowedSet.has(suggestedSubtype.toLowerCase())) {
+      return {
+        suggested_subtype: suggestedSubtype.toLowerCase(),
+        reasoning,
+        response_kind: 'existing',
+        raw_response: raw,
+      };
+    }
+    return {
+      suggested_subtype: suggestedSubtype,
+      reasoning,
+      response_kind: 'missing',
+      raw_response: raw,
+    };
+  }
+
+  return buildJudgeErrorResponse('PARSE', raw, 'Unsupported response_kind');
+}
+
 function parseJsonObject(raw) {
+  const strict = tryParseJsonStrict(raw);
+  if (strict && typeof strict === 'object' && !Array.isArray(strict)) return strict;
+
+  const stripped = stripMarkdownCodeFences(raw);
+  const strippedParsed = tryParseJsonStrict(stripped);
+  if (strippedParsed && typeof strippedParsed === 'object' && !Array.isArray(strippedParsed)) return strippedParsed;
+
+  const extracted = extractFirstJsonObject(stripped);
+  if (extracted) {
+    const extractedParsed = tryParseJsonStrict(extracted);
+    if (extractedParsed && typeof extractedParsed === 'object' && !Array.isArray(extractedParsed)) return extractedParsed;
+  }
+
+  const repaired = basicJsonRepair(extracted || stripped);
+  const repairedParsed = tryParseJsonStrict(repaired);
+  if (repairedParsed && typeof repairedParsed === 'object' && !Array.isArray(repairedParsed)) return repairedParsed;
+
+  return null;
+}
+
+function tryParseJsonStrict(raw) {
   try {
     return JSON.parse(raw);
   } catch {
     return null;
   }
+}
+
+function stripMarkdownCodeFences(raw) {
+  const text = String(raw || '').trim();
+  if (!text.startsWith('```')) return text;
+  return text
+    .replace(/^```[a-zA-Z0-9_-]*\s*/m, '')
+    .replace(/\s*```$/m, '')
+    .trim();
+}
+
+function extractFirstJsonObject(raw) {
+  const text = String(raw || '');
+  const start = text.indexOf('{');
+  if (start < 0) return '';
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+  return '';
+}
+
+function basicJsonRepair(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return text;
+
+  // Lightweight cleanup for common LLM issues.
+  return text
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/,\s*([}\]])/g, '$1')
+    .trim();
 }
 
 function clipText(value, max = 1200) {
@@ -151,22 +342,52 @@ function logMalformedJson(mode, raw, errMessage = '', traceId = '-') {
 async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_MODEL, trace = {}) {
   const traceId = trace.traceId || '-';
   const mode = trace.mode || 'unknown';
+  const preferJson = Boolean(trace.preferJson && ASK_GPT_USE_JSON_MODE);
   LOG.info(traceId, `── CALL START mode=${mode} model=${model} max_tokens=${maxTokens} messages=${messages.length}`);
 
-  const response = await fetch(OPENAI_API_URL, {
+  const makeBody = (withJsonMode) => {
+    const body = {
+      model,
+      max_tokens: maxTokens,
+      temperature: 0,
+      messages,
+    };
+    if (withJsonMode) {
+      body.response_format = { type: 'json_object' };
+    }
+    return body;
+  };
+
+  let response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     timeout: TIMEOUT_MS,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      temperature: 0,
-      messages,
-    }),
+    body: JSON.stringify(makeBody(preferJson)),
   });
+
+  if (!response.ok && preferJson) {
+    const errPreview = await response.text();
+    const jsonModeLikelyUnsupported =
+      response.status === 400 && /(response_format|json_object|unsupported|invalid)/i.test(errPreview);
+    if (jsonModeLikelyUnsupported) {
+      LOG.warn(traceId, `── JSON MODE RETRY mode=${mode} reason=${clipText(errPreview, 300)}`);
+      response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        timeout: TIMEOUT_MS,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify(makeBody(false)),
+      });
+    } else {
+      LOG.error(traceId, `── CALL FAILED mode=${mode} status=${response.status} body=${clipText(errPreview, 2000)}`);
+      throw new Error(`OpenAI ${response.status}: ${errPreview}`);
+    }
+  }
 
   if (!response.ok) {
     const err = await response.text();
@@ -187,7 +408,8 @@ async function callChat(messages, maxTokens = OPENAI_MAX_TOKENS, model = OPENAI_
  * POST /api/ask-gpt
  * Body: { attributes, metadata, suggested_subtype?, suggested_type? }
  * Returns:
- * - verdict mode (Unknowns): { verdict: "yes"|"no", reasoning: "..." }
+ * - judge mode: { suggested_subtype, reasoning, response_kind }
+ * - verdict mode (legacy): { verdict: "yes"|"no", reasoning: "..." }
  * - classify mode (Record Details): { subtype: "...", reason: "...", text: "..." }
  */
 router.post('/ask-gpt', async (req, res) => {
@@ -232,33 +454,32 @@ router.post('/ask-gpt', async (req, res) => {
         ? [...new Set(allowed_subtypes)].map(s => `- ${s}`).join('\n')
         : '- N/A';
 
-      const systemPrompt = `You are an expert audit judge for a two-stage subtype classifier.
+      const systemPrompt = `You are an expert audit judge for a subtype classifier.
 
-You must classify each record into exactly one decision:
-1) truly_unknown
-   Use when the record has no actionable content signal. This includes:
-   - Attributes where name/description are null, empty, or contain only an identifier (UUID, GUID, barcode, numeric code, "ID-xxxxx").
-   - Records with all-null or all-empty fields beyond the SKU.
-   - Records where confidence is very low (<0.15) and no human-readable description exists.
-   When in doubt and signal is weak, choose truly_unknown over any other option.
-2) true_missing_subtype
-   Use ONLY when the record has strong, explicit content signal (a real name, description, or tags with meaningful words) AND the concept is clearly absent from the allowed list.
-   Do NOT use this for records whose only content is an identifier string — even if the identifier pattern suggests a category.
-3) missing_but_mappable
-   Use when the classifier flagged missing, but the meaning is semantically close enough to an existing allowed subtype.
-4) wrong_subtype
-   Use when the classifier result is simply wrong and a different allowed subtype should have been chosen.
+  You must classify each record into exactly one response_kind:
+  1) existing
+    Use when the record can be classified as one of the allowed subtypes.
+    The suggested_subtype must be copied verbatim from the allowed list.
+  2) missing
+    Use when the record has enough signal to classify, but the best subtype is not in the allowed list.
+    The suggested_subtype must be a short English label describing the concrete classification.
+  3) unknown
+    Use when the record does not contain enough actionable information to classify.
+    Even then, suggested_subtype must still be your best-effort concrete classification label.
 
 Output JSON only with this schema:
-{"decision":"truly_unknown|true_missing_subtype|missing_but_mappable|wrong_subtype","mapped_allowed_subtype":"<allowed subtype or empty>","suggested_missing_subtype":"<1-3 words title case or empty>","reasoning":"1-2 concise sentences"}
+{"suggested_subtype":"<concrete subtype label>","reasoning":"1-2 concise sentences","response_kind":"existing|missing|unknown"}
 
 Rules:
 - Never output markdown.
 - The attributes and metadata may be in any language — ignore their language and respond entirely in English.
-- mapped_allowed_subtype must be copied verbatim from the allowed subtypes list, or left empty. Do not invent or translate subtype names.
-- suggested_missing_subtype must be in English title case, non-empty only for true_missing_subtype.
-- If uncertain between missing_but_mappable and wrong_subtype, prefer wrong_subtype.
-- If uncertain between true_missing_subtype and truly_unknown, prefer truly_unknown.`;
+- suggested_subtype must ALWAYS be a concrete descriptive classification label (e.g. "handcrafted instrument", "electric guitar"). It must NEVER be the word "missing", "unknown", "none", or any enum/placeholder.
+- If response_kind is existing, suggested_subtype must be copied verbatim from the allowed subtype list.
+- If response_kind is missing, suggested_subtype must be the best classification label that is NOT in the allowed subtype list.
+- If response_kind is unknown, suggested_subtype must still be your best guess at a concrete classification label.
+- If the best natural subtype label is not literally present in the allowed subtype list, use response_kind=missing and return that natural subtype label.
+- Do not replace a missing subtype with the closest allowed subtype just because it is semantically similar.
+- If uncertain between missing and unknown, prefer unknown but still provide a concrete suggested_subtype.`;
 
       const userPrompt = `Allowed subtypes for this country:
 ${allowedList}
@@ -274,57 +495,27 @@ ${JSON.stringify(metadata, null, 2)}`;
       const { data, raw } = await callChat([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL, { traceId, mode: 'judge' });
+      ], OPENAI_JUDGE_MAX_TOKENS, OPENAI_JUDGE_MODEL, { traceId, mode: 'judge', preferJson: true });
 
       const parsedOrNull = parseJsonObject(raw);
-      if (!parsedOrNull) {
+      if (!parsedOrNull || typeof parsedOrNull !== 'object') {
         logMalformedJson('judge', raw, '', traceId);
-        LOG.warn(traceId, 'returning error response — malformed judge JSON');
-        return res.json({
-          error: 'Malformed JSON response from GPT judge',
-          raw_response: raw,
-        });
+        LOG.warn(traceId, 'judge JSON malformed — returning structured parse error');
+        return res.json(buildJudgeErrorResponse('PARSE', raw, 'Malformed JSON response from GPT judge'));
       }
-      const parsed = parsedOrNull;
-      const decision = normalizeJudgeDecision(parsed.decision || parsed.verdict || raw, predicted_status || stage2_subtype);
-      const mappedAllowedSubtypeRaw = pickFirstNonEmpty([
-        parsed.mapped_allowed_subtype,
-        parsed.corrected_subtype,
-      ]);
-      // Normalise to lowercase throughout so casing from GPT never causes a mismatch.
-      const allowedList_ = (Array.isArray(allowed_subtypes) ? allowed_subtypes : []).map(s => String(s).trim().toLowerCase());
-      const allowedSet_ = new Set(allowedList_);
-      const mappedAllowedSubtype = allowedSet_.has(mappedAllowedSubtypeRaw.toLowerCase()) ? mappedAllowedSubtypeRaw.toLowerCase() : '';
-      if (mappedAllowedSubtypeRaw && !mappedAllowedSubtype) {
-        LOG.warn(traceId, `── GPT SUBTYPE "${mappedAllowedSubtypeRaw}" not found in allowed list (${allowedList_.length} entries) — discarded`);
-      }
-      const suggestedMissingSubtype = pickFirstNonEmpty([
-        parsed.suggested_missing_subtype,
-        parsed.suggested_label,
-        parsed.suggested_subtype,
-        // Common typo variants observed in model output.
-        parsed.suggetsed_missing_subtype,
-        parsed.sugested_missing_subtype,
-      ]);
-      const reasoning = String(parsed.reasoning || parsed.reason || raw).trim();
+
+      const parsed = parsedOrNull || {};
+      const outcome = buildJudgeOutcome(parsed, raw, allowed_subtypes, predicted_status || stage2_subtype);
 
       LOG.info(traceId,
-        `── JUDGE RESULT decision_raw=${String(parsed.decision || parsed.verdict || '').trim()}` +
-        ` => decision_normalized=${decision}` +
-        ` | GPT SUBTYPE mapped_raw="${mappedAllowedSubtypeRaw || '(empty)'}" mapped_final="${mappedAllowedSubtype || '(empty)'}"` +
-        ` | GPT VERDICT suggested_missing="${suggestedMissingSubtype || '(empty)'}"` +
-        ` | GPT RAW RESPONSE chars=${raw.length} reasoning_chars=${reasoning.length}` +
+        `── JUDGE RESULT response_kind=${outcome.response_kind}` +
+        ` | suggested_subtype="${outcome.suggested_subtype || '(empty)'}"` +
+        ` | GPT RAW RESPONSE chars=${raw.length} reasoning_chars=${String(outcome.reasoning || '').length}` +
         ` | model=${data.model} tokens=${data.usage?.total_tokens}`
       );
       LOG.info(traceId, '── RESPONSE SENT');
 
-      return res.json({
-        decision,
-        mapped_allowed_subtype: mappedAllowedSubtype,
-        suggested_missing_subtype: suggestedMissingSubtype,
-        reasoning,
-        raw_response: raw,
-      });
+      return res.json(outcome);
     }
 
     // Existing Unknowns workflow: yes/no verdict for suggested subtype.
@@ -341,11 +532,12 @@ Respond with a JSON object only — no markdown, no extra text:
 {"verdict": "yes" or "no", "reasoning": "1-2 sentence explanation"}`;
 
       LOG.info(traceId, `── VERDICT PROMPT chars=${prompt.length}`);
-      const { data, raw } = await callChat([{ role: 'user', content: prompt }], OPENAI_MAX_TOKENS, OPENAI_MODEL, { traceId, mode: 'verdict' });
+      const { data, raw } = await callChat([{ role: 'user', content: prompt }], OPENAI_MAX_TOKENS, OPENAI_MODEL, { traceId, mode: 'verdict', preferJson: true });
       LOG.info(traceId, `── VERDICT model=${data.model} tokens=${data.usage?.total_tokens}`);
 
       try {
-        const parsed = JSON.parse(raw);
+        const parsed = parseJsonObject(raw);
+        if (!parsed) throw new Error('malformed verdict JSON');
         LOG.info(traceId, `── VERDICT PARSED verdict=${parsed.verdict || '(missing)'} reasoning_chars=${String(parsed.reasoning || '').length}`);
         return res.json({ verdict: parsed.verdict || 'no', reasoning: parsed.reasoning || raw, raw_response: raw });
       } catch (err) {
@@ -388,9 +580,10 @@ Respond with a JSON object only — no markdown, no extra text:
     LOG.info(traceId, `── STAGE1 RESULT model=${data.model} tokens=${data.usage?.total_tokens} subtype=${parsed.subtype || '(empty)'} reason_chars=${String(parsed.reason || '').length}`);
     return res.json({ subtype: parsed.subtype, reason: parsed.reason, text: raw, raw_response: raw });
   } catch (err) {
+    const httpStatus = parseHttpStatusCode(err.message) || '500';
     LOG.error(traceId, `── UNHANDLED ERROR message=${err.message}`);
     LOG.debug(traceId, `stack: ${clipText(err.stack || '', 2000)}`);
-    res.status(500).json({ error: err.message });
+    res.status(Number(httpStatus) || 500).json(buildJudgeErrorResponse(httpStatus, '', err.message));
   }
 });
 
