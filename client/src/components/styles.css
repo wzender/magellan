@@ -2537,13 +2537,14 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
+  text-decoration: none;
   border-radius: 4px;
   cursor: pointer;
   line-height: 1.6;
   white-space: nowrap;
 }
 
-.export-csv-btn:hover { background: var(--bg); color: var(--text); }
+.export-csv-btn:hover { background: var(--bg); color: var(--text); text-decoration: none; }
 
 .row-height-control {
   display: flex;
