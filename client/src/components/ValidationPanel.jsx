@@ -694,14 +694,20 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
   const [recentGptUpdate, setRecentGptUpdate] = useState(null);
+  const [recentTrueSubtypeUpdate, setRecentTrueSubtypeUpdate] = useState(null);
   const [gptGenieRowId, setGptGenieRowId] = useState(null);
+  const [trueSubtypeGenieRowId, setTrueSubtypeGenieRowId] = useState(null);
   const [gptSortHold, setGptSortHold] = useState(null);
+  const [trueSubtypeSortHold, setTrueSubtypeSortHold] = useState(null);
   const gptCancelledRef = useRef(false);
   const gptLoadSeqRef = useRef(0);
   const gptRowUpdateSeqRef = useRef({});
   const gptGenieTimerRef = useRef(null);
   const recentGptUpdateTimerRef = useRef(null);
   const gptSortHoldTimerRef = useRef(null);
+  const trueSubtypeGenieTimerRef = useRef(null);
+  const recentTrueSubtypeUpdateTimerRef = useRef(null);
+  const trueSubtypeSortHoldTimerRef = useRef(null);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -731,6 +737,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     if (gptGenieTimerRef.current) clearTimeout(gptGenieTimerRef.current);
     if (recentGptUpdateTimerRef.current) clearTimeout(recentGptUpdateTimerRef.current);
     if (gptSortHoldTimerRef.current) clearTimeout(gptSortHoldTimerRef.current);
+    if (trueSubtypeGenieTimerRef.current) clearTimeout(trueSubtypeGenieTimerRef.current);
+    if (recentTrueSubtypeUpdateTimerRef.current) clearTimeout(recentTrueSubtypeUpdateTimerRef.current);
+    if (trueSubtypeSortHoldTimerRef.current) clearTimeout(trueSubtypeSortHoldTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -741,8 +750,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptRunning(false);
     setAskGptLoading({});
     setRecentGptUpdate(null);
+    setRecentTrueSubtypeUpdate(null);
     setGptGenieRowId(null);
+    setTrueSubtypeGenieRowId(null);
     setGptSortHold(null);
+    setTrueSubtypeSortHold(null);
     setExpandedJsonCells({});
     setTranslateState({ running: false, field: null, done: 0, total: 0 });
     setTranslatedOverrides({});
@@ -1116,11 +1128,19 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         let aVal;
         let bVal;
         if (sortConfig.key === 'verdict') {
-          aVal = verdicts[a.request_id] || '';
-          bVal = verdicts[b.request_id] || '';
+          aVal = trueSubtypeSortHold && String(a.request_id) === String(trueSubtypeSortHold.requestId)
+            ? trueSubtypeSortHold.previousSubtype
+            : (verdicts[a.request_id] || '');
+          bVal = trueSubtypeSortHold && String(b.request_id) === String(trueSubtypeSortHold.requestId)
+            ? trueSubtypeSortHold.previousSubtype
+            : (verdicts[b.request_id] || '');
         } else if (sortConfig.key === 'true_type') {
-                getGptResponseKind(gptResults[r.request_id]) === 'unknown'
-          const bSub = verdicts[b.request_id] || '';
+          const aSub = trueSubtypeSortHold && String(a.request_id) === String(trueSubtypeSortHold.requestId)
+            ? trueSubtypeSortHold.previousSubtype
+            : (verdicts[a.request_id] || '');
+          const bSub = trueSubtypeSortHold && String(b.request_id) === String(trueSubtypeSortHold.requestId)
+            ? trueSubtypeSortHold.previousSubtype
+            : (verdicts[b.request_id] || '');
           aVal = aSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[aSub] || 'Unknown');
           bVal = bSub === '' ? NOT_RETAGGED_LABEL : (subtypeToType[bSub] || 'Unknown');
         } else if (sortConfig.key === 'missing_subtype') {
@@ -1171,6 +1191,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptResults,
     sortConfig,
     gptSortHold,
+    trueSubtypeSortHold,
   ]);
 
   const effectivePageSize = pageSize === 'All' ? filtered.length : pageSize;
@@ -1660,6 +1681,49 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptRunning(false);
   };
 
+  const handleSetTrueSubtype = (requestId, nextSubtype, { source = 'manual' } = {}) => {
+    const previousSubtype = verdicts[requestId] || '';
+    const resolvedNext = nextSubtype || '';
+    const isSortedByTrueSubtype = sortConfig.key === 'verdict' || sortConfig.key === 'true_type';
+
+    LOG.info(
+      `[true-subtype-ui] TRUE SUBTYPE CHANGE ATTEMPT` +
+      ` request_id=${requestId}` +
+      ` source=${source}` +
+      ` sorted_by_true_subtype=${isSortedByTrueSubtype}` +
+      ` previous="${previousSubtype || '(none)'}"` +
+      ` next="${resolvedNext || '(empty)'}"`
+    );
+
+    if (previousSubtype !== resolvedNext) {
+      if (isSortedByTrueSubtype) {
+        setTrueSubtypeSortHold({ requestId, previousSubtype });
+        if (trueSubtypeSortHoldTimerRef.current) clearTimeout(trueSubtypeSortHoldTimerRef.current);
+        trueSubtypeSortHoldTimerRef.current = setTimeout(() => {
+          setTrueSubtypeSortHold(current => String(current?.requestId) === String(requestId) ? null : current);
+        }, 900);
+      }
+
+      setRecentTrueSubtypeUpdate({
+        requestId,
+        previousSubtype,
+        nextSubtype: resolvedNext,
+        sortedByTrueSubtype: isSortedByTrueSubtype,
+      });
+      setTrueSubtypeGenieRowId(requestId);
+      if (trueSubtypeGenieTimerRef.current) clearTimeout(trueSubtypeGenieTimerRef.current);
+      if (recentTrueSubtypeUpdateTimerRef.current) clearTimeout(recentTrueSubtypeUpdateTimerRef.current);
+      trueSubtypeGenieTimerRef.current = setTimeout(() => {
+        setTrueSubtypeGenieRowId(current => String(current) === String(requestId) ? null : current);
+      }, 1200);
+      recentTrueSubtypeUpdateTimerRef.current = setTimeout(() => {
+        setRecentTrueSubtypeUpdate(current => String(current?.requestId) === String(requestId) ? null : current);
+      }, 8000);
+    }
+
+    return onSetVerdict(requestId, resolvedNext);
+  };
+
   const handleBulkAcceptGpt = (recordsToProcess) => {
     const bulkVerdicts = {};
     recordsToProcess.forEach(r => {
@@ -1962,6 +2026,18 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         </div>
       )}
 
+      {recentTrueSubtypeUpdate && (
+        <div className="gpt-recent-update true-subtype-recent-update" role="status">
+          <span className="gpt-recent-update-badge">Tagged</span>
+          <span className="gpt-recent-update-text">
+            Request {recentTrueSubtypeUpdate.requestId}: {recentTrueSubtypeUpdate.previousSubtype || '(none)'} -> {recentTrueSubtypeUpdate.nextSubtype || '(empty)'}
+          </span>
+          {recentTrueSubtypeUpdate.sortedByTrueSubtype && (
+            <span className="gpt-recent-update-note">row moved by True Subtype sort</span>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="validation-table-wrap">
         <table className="validation-table records-table">
@@ -2087,7 +2163,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
 
               return (
-                <tr key={r.request_id} className={String(gptGenieRowId) === String(r.request_id) ? 'gpt-row-genie' : ''}>
+                <tr
+                  key={r.request_id}
+                  className={[
+                    String(gptGenieRowId) === String(r.request_id) ? 'gpt-row-genie' : '',
+                    String(trueSubtypeGenieRowId) === String(r.request_id) ? 'true-subtype-row-genie' : '',
+                  ].filter(Boolean).join(' ')}
+                >
                   <td className="cell-request-id">{r.request_id}</td>
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
@@ -2109,13 +2191,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                         className={`gpt-subtype-pill is-${gptSubtypeLegendClass}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
                         disabled={!canAcceptGpt}
                         onClick={() => {
-                          if (!canAcceptGpt) return;
-                          if (gptSuggestedVerdict === 'Missing') {
-                            onSetVerdict(r.request_id, 'Missing');
-                            return;
-                          }
-                          onSetVerdict(r.request_id, isGptAccepted ? '' : gptSuggestedVerdict);
-                        }}
+	                          if (!canAcceptGpt) return;
+	                          if (gptSuggestedVerdict === 'Missing') {
+	                            handleSetTrueSubtype(r.request_id, 'Missing', { source: 'gpt-subtype-pill' });
+	                            return;
+	                          }
+	                          handleSetTrueSubtype(r.request_id, isGptAccepted ? '' : gptSuggestedVerdict, { source: 'gpt-subtype-pill' });
+	                        }}
                         title={canAcceptGpt
                           ? isGptAccepted
                             ? 'GPT subtype is applied. Click to clear it.'
@@ -2130,11 +2212,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   </td>
                   <td className="cell-verdict cell-retag">
                     <ValidationRecordDecisionControls
-                      requestId={r.request_id}
-                      verdict={verdict}
-                      countrySubtypes={countrySubtypes}
-                      onSetVerdict={onSetVerdict}
-                    />
+	                      requestId={r.request_id}
+	                      verdict={verdict}
+	                      countrySubtypes={countrySubtypes}
+	                      onSetVerdict={(requestId, value) => handleSetTrueSubtype(requestId, value, { source: 'manual-tag-control' })}
+	                    />
                   </td>
                 </tr>
               );
