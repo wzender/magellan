@@ -50,60 +50,56 @@ function ValidationRecordDecisionControls({ requestId, verdict, countrySubtypes,
         : 'is-mapped';
 
   return (
-    <div className="validation-record-actions">
-      <div className="validation-action-primary">
-        <div className="validation-tag-subtype-wrap" ref={dropdownRef}>
-          <button
-            type="button"
-            className={`validation-tag-trigger${menuOpen ? ' open' : ''}${selectedLegendClass ? ` ${selectedLegendClass}` : ''}`}
-            onClick={() => setMenuOpen(v => !v)}
-            title="Tag correct subtype"
+    <div className="validation-tag-subtype-wrap" ref={dropdownRef}>
+      <button
+        type="button"
+        className={`validation-tag-trigger${menuOpen ? ' open' : ''}${selectedLegendClass ? ` ${selectedLegendClass}` : ''}`}
+        onClick={() => setMenuOpen(v => !v)}
+        title="Tag correct subtype"
+      >
+        <span className="validation-tag-trigger-text">
+          {verdict ? (verdict === 'unknown' ? 'Unknown' : verdict) : 'Select subtype'}
+        </span>
+        <span className="validation-tag-trigger-caret">{menuOpen ? '▲' : '▼'}</span>
+      </button>
+      <div className={`validation-tag-dropdown${menuOpen ? ' open' : ''}`}>
+        <input
+          ref={searchInputRef}
+          className="validation-tag-search"
+          placeholder="Search or select..."
+          value={mapQuery}
+          onChange={e => setMapQuery(e.target.value)}
+          autoComplete="off"
+        />
+        <ul className="validation-tag-list">
+          <li
+            className={`validation-tag-option validation-tag-clear-option${!verdict ? ' disabled' : ''}`}
+            onMouseDown={e => {
+              e.preventDefault();
+              if (!verdict) return;
+              commit('');
+              setMenuOpen(false);
+              setMapQuery('');
+            }}
+            title={!verdict ? 'Already untagged' : 'Clear selection and return to untagged'}
           >
-            <span className="validation-tag-trigger-text">
-              {verdict ? (verdict === 'unknown' ? 'Unknown' : verdict) : 'Select subtype'}
-            </span>
-            <span className="validation-tag-trigger-caret">{menuOpen ? '▲' : '▼'}</span>
-          </button>
-          <div className={`validation-tag-dropdown${menuOpen ? ' open' : ''}`}>
-            <input
-              ref={searchInputRef}
-              className="validation-tag-search"
-              placeholder="Search or select..."
-              value={mapQuery}
-              onChange={e => setMapQuery(e.target.value)}
-              autoComplete="off"
-            />
-            <ul className="validation-tag-list">
+            Clear selection (Untagged)
+          </li>
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map(s => (
               <li
-                className={`validation-tag-option validation-tag-clear-option${!verdict ? ' disabled' : ''}`}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  if (!verdict) return;
-                  commit('');
-                  setMenuOpen(false);
-                  setMapQuery('');
-                }}
-                title={!verdict ? 'Already untagged' : 'Clear selection and return to untagged'}
+                key={s}
+                className={`validation-tag-option${verdict === s ? ' selected' : ''}`}
+                onMouseDown={e => { e.preventDefault(); handleOptionPick(s); }}
               >
-                Clear selection (Untagged)
+                <span className="validation-tag-option-text">{s === 'unknown' ? 'Unknown' : s}</span>
+                {verdict === s && <span className="validation-tag-checkmark">✓</span>}
               </li>
-              {filteredOptions.length > 0 ? (
-                filteredOptions.map(s => (
-                  <li
-                    key={s}
-                    className={`validation-tag-option${verdict === s ? ' selected' : ''}`}
-                    onMouseDown={e => { e.preventDefault(); handleOptionPick(s); }}
-                  >
-                    <span className="validation-tag-option-text">{s === 'unknown' ? 'Unknown' : s}</span>
-                    {verdict === s && <span className="validation-tag-checkmark">✓</span>}
-                  </li>
-                ))
-              ) : (
-                <li className="validation-tag-option validation-tag-empty">No matches</li>
-              )}
-            </ul>
-          </div>
-        </div>
+            ))
+          ) : (
+            <li className="validation-tag-option validation-tag-empty">No matches</li>
+          )}
+        </ul>
       </div>
     </div>
   );
