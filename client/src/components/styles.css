@@ -2833,11 +2833,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* Second header row: 1st th = Total (Unknown Validation), 5th th = Total (Missing Subtypes) */
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(1) { border-left: 1px solid #cbd5e1; }
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(1) { border-left: 1px solid #cbd5e1; }
-.unknowns-leaderboard-table thead tr:last-child th:nth-child(4) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table thead tr:last-child th:nth-child(3) { border-left: 1px solid #cbd5e1; }
 
 .unknowns-leaderboard-table tbody td:nth-child(2) { border-left: 1px solid #cbd5e1; }
-.unknowns-leaderboard-table tbody td:nth-child(4) { border-left: 1px solid #ddd6fe; }
-.unknowns-leaderboard-table tbody td:nth-child(7) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table tbody td:nth-child(5) { border-left: 1px solid #cbd5e1; }
 .unknowns-retagged-subheader {
   font-size: 10px;
   font-weight: 600;

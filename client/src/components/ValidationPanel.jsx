@@ -1181,13 +1181,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptReviewedCount,
     retaggedCount,
     anyReviewedCount,
-    noGptAskedCount,
     onlyMissingCount,
     onlyUnknownCount,
     untaggedCount,
     falseUnknownCount,
+    falseMissingCount,
     gptErrorCount,
-    weakSignalCount,
   } = useMemo(() => {
     const acc = {
       total: preparedRecords.length,
@@ -1203,6 +1202,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       onlyUnknownCount: 0,
       untaggedCount: 0,
       falseUnknownCount: 0,
+      falseMissingCount: 0,
       gptErrorCount: 0,
       weakSignalCount: 0,
     };
@@ -1234,6 +1234,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       else acc.onlyMissingCount++;
 
       if (gptDecision === 'existing') acc.falseUnknownCount++;
+      if ((r.pred_subtype_2 || '') === PS2_MISSING && gptDecision === 'existing') acc.falseMissingCount++;
       if (gptResults[r.request_id]?.error) acc.gptErrorCount++;
       if ((r.pred_subtype_2 || '') === PS2_MISSING && gptDecision === 'unknown') acc.weakSignalCount++;
     });
@@ -1776,14 +1777,13 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           <>
             <div className="validation-verdict-tabs">
               {[
-                { key: 'all',           label: 'All',           count: total,              title: 'All records in this run' },
-                { key: 'no_gpt_asked',  label: 'No GPT Asked',  count: noGptAskedCount,    title: 'Records for which Ask GPT has not been run yet' },
+                { key: 'all',           label: 'all',           count: total,              title: 'All records in this run' },
                 { key: 'untagged',      label: 'Untagged',      count: untaggedCount,      title: 'Records that have not yet been assigned a true subtype by a human reviewer' },
-                { key: 'only_missing',  label: 'Missing',       count: onlyMissingCount,   title: 'Records with a concrete missing subtype value (excluding empty/None/unknown)' },
-                { key: 'only_unknown',  label: 'Unknown',       count: onlyUnknownCount,   title: 'Records with missing subtype empty, None, or unknown' },
+                { key: 'only_missing',  label: 'missing',       count: onlyMissingCount,   title: 'Records with a concrete missing subtype value (excluding empty/None/unknown)' },
+                { key: 'only_unknown',  label: 'unknowns',      count: onlyUnknownCount,   title: 'Records with missing subtype empty, None, or unknown' },
                 { key: 'false_unknown', label: 'False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
-                { key: 'gpt_error',       label: 'GPT Errors',   count: gptErrorCount,      title: 'Records where GPT returned malformed or failed output and the review could not be parsed' },
-                { key: 'weak_signal',     label: 'Weak Signal',  count: weakSignalCount,    title: 'Model proposed a specific missing subtype (suggesting a content signal), but GPT found no reliable signal and judged the record as truly unknown' },
+                { key: 'false_missing', label: 'False Knowns',  count: falseMissingCount,  title: 'Records predicted as missing, but GPT judged them as belonging to an existing subtype' },
+                { key: 'gpt_error',     label: 'GPT errors',    count: gptErrorCount,      title: 'Records where GPT returned malformed or failed output and the review could not be parsed' },
               ].map(t => (
                 <button
                   key={t.key}
