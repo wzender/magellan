@@ -3871,6 +3871,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   text-transform: uppercase;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  overflow: visible;
+  position: relative;
 }
 
 .validation-table tbody td {
@@ -4382,30 +4384,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* ─ Validation Record Actions (Unknowns retag mode) ────────────────────── */
 
-/* Per-record decision controls in the table row */
-.validation-record-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  padding: 4px 0;
-}
-
-/* Primary action: Tag subtype */
-.validation-action-primary {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 0;
-  border: 2px solid #dbeafe;
-  border-radius: 8px;
-  background: #f0f9ff;
-  padding: 10px;
-}
-
 .validation-tag-subtype-wrap {
   position: relative;
   display: block;
+  z-index: 10;
 }
 
 .validation-tag-trigger {

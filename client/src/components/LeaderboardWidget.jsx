@@ -243,14 +243,12 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             <tr className="unknowns-leaderboard-group-row">
               <th rowSpan={2} style={{ width: 180 }} title="Run country">Country</th>
               <th rowSpan={2} style={{ width: 250 }} title="Blue = GPT reviewed, green = human retagged">Progress</th>
-              <th rowSpan={2} style={{ width: 130 }} title="Unknown-model records GPT also marked truly_unknown">GPT Unknown Agree</th>
-              <th colSpan={3} className="unknowns-conflict-subheader" title="Records where model and GPT disagree on signal strength or subtype existence">Model vs GPT</th>
+              <th colSpan={2} className="unknowns-conflict-subheader" title="Records where model and GPT disagree on signal strength or subtype existence">Model vs GPT</th>
               <th colSpan={3} className="unknowns-retagged-subheader" title="Reviewer-applied tags">Retagged</th>
             </tr>
             <tr>
-              <th style={{ width: 90 }} title="Model abstained (unknown), but GPT found a classifiable signal — out of all unknown records" className="th-conflict">False Unknown</th>
-              <th style={{ width: 90 }} title="Model flagged a new missing subtype, but GPT found no signal — out of all missing records" className="th-conflict">False Missing</th>
-              <th style={{ width: 90 }} title="Model flagged a new missing subtype, but GPT found an existing label that fits — out of all missing records" className="th-conflict">Mappable</th>
+              <th style={{ width: 90 }} title="Model said unknown but GPT said known (missing or existing)" className="th-conflict">False Unknowns</th>
+              <th style={{ width: 90 }} title="Model said missing/existing but GPT said unknown" className="th-conflict">False Knowns</th>
               <th style={{ width: 70 }} title="Retagged to an existing subtype" className="th-existing">Existing</th>
               <th style={{ width: 70 }} title="Retagged as Missing" className="th-missing">Missing</th>
               <th style={{ width: 70 }} title="Retagged as unknown" className="th-unknown">Unknown</th>
@@ -272,15 +270,9 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
               const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
               const humanTagged      = existing + missingTag + unknownTag;
-              const untagged         = total - existing - missingTag - unknownTag;
-              const gptUnknownAgreeCount = row.gpt_unknown_agree_count ?? row.truly_unknown_count ?? 0;
               const gptUnknownAgreeBase = row.unknowns_count ?? unknownsTotal;
-              const gptUnknownAgreePct = gptUnknownAgreeBase > 0
-                ? ((gptUnknownAgreeCount / gptUnknownAgreeBase) * 100).toFixed(1)
-                : '0.0';
               const hastyUnknown     = row.hasty_unknown_count ?? 0;
               const falseMissingGpt  = row.false_missing_gpt_count ?? 0;
-              const mappableMissing  = row.mappable_missing_count ?? 0;
               const missingBase      = row.missing_count ?? missingTotal;
               const isSelected       = selectedRuns[0] === row.run_id;
               return (
@@ -307,10 +299,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                       total={total}
                     />
                   </td>
-                  <td className="metric" title={`${gptUnknownAgreeCount}/${gptUnknownAgreeBase} unknowns`}>{gptUnknownAgreeCount}/{gptUnknownAgreeBase} ({gptUnknownAgreePct}%)</td>
                   <td className="metric metric-conflict" title={`${hastyUnknown} of ${gptUnknownAgreeBase} unknown records where GPT found a signal`}>{hastyUnknown}/{gptUnknownAgreeBase}</td>
                   <td className="metric metric-conflict" title={`${falseMissingGpt} of ${missingBase} missing-subtype records where GPT found no signal`}>{falseMissingGpt}/{missingBase}</td>
-                  <td className="metric metric-conflict" title={`${mappableMissing} of ${missingBase} missing-subtype records where GPT found an existing label`}>{mappableMissing}/{missingBase}</td>
                   <td className="metric metric-existing">{existing}</td>
                   <td className="metric metric-missing">{missingTag}</td>
                   <td className="metric metric-unknown">{unknownTag}</td>

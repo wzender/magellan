@@ -535,6 +535,19 @@ function getGptSubtypeSource(result) {
   return getGptSubtypeState(result).source;
 }
 
+function getGptSubtypeLegendClass(result) {
+  const responseKind = getGptResponseKind(result);
+  if (responseKind === 'unknown') return 'truly-unknown';
+  if (responseKind === 'missing') return 'suggested';
+  if (responseKind === 'existing') return 'mapped';
+
+  const fallbackSource = getGptSubtypeSource(result);
+  if (fallbackSource === 'truly-unknown') return 'truly-unknown';
+  if (fallbackSource === 'suggested') return 'suggested';
+  if (fallbackSource === 'mapped') return 'mapped';
+  return 'empty';
+}
+
 function getGptSuggestedVerdict(result, countrySubtypes) {
   if (!result) return '';
   if (getGptResponseKind(result) === 'error') return '';
@@ -817,6 +830,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
     if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
     if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (trueSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(verdicts[r.request_id] || '').trim();
+        return trueSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
 
     if (verdictFilter !== 'all') {
       if (verdictFilter === 'no_gpt_asked') {
@@ -889,6 +908,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     predSubtypeFilter,
     attributesFilter,
     metadataFilter,
+    gptSubtypeFilter,
+    trueSubtypeFilter,
     verdictFilter,
     isRetag,
     gptResults,
@@ -993,6 +1014,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     attributesFilter,
     metadataFilter,
     gptSubtypeFilter,
+    trueSubtypeFilter,
     verdictFilter,
     isRetag,
     gptResults,
@@ -2075,7 +2097,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const canAcceptGpt = Boolean(gptSuggestedVerdict);
               const isGptAccepted = canAcceptGpt && verdict === gptSuggestedVerdict;
               const gptSubtypeText = getGptSubtype(gpt);
-              const gptSubtypeSource = getGptSubtypeSource(gpt);
+              const gptSubtypeLegendClass = getGptSubtypeLegendClass(gpt);
               const gptDisplayObject = gpt
                 ? {
                     response_kind: getGptResponseKind(gpt) || null,
@@ -2120,7 +2142,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                       {gptSubtypeText ? (
                         <button
                           type="button"
-                          className={`gpt-subtype-pill is-${gptSubtypeSource}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
+                          className={`gpt-subtype-pill is-${gptSubtypeLegendClass}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
                           disabled={!canAcceptGpt}
                           onClick={() => {
                             if (!canAcceptGpt) return;
