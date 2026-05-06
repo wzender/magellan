@@ -2836,6 +2836,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .unknowns-leaderboard-table thead tr:last-child th:nth-child(4) { border-left: 1px solid #cbd5e1; }
 
 .unknowns-leaderboard-table tbody td:nth-child(2) { border-left: 1px solid #cbd5e1; }
+.unknowns-leaderboard-table tbody td:nth-child(4) { border-left: 1px solid #ddd6fe; }
 .unknowns-leaderboard-table tbody td:nth-child(7) { border-left: 1px solid #cbd5e1; }
 .unknowns-retagged-subheader {
   font-size: 10px;
@@ -2846,11 +2847,22 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   padding: 2px 4px;
   border-bottom: 1px solid #e2e8f0;
 }
+.unknowns-conflict-subheader {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #7c3aed;
+  padding: 2px 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
 
 /* Colored breakdown columns */
+.th-conflict  { color: #7c3aed; }
 .th-existing  { color: #15803d; }
 .th-missing   { color: #a16207; }
 .th-unknown   { color: #b91c1c; }
+.metric-conflict  { color: #7c3aed; font-weight: 600; }
 .metric-existing  { color: #15803d; font-weight: 600; }
 .metric-missing   { color: #a16207; font-weight: 600; }
 .metric-unknown   { color: #b91c1c; font-weight: 600; }

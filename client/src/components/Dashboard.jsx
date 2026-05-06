@@ -72,10 +72,14 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
   let trulyUnknownCount = 0;
   let wrongSubtypeCount = 0;
   let mappableCount = 0;
+  // Model vs GPT disagreement categories
+  let hastyUnknownCount = 0;    // model=unknown, GPT found a signal
+  let falseMissingGptCount = 0; // model=missing, GPT says no signal
+  let mappableMissingCount = 0; // model=missing, GPT says existing label works
 
   rows.forEach(r => {
     const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
-    if (status !== PS2_UNKNOWN) return;
+    if (status !== PS2_UNKNOWN && status !== PS2_MISSING) return;
 
     const saved = gpt[r.request_id];
     if (!saved) return;
@@ -92,11 +96,17 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     if (status === PS2_UNKNOWN) {
       if (hasGptSubtype) falseUnknownCount++;
       else if (saved.verdict) realUnknownCount++;
+      // Model abstained but GPT found a classifiable signal
+      if (decision && decision !== 'truly_unknown') hastyUnknownCount++;
     }
 
     if (status === PS2_MISSING) {
       if (suggestedSubtype) realMissingCount++;
       else if (mappedSubtype || saved.verdict) falseMissingCount++;
+      // Model invented a new subtype but GPT says there is no signal
+      if (decision === 'truly_unknown') falseMissingGptCount++;
+      // Model said new subtype needed but GPT says an existing label works
+      if (decision === 'wrong_subtype' || decision === 'missing_but_mappable') mappableMissingCount++;
     }
 
     if (decision === 'truly_unknown') trulyUnknownCount++;
@@ -118,6 +128,9 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     gpt_unknown_agree_rate: unknownsCount > 0 ? (trulyUnknownCount / unknownsCount) : 0,
     wrong_subtype_count: wrongSubtypeCount,
     mappable_count: mappableCount,
+    hasty_unknown_count: hastyUnknownCount,
+    false_missing_gpt_count: falseMissingGptCount,
+    mappable_missing_count: mappableMissingCount,
   };
 }
 
