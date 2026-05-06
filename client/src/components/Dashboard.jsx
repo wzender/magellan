@@ -336,11 +336,24 @@ function Dashboard() {
   const [validationLoading, setValidationLoading] = useState(false);
   const [countrySubtypes, setCountrySubtypes] = useState([]);
   const [unknownsCountry, setUnknownsCountry] = useState(null);
-  const [subtypesWarning, setSubtypesWarning] = useState(null);
+  const [subtypesWarnings, setSubtypesWarnings] = useState([]);
   const [publishState, setPublishState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
+  const [unknownsWarningsExpanded, setUnknownsWarningsExpanded] = useState(false);
 
   const isUnknownsBenchmark = selectedBenchmark?.name === UNKNOWNS_BENCHMARK_NAME;
+  const handleUnknownsWarning = useCallback((message) => {
+    if (!message) {
+      setSubtypesWarnings([]);
+      return;
+    }
+    console.warn('[unknowns-warning]', message);
+    setSubtypesWarnings(prev => {
+      const next = [message, ...prev.filter(item => item !== message)];
+      return next.slice(0, 5);
+    });
+    setUnknownsWarningsExpanded(false);
+  }, []);
 
   /* derive country name candidates from run metadata */
   const _unknownsRun = leaderboard.find(r => sameRunId(r.run_id, selectedRunIds[0]));
@@ -509,7 +522,7 @@ function Dashboard() {
     if (!isUnknownsBenchmark || unknownsCountryCandidates.length === 0) {
       setCountrySubtypes([]);
       setUnknownsCountry(null);
-      setSubtypesWarning(null);
+      setSubtypesWarnings([]);
       return;
     }
 
@@ -531,9 +544,9 @@ function Dashboard() {
             setCountrySubtypes(data);
             setUnknownsCountry(candidate);
             if (triedAndFailed.length > 0) {
-              setSubtypesWarning(`Country subtypes resolved to "${candidate}" after failing: ${triedAndFailed.join(', ')}`);
+              handleUnknownsWarning(`Country subtypes resolved to "${candidate}" after failing: ${triedAndFailed.join(', ')}`);
             } else {
-              setSubtypesWarning(null);
+              setSubtypesWarnings([]);
             }
             return;
           }
@@ -549,7 +562,7 @@ function Dashboard() {
       if (!cancelled) {
         setCountrySubtypes([]);
         setUnknownsCountry(unknownsCountryCandidates[0] || null);
-        setSubtypesWarning(`Could not load subtypes for any candidate: ${triedAndFailed.join(', ')}. No subtype filtering applied.`);
+        handleUnknownsWarning(`Could not load subtypes for any candidate: ${triedAndFailed.join(', ')}. No subtype filtering applied.`);
       }
     };
 
@@ -1002,10 +1015,29 @@ function Dashboard() {
 
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (
             <div className="unknowns-view">
-              {subtypesWarning && (
-                <div className="subtypes-warning" style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffc107', borderRadius: 4, padding: '8px 12px', margin: '8px 0', fontSize: 13 }}>
-                  ⚠ {subtypesWarning}
-                </div>
+              {subtypesWarnings.length > 0 && (
+                <button
+                  type="button"
+                  className={`subtypes-warning${unknownsWarningsExpanded ? ' expanded' : ''}`}
+                  onClick={() => setUnknownsWarningsExpanded(prev => !prev)}
+                  title={unknownsWarningsExpanded ? 'Hide warning history' : 'Show all warning messages'}
+                >
+                  <span className="subtypes-warning-main">
+                    <strong>Warning:</strong> {subtypesWarnings[0]}
+                  </span>
+                  {subtypesWarnings.length > 1 && (
+                    <span className="subtypes-warning-count">
+                      {unknownsWarningsExpanded ? 'Hide' : `+${subtypesWarnings.length - 1} more`}
+                    </span>
+                  )}
+                  {unknownsWarningsExpanded && subtypesWarnings.length > 1 && (
+                    <ul className="subtypes-warning-list">
+                      {subtypesWarnings.slice(1).map((warning, index) => (
+                        <li key={`${index}-${warning}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                </button>
               )}
               {validationLoading && <div className="viewer-loading">Loading records…</div>}
               {!validationLoading && (
@@ -1021,6 +1053,7 @@ function Dashboard() {
                   onSetVerdict={handleSetVerdict}
                   onBulkVerdict={handleBulkVerdict}
                   onGptResultsUpdated={() => refreshUnknownsRunStats(selectedRunIds[0])}
+                  onWarning={handleUnknownsWarning}
                   publishState={publishState}
                   onPublishRetagged={async () => {
                     setPublishState('loading');

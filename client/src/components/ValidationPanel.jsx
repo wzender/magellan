@@ -672,7 +672,7 @@ function getJsonCellState(raw) {
   };
 }
 
-function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated, publishState = 'idle', onPublishRetagged }) {
+function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated, onWarning, publishState = 'idle', onPublishRetagged }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -694,6 +694,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
   const gptCancelledRef = useRef(false);
+  const gptLoadSeqRef = useRef(0);
+  const gptRowUpdateSeqRef = useRef({});
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -720,6 +722,8 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   }, []);
 
   useEffect(() => {
+    const loadSeq = ++gptLoadSeqRef.current;
+    gptRowUpdateSeqRef.current = {};
     setCurrentPage(0);
     setGptResults({});
     setGptRunning(false);
@@ -729,19 +733,30 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setTranslatedOverrides({});
     setColFilters(EMPTY_COL_FILTERS);
     if (runId) {
+      LOG.info(`[gpt-results-load][${loadSeq}] START run_id=${runId}`);
       fetch(`/api/gpt-results?run_id=${runId}`)
         .then(r => r.json())
         .then(data => {
           if (!data || typeof data !== 'object') return;
           const mapped = {};
           Object.entries(data).forEach(([requestId, value]) => {
+            const rowSeq = gptRowUpdateSeqRef.current[String(requestId)] || 0;
+            if (rowSeq > loadSeq) {
+              LOG.warn(`[gpt-results-load][${loadSeq}] stale load skipped for request_id=${requestId}; row_update_seq=${rowSeq}`);
+              return;
+            }
             mapped[requestId] = normalizeGptResult(value);
           });
+          LOG.info(`[gpt-results-load][${loadSeq}] DONE run_id=${runId} loaded=${Object.keys(mapped).length}`);
           setGptResults(prev => ({ ...prev, ...mapped }));
         })
-        .catch(() => {});
+        .catch(err => {
+          const msg = `[gpt-results-load][${loadSeq}] failed run_id=${runId}: ${err?.message || 'unknown error'}`;
+          LOG.error(msg);
+          if (onWarning) onWarning(msg);
+        });
     }
-  }, [runId]);
+  }, [runId, onWarning]);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -1339,12 +1354,21 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const askGptForRecord = async (record, { quick = false } = {}) => {
     const requestId = record.request_id;
     const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const updateSeq = ++gptLoadSeqRef.current;
+    gptRowUpdateSeqRef.current[String(requestId)] = updateSeq;
     setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
     const predictedStatus = String(record.pred_subtype_2 || '').trim().toLowerCase();
     const previousResult = gptResults[requestId] || null;
     const previousSubtypeState = getGptSubtypeState(previousResult);
+    const showAskWarning = (message) => {
+      const fullMessage = `[${traceId}] ${message}`;
+      LOG.warn(fullMessage);
+      if (onWarning) onWarning(message);
+    };
 
     LOG.info(`[${traceId}] ── START request_id=${requestId} run_id=${runId} quick=${quick} predicted_status=${predictedStatus}`,
+      `| update_seq=${updateSeq}`,
+      `| previous_gpt_subtype="${previousSubtypeState.text || '(none)'}" previous_condition=${previousSubtypeState.condition}`,
       `| attributes=${JSON.stringify(summarizePayloadShape(record.attributes))} metadata=${JSON.stringify(summarizePayloadShape(record.metadata))}`);
 
     let result;
@@ -1391,6 +1415,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           reason: data.reasoning || '',
           error: data.error || data.suggested_subtype || `ERROR_${res.status || 'UNKNOWN'}`,
         };
+        showAskWarning(`Ask GPT returned an error for request ${requestId}: ${result.error}. The GPT subtype will be saved as an error marker.`);
       } else {
         result = {
           text: data.text || '',
@@ -1422,6 +1447,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         reason: '',
         error: err.message || '(error)',
       };
+      showAskWarning(`Ask GPT fetch failed for request ${requestId}: ${result.error}. The GPT subtype will be saved as ERROR_FETCH.`);
     }
 
     if (result.error) {
@@ -1443,6 +1469,20 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     const gptSuggested = getGptSuggestedVerdict(result, countrySubtypes);
     const gptSource = subtypeState.source;
     result = { ...result, gptSubtype };
+    if (onWarning) {
+      onWarning(
+        `GPT subtype UI update attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}" ` +
+        `(source=${gptSource}, condition=${subtypeState.condition}).`
+      );
+    }
+    LOG.info(
+      `[${traceId}] ── GPT SUBTYPE CHANGE ATTEMPT UI_STATE` +
+      ` request_id=${requestId} run_id=${runId}` +
+      ` previous="${previousSubtypeState.text || '(none)'}"` +
+      ` next="${gptSubtype || '(empty)'}"` +
+      ` source=${gptSource}` +
+      ` condition=${subtypeState.condition}`
+    );
     setGptResults(prev => ({ ...prev, [requestId]: { ...result } }));
     LOG.debug(`[${traceId}] setGptResults done request_id=${requestId} gpt_subtype="${gptSubtype}"`);
     LOG.info(
@@ -1450,13 +1490,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       ` suggested_verdict="${gptSuggested || '(none)'}" can_accept=${Boolean(gptSuggested)}`
     );
     if (!gptSubtype) {
-      LOG.error(`[${traceId}] subtype unexpectedly empty after Ask GPT — this should never happen`);
+      showAskWarning(`GPT subtype was empty after Ask GPT for request ${requestId}; this should never happen.`);
+    } else if (result.error) {
+      showAskWarning(`Ask GPT produced warning/error for request ${requestId}; displaying and saving GPT subtype "${gptSubtype}".`);
     }
 
     if (previousSubtypeState.text === gptSubtype) {
-      LOG.warn(
-        `[${traceId}] GPT SUBTYPE unchanged text="${gptSubtype || '(empty)'}"` +
-        ` prev_condition=${previousSubtypeState.condition} new_condition=${subtypeState.condition}`
+      showAskWarning(
+        `GPT subtype is unchanged for request ${requestId}: "${gptSubtype || '(empty)'}"` +
+        ` (previous=${previousSubtypeState.condition}, new=${subtypeState.condition}).`
       );
     } else {
       LOG.info(
@@ -1477,31 +1519,66 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       raw_response: result.rawResponse || '',
       error: result.error || null,
     });
-    LOG.info(`[${traceId}] ── PERSIST /api/gpt-results legacy_verdict="${legacyVerdict || '(empty)'}" reasoning_chars=${structuredReasoning.length}`);
-    fetch('/api/gpt-results', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        run_id: runId,
-        results: {
-          [requestId]: {
-            verdict: legacyVerdict,
-            reasoning: structuredReasoning,
-            gpt_subtype: gptSubtype,
-          },
+    const persistPayload = {
+      run_id: runId,
+      results: {
+        [requestId]: {
+          verdict: legacyVerdict,
+          reasoning: structuredReasoning,
+          gpt_subtype: gptSubtype,
         },
-      }),
-    })
-      .then(() => {
-        LOG.info(`[${traceId}] ── PERSIST success request_id=${requestId}`);
-        if (onGptResultsUpdated) onGptResultsUpdated();
-      })
-      .catch((persistErr) => {
-        LOG.error(`[${traceId}] PERSIST failed request_id=${requestId} message=${persistErr?.message || '(unknown)'}`);
-      });
+      },
+    };
 
-    setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
-    LOG.info(`[${traceId}] ── DONE request_id=${requestId}`);
+    LOG.info(
+      `[${traceId}] ── PERSIST START /api/gpt-results` +
+      ` request_id=${requestId} run_id=${runId}` +
+      ` legacy_verdict="${legacyVerdict || '(empty)'}"` +
+      ` gpt_subtype="${gptSubtype || '(empty)'}"` +
+      ` reasoning_chars=${structuredReasoning.length}`
+    );
+    LOG.info(
+      `[${traceId}] ── GPT SUBTYPE CHANGE ATTEMPT PERSIST` +
+      ` request_id=${requestId} run_id=${runId}` +
+      ` previous="${previousSubtypeState.text || '(none)'}"` +
+      ` next="${gptSubtype || '(empty)'}"`
+    );
+    if (onWarning) {
+      onWarning(
+        `GPT subtype save attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}".`
+      );
+    }
+    LOG.debug(`[${traceId}] persist payload=${clipLogText(JSON.stringify(persistPayload), 2000)}`);
+
+    try {
+      const persistRes = await fetch('/api/gpt-results', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(persistPayload),
+      });
+      const persistData = await persistRes.json().catch(() => ({}));
+      LOG.info(
+        `[${traceId}] ── PERSIST RESPONSE status=${persistRes.status} ok=${persistRes.ok}` +
+        ` body=${clipLogText(JSON.stringify(persistData), 1200)}`
+      );
+      if (!persistRes.ok || persistData.error) {
+        throw new Error(persistData.error || `Persist failed (${persistRes.status})`);
+      }
+      if (Array.isArray(persistData.missing_request_ids) && persistData.missing_request_ids.length > 0) {
+        showAskWarning(`GPT subtype save for request ${requestId} reported missing row(s): ${persistData.missing_request_ids.join(', ')}`);
+      }
+      LOG.info(
+        `[${traceId}] ── GPT SUBTYPE SUCCESSFULLY UPDATED` +
+        ` request_id=${requestId} run_id=${runId} gpt_subtype="${gptSubtype}"`
+      );
+      if (onGptResultsUpdated) onGptResultsUpdated();
+    } catch (persistErr) {
+      showAskWarning(`GPT subtype was generated for request ${requestId}, but saving it failed: ${persistErr?.message || 'unknown error'}`);
+      LOG.error(`[${traceId}] PERSIST failed request_id=${requestId} message=${persistErr?.message || '(unknown)'}`);
+    } finally {
+      setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
+      LOG.info(`[${traceId}] ── DONE request_id=${requestId}`);
+    }
   };
 
   const askGptAll = async (recordsToProcess) => {

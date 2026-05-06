@@ -4109,6 +4109,44 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   min-height: 0;
 }
 
+.subtypes-warning {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subtypes-warning:hover {
+  filter: brightness(0.98);
+}
+
+.subtypes-warning-main {
+  display: inline;
+}
+
+.subtypes-warning-count {
+  margin-left: 8px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.subtypes-warning-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.subtypes-warning-list li + li {
+  margin-top: 2px;
+}
+
 .unknowns-view-header {
   display: flex;
   align-items: center;

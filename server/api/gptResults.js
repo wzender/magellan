@@ -63,6 +63,8 @@ router.put('/gpt-results', async (req, res) => {
   if (!results || typeof results !== 'object') return res.status(400).json({ error: 'results object is required' });
 
   try {
+    let updated = 0;
+    const missingRequestIds = [];
     if (usePostgres) {
       const run = await getRun(run_id);
       if (!run) return res.status(404).json({ error: 'Run not found' });
@@ -73,15 +75,42 @@ router.put('/gpt-results', async (req, res) => {
         const verdict = payload?.verdict || '';
         const reasoning = payload?.reasoning || '';
         const gptSubtype = payload?.gpt_subtype || null;
-        await query(
+        console.info(
+          '[gpt-results PUT] GPT subtype change attempt',
+          `run_id=${run_id}`,
+          `table=${tbl}`,
+          `request_id=${request_id}`,
+          `gpt_subtype=${JSON.stringify(gptSubtype)}`
+        );
+        const result = await query(
           `UPDATE "${tbl}" SET gpt_verdict = $1, gpt_reasoning = $2, gpt_subtype = $3 WHERE ${idCol} = $4`,
           [verdict, reasoning, gptSubtype, request_id]
         );
+        console.info(
+          '[gpt-results PUT] GPT subtype change result',
+          `run_id=${run_id}`,
+          `table=${tbl}`,
+          `request_id=${request_id}`,
+          `row_count=${result.rowCount || 0}`,
+          `gpt_subtype=${JSON.stringify(gptSubtype)}`
+        );
+        updated += result.rowCount || 0;
+        if (!result.rowCount) missingRequestIds.push(request_id);
       }
     } else {
       updateGptResults(run_id, results);
+      updated = Object.keys(results).length;
     }
-    return res.json({ ok: true });
+    if (missingRequestIds.length > 0) {
+      console.warn('[gpt-results PUT] no rows updated for request ids:', missingRequestIds.join(', '));
+      return res.status(404).json({
+        ok: false,
+        error: `No GPT rows updated for request id(s): ${missingRequestIds.join(', ')}`,
+        updated,
+        missing_request_ids: missingRequestIds,
+      });
+    }
+    return res.json({ ok: true, updated, missing_request_ids: [] });
   } catch (err) {
     console.error('[gpt-results PUT]', err.message);
     res.status(500).json({ error: err.message });
