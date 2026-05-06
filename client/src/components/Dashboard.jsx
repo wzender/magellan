@@ -336,6 +336,7 @@ function Dashboard() {
   const [validationLoading, setValidationLoading] = useState(false);
   const [countrySubtypes, setCountrySubtypes] = useState([]);
   const [unknownsCountry, setUnknownsCountry] = useState(null);
+  const [subtypesWarning, setSubtypesWarning] = useState(null);
   const [publishState, setPublishState] = useState('idle'); // 'idle' | 'loading' | 'done' | 'error'
   const [unknownsGridFilter, setUnknownsGridFilter] = useState(EMPTY_UNKNOWNS_GRID_FILTER);
 
@@ -508,17 +509,20 @@ function Dashboard() {
     if (!isUnknownsBenchmark || unknownsCountryCandidates.length === 0) {
       setCountrySubtypes([]);
       setUnknownsCountry(null);
+      setSubtypesWarning(null);
       return;
     }
 
     let cancelled = false;
 
     const load = async () => {
+      const triedAndFailed = [];
       for (const candidate of unknownsCountryCandidates) {
         try {
           const response = await fetch(`/api/subtypes-by-country?country=${encodeURIComponent(candidate)}`);
           if (!response.ok) {
             console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" returned ${response.status} — trying next`);
+            triedAndFailed.push(`${candidate} (${response.status})`);
             continue;
           }
           const data = await response.json();
@@ -526,11 +530,18 @@ function Dashboard() {
           if (Array.isArray(data) && data.length > 0) {
             setCountrySubtypes(data);
             setUnknownsCountry(candidate);
+            if (triedAndFailed.length > 0) {
+              setSubtypesWarning(`Country subtypes resolved to "${candidate}" after failing: ${triedAndFailed.join(', ')}`);
+            } else {
+              setSubtypesWarning(null);
+            }
             return;
           }
           console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" returned empty array — trying next`);
+          triedAndFailed.push(`${candidate} (empty)`);
         } catch (err) {
           console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" fetch failed: ${err.message} — trying next`);
+          triedAndFailed.push(`${candidate} (error)`);
         }
       }
 
@@ -538,6 +549,7 @@ function Dashboard() {
       if (!cancelled) {
         setCountrySubtypes([]);
         setUnknownsCountry(unknownsCountryCandidates[0] || null);
+        setSubtypesWarning(`Could not load subtypes for any candidate: ${triedAndFailed.join(', ')}. No subtype filtering applied.`);
       }
     };
 
@@ -990,6 +1002,11 @@ function Dashboard() {
 
           {isUnknownsBenchmark && selectedRunIds.length > 0 && (
             <div className="unknowns-view">
+              {subtypesWarning && (
+                <div className="subtypes-warning" style={{ background: '#fff3cd', color: '#856404', border: '1px solid #ffc107', borderRadius: 4, padding: '8px 12px', margin: '8px 0', fontSize: 13 }}>
+                  ⚠ {subtypesWarning}
+                </div>
+              )}
               {validationLoading && <div className="viewer-loading">Loading records…</div>}
               {!validationLoading && (
                 <ValidationPanel
