@@ -4427,6 +4427,10 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   z-index: 10;
 }
 
+.validation-tag-subtype-wrap:has(.validation-tag-dropdown.open) {
+  z-index: 200;
+}
+
 .validation-tag-trigger {
   width: 100%;
   padding: 9px 10px;

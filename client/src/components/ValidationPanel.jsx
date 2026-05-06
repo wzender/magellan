@@ -1469,12 +1469,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     const gptSuggested = getGptSuggestedVerdict(result, countrySubtypes);
     const gptSource = subtypeState.source;
     result = { ...result, gptSubtype };
-    if (onWarning) {
-      onWarning(
-        `GPT subtype UI update attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}" ` +
-        `(source=${gptSource}, condition=${subtypeState.condition}).`
-      );
-    }
+    LOG.info(
+      `[${traceId}] GPT subtype UI update attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}" ` +
+      `(source=${gptSource}, condition=${subtypeState.condition}).`
+    );
     LOG.info(
       `[${traceId}] ── GPT SUBTYPE CHANGE ATTEMPT UI_STATE` +
       ` request_id=${requestId} run_id=${runId}` +
@@ -1543,11 +1541,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       ` previous="${previousSubtypeState.text || '(none)'}"` +
       ` next="${gptSubtype || '(empty)'}"`
     );
-    if (onWarning) {
-      onWarning(
-        `GPT subtype save attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}".`
-      );
-    }
+    LOG.info(
+      `[${traceId}] GPT subtype save attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}".`
+    );
     LOG.debug(`[${traceId}] persist payload=${clipLogText(JSON.stringify(persistPayload), 2000)}`);
 
     try {

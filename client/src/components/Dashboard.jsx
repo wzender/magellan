@@ -68,6 +68,7 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
 
   const unknownsCount = rows.filter(r => (r.pred_subtype_2 || '') === PS2_UNKNOWN).length;
   const missingCount = rows.filter(r => (r.pred_subtype_2 || '') === PS2_MISSING).length;
+  const humanTaggedCount = rows.filter(r => String(r.true_subtype || '').trim() !== '').length;
 
   let reviewedCount = 0;
   let realUnknownCount = 0;
@@ -95,8 +96,8 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     const hasGptSubtype = Boolean(mappedSubtype || suggestedSubtype);
     const decision = String(payload.decision || saved.verdict || '').trim();
 
-    // Count reviewed when we have either a parsed subtype output or a legacy verdict.
-    if (hasGptSubtype || saved.verdict) reviewedCount++;
+    // Count reviewed for any non-empty GPT result
+    reviewedCount++;
 
     if (status === PS2_UNKNOWN) {
       if (hasGptSubtype) falseUnknownCount++;
@@ -124,6 +125,7 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
     unknowns_count: unknownsCount,
     missing_count: missingCount,
     reviewed_count: reviewedCount,
+    human_tagged: humanTaggedCount,
     real_unknown_count: realUnknownCount,
     real_missing_count: realMissingCount,
     false_unknown_count: falseUnknownCount,

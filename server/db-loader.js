@@ -342,8 +342,8 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
     if (!run || !row.table_exists) return;
     try {
       const columns = await getTableColumns(run.run_name);
-      const humanExpr = columns.has('gpt_verdict')
-        ? `COUNT(*) FILTER (WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> '')`
+      const humanExpr = columns.has('true_subtype')
+        ? `COUNT(*) FILTER (WHERE true_subtype IS NOT NULL AND true_subtype <> '')`
         : '0';
       const gptExpr = columns.has('gpt_subtype')
         ? `COUNT(*) FILTER (WHERE gpt_subtype IS NOT NULL AND gpt_subtype <> '')`
