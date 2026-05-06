@@ -693,9 +693,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [translateState, setTranslateState] = useState({ running: false, field: null, done: 0, total: 0 });
   const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
+  const [recentGptUpdate, setRecentGptUpdate] = useState(null);
+  const [gptGenieRowId, setGptGenieRowId] = useState(null);
+  const [gptSortHold, setGptSortHold] = useState(null);
   const gptCancelledRef = useRef(false);
   const gptLoadSeqRef = useRef(0);
   const gptRowUpdateSeqRef = useRef({});
+  const gptGenieTimerRef = useRef(null);
+  const recentGptUpdateTimerRef = useRef(null);
+  const gptSortHoldTimerRef = useRef(null);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
 
@@ -721,6 +727,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     return () => window.removeEventListener('resize', updateToolbarHeight);
   }, []);
 
+  useEffect(() => () => {
+    if (gptGenieTimerRef.current) clearTimeout(gptGenieTimerRef.current);
+    if (recentGptUpdateTimerRef.current) clearTimeout(recentGptUpdateTimerRef.current);
+    if (gptSortHoldTimerRef.current) clearTimeout(gptSortHoldTimerRef.current);
+  }, []);
+
   useEffect(() => {
     const loadSeq = ++gptLoadSeqRef.current;
     gptRowUpdateSeqRef.current = {};
@@ -728,6 +740,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     setGptResults({});
     setGptRunning(false);
     setAskGptLoading({});
+    setRecentGptUpdate(null);
+    setGptGenieRowId(null);
+    setGptSortHold(null);
     setExpandedJsonCells({});
     setTranslateState({ running: false, field: null, done: 0, total: 0 });
     setTranslatedOverrides({});
@@ -1124,8 +1139,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
           aVal = getAskText(gptResults[a.request_id]);
           bVal = getAskText(gptResults[b.request_id]);
         } else if (sortConfig.key === 'gpt_subtype') {
-          aVal = getGptSubtype(gptResults[a.request_id]);
-          bVal = getGptSubtype(gptResults[b.request_id]);
+          aVal = gptSortHold && String(a.request_id) === String(gptSortHold.requestId)
+            ? gptSortHold.previousSubtype
+            : getGptSubtype(gptResults[a.request_id]);
+          bVal = gptSortHold && String(b.request_id) === String(gptSortHold.requestId)
+            ? gptSortHold.previousSubtype
+            : getGptSubtype(gptResults[b.request_id]);
         } else {
           aVal = a[sortConfig.key] ?? '';
           bVal = b[sortConfig.key] ?? '';
@@ -1151,6 +1170,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     verdictFilter,
     gptResults,
     sortConfig,
+    gptSortHold,
   ]);
 
   const effectivePageSize = pageSize === 'All' ? filtered.length : pageSize;
@@ -1360,6 +1380,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     const predictedStatus = String(record.pred_subtype_2 || '').trim().toLowerCase();
     const previousResult = gptResults[requestId] || null;
     const previousSubtypeState = getGptSubtypeState(previousResult);
+    const isSortedByGptSubtype = sortConfig.key === 'gpt_subtype';
     const showAskWarning = (message) => {
       const fullMessage = `[${traceId}] ${message}`;
       LOG.warn(fullMessage);
@@ -1368,9 +1389,9 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
     LOG.info(`[${traceId}] ── START request_id=${requestId} run_id=${runId} quick=${quick} predicted_status=${predictedStatus}`,
       `| update_seq=${updateSeq}`,
+      `| sorted_by_gpt_subtype=${isSortedByGptSubtype}`,
       `| previous_gpt_subtype="${previousSubtypeState.text || '(none)'}" previous_condition=${previousSubtypeState.condition}`,
       `| attributes=${JSON.stringify(summarizePayloadShape(record.attributes))} metadata=${JSON.stringify(summarizePayloadShape(record.metadata))}`);
-
     let result;
     try {
       const allowedSubtypes = quick ? [] : (countrySubtypes || []).map(o => o.subtype).filter(Boolean).map(s => s.toLowerCase());
@@ -1469,6 +1490,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     const gptSuggested = getGptSuggestedVerdict(result, countrySubtypes);
     const gptSource = subtypeState.source;
     result = { ...result, gptSubtype };
+    if (isSortedByGptSubtype) {
+      setGptSortHold({
+        requestId,
+        previousSubtype: previousSubtypeState.text || '',
+      });
+      if (gptSortHoldTimerRef.current) clearTimeout(gptSortHoldTimerRef.current);
+      gptSortHoldTimerRef.current = setTimeout(() => {
+        setGptSortHold(current => String(current?.requestId) === String(requestId) ? null : current);
+      }, 900);
+    }
     LOG.info(
       `[${traceId}] GPT subtype UI update attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}" ` +
       `(source=${gptSource}, condition=${subtypeState.condition}).`
@@ -1503,6 +1534,21 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         `[${traceId}] GPT SUBTYPE changed "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}"` +
         ` prev_condition=${previousSubtypeState.condition} new_condition=${subtypeState.condition}`
       );
+      setRecentGptUpdate({
+        requestId,
+        previousSubtype: previousSubtypeState.text || '',
+        nextSubtype: gptSubtype || '',
+        sortedByGptSubtype: isSortedByGptSubtype,
+      });
+      setGptGenieRowId(requestId);
+      if (gptGenieTimerRef.current) clearTimeout(gptGenieTimerRef.current);
+      if (recentGptUpdateTimerRef.current) clearTimeout(recentGptUpdateTimerRef.current);
+      gptGenieTimerRef.current = setTimeout(() => {
+        setGptGenieRowId(current => String(current) === String(requestId) ? null : current);
+      }, 1200);
+      recentGptUpdateTimerRef.current = setTimeout(() => {
+        setRecentGptUpdate(current => String(current?.requestId) === String(requestId) ? null : current);
+      }, 8000);
     }
 
     const legacyVerdict = result.error ? '' : toLegacyYesNo(result.responseKind || result.decision || result.subtype, predictedStatus);
@@ -1540,9 +1586,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       ` request_id=${requestId} run_id=${runId}` +
       ` previous="${previousSubtypeState.text || '(none)'}"` +
       ` next="${gptSubtype || '(empty)'}"`
-    );
-    LOG.info(
-      `[${traceId}] GPT subtype save attempt for request ${requestId}: "${previousSubtypeState.text || '(none)'}" -> "${gptSubtype || '(empty)'}".`
     );
     LOG.debug(`[${traceId}] persist payload=${clipLogText(JSON.stringify(persistPayload), 2000)}`);
 
@@ -1907,6 +1950,18 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         </>
       </div>
 
+      {recentGptUpdate && (
+        <div className="gpt-recent-update" role="status">
+          <span className="gpt-recent-update-badge">Updated</span>
+          <span className="gpt-recent-update-text">
+            Request {recentGptUpdate.requestId}: {recentGptUpdate.previousSubtype || '(none)'} -> {recentGptUpdate.nextSubtype || '(empty)'}
+          </span>
+          {recentGptUpdate.sortedByGptSubtype && (
+            <span className="gpt-recent-update-note">row moved by GPT Subtype sort</span>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="validation-table-wrap">
         <table className="validation-table records-table">
@@ -2032,7 +2087,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
 
               return (
-                <tr key={r.request_id}>
+                <tr key={r.request_id} className={String(gptGenieRowId) === String(r.request_id) ? 'gpt-row-genie' : ''}>
                   <td className="cell-request-id">{r.request_id}</td>
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>

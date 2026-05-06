@@ -3848,6 +3848,37 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   border-radius: 0 0 8px 8px;
 }
 
+.gpt-recent-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.gpt-recent-update-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #d1fae5;
+  color: #047857;
+  font-weight: 700;
+}
+
+.gpt-recent-update-text {
+  font-weight: 600;
+}
+
+.gpt-recent-update-note {
+  color: #047857;
+  margin-left: auto;
+  font-size: 12px;
+}
+
 .validation-table {
   width: 100%;
   border-collapse: collapse;
@@ -3883,6 +3914,27 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .validation-table tbody tr:hover {
   background: var(--surface);
+}
+
+.validation-table tbody tr.gpt-row-genie {
+  animation: gptRowGenie 1.1s ease both;
+}
+
+@keyframes gptRowGenie {
+  0% {
+    background: #fef3c7;
+    box-shadow: inset 0 0 0 2px #f59e0b;
+  }
+  55% {
+    background: #ecfdf5;
+    box-shadow: inset 0 0 0 2px #10b981;
+    transform: scaleY(0.985);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 0 transparent;
+    transform: scaleY(1);
+  }
 }
 
 .validation-row-justified   { background: rgba(34,197,94,0.06); }
