@@ -308,13 +308,18 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
   const rows = leaderboard.filter(l => l.benchmark_id === benchmarkId);
 
   const benchmark = benchmarks.find(b => b.id === benchmarkId);
-  if (benchmark && benchmark.name.toLowerCase() === 'unknowns') {
+  const isUnknownBenchmark = benchmark && benchmark.name.toLowerCase() === 'unknowns';
+  const unknownsProgressClause = isUnknownBenchmark
+    ? ` WHERE LOWER(TRIM(COALESCE(pred_subtype_2,''))) = '${PS2_UNKNOWN}'`
+    : '';
+
+  if (isUnknownBenchmark) {
     await Promise.all(rows.map(async (row) => {
       const run = runs.find(r => r.id === row.run_id);
       if (!run) return;
       try {
         const result = await query(
-          `SELECT COUNT(*) AS cnt FROM "${run.run_name}" WHERE LOWER(TRIM(COALESCE(pred_subtype_2,''))) = '${PS2_UNKNOWN}'`
+          `SELECT COUNT(*) AS cnt FROM "${run.run_name}"${unknownsProgressClause}`
         );
         row.benchmark_length = parseInt(result.rows[0].cnt) || 0;
       } catch (err) {
@@ -342,7 +347,7 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
         `SELECT
            ${humanExpr} AS human_tagged,
            ${gptExpr} AS gpt_reviewed
-         FROM "${run.run_name}"`
+         FROM "${run.run_name}"${unknownsProgressClause}`
       );
       row.human_tagged = parseInt(result.rows[0].human_tagged) || 0;
       row.gpt_reviewed = parseInt(result.rows[0].gpt_reviewed) || 0;

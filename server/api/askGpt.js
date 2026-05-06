@@ -144,11 +144,12 @@ function buildJudgeOutcome(parsed, raw, allowedSubtypes, predictedStatus) {
   const allowedSet = new Set(allowedList);
   const reasoning = String(parsed.reasoning || parsed.reason || '').trim() || null;
 
-  const normalizedAllowedSuggestion = pickFirstNonEmpty([
+  const suggestedSubtypeOriginal = pickFirstNonEmpty([
     parsed.suggested_subtype,
     parsed.mapped_allowed_subtype,
     parsed.corrected_subtype,
-  ]).toLowerCase();
+  ]);
+  const normalizedAllowedSuggestion = suggestedSubtypeOriginal.toLowerCase();
 
   const missingSuggestion = pickFirstNonEmpty([
     parsed.suggested_subtype,
@@ -168,11 +169,14 @@ function buildJudgeOutcome(parsed, raw, allowedSubtypes, predictedStatus) {
   }
 
   if (responseKind === 'existing') {
-    if (!normalizedAllowedSuggestion || !allowedSet.has(normalizedAllowedSuggestion)) {
-      return buildJudgeErrorResponse('PARSE', raw, 'Existing response_kind without allowed suggested_subtype');
+    if (!normalizedAllowedSuggestion) {
+      return buildJudgeErrorResponse('PARSE', raw, 'Existing response_kind without suggested_subtype');
+    }
+    if (allowedSubtypes.length > 0 && !allowedSet.has(normalizedAllowedSuggestion)) {
+      return buildJudgeErrorResponse('PARSE', raw, 'Existing response_kind with suggested_subtype not in allowed list');
     }
     return {
-      suggested_subtype: normalizedAllowedSuggestion,
+      suggested_subtype: suggestedSubtypeOriginal,
       reasoning,
       response_kind: 'existing',
       raw_response: raw,

@@ -15,7 +15,7 @@ const usePostgres = (process.env.DATA_SOURCE || 'csv').toLowerCase() === 'postgr
 
 const { query }                       = usePostgres ? require('../db') : {};
 const { getRun, getIdColumn }         = usePostgres ? require('../db-loader') : {};
-const { getGptResults, updateGptResults } = usePostgres ? {} : require('../csv-loader');
+const { getGptResults, updateGptResults, cleanEmptyGptSubtypes } = usePostgres ? {} : require('../csv-loader');
 
 async function ensureGptColumns(tbl) {
   await query(`ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS gpt_verdict TEXT`);
@@ -84,6 +84,32 @@ router.put('/gpt-results', async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     console.error('[gpt-results PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** POST /api/gpt-results/clean-empty — clears empty GPT subtype values for a run */
+router.post('/gpt-results/clean-empty', async (req, res) => {
+  const run_id = parseInt(req.body.run_id, 10);
+  if (!run_id) return res.status(400).json({ error: 'run_id is required' });
+
+  try {
+    let updated = 0;
+    if (usePostgres) {
+      const run = await getRun(run_id);
+      if (!run) return res.status(404).json({ error: 'Run not found' });
+      const tbl = run.run_name;
+      await ensureGptColumns(tbl);
+      const result = await query(
+        `UPDATE "${tbl}" SET gpt_subtype = NULL WHERE gpt_subtype IS NOT NULL AND TRIM(gpt_subtype) = ''`
+      );
+      updated = result.rowCount || 0;
+    } else {
+      updated = cleanEmptyGptSubtypes(run_id);
+    }
+    return res.json({ ok: true, updated });
+  } catch (err) {
+    console.error('[gpt-results CLEAN EMPTY]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

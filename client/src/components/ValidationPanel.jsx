@@ -487,7 +487,7 @@ function getGptSubtypeState(result) {
   }
   LOG.debug(`[getGptSubtypeState]: suggested is empty, checking decision...`);
 
-  const decision = normalizeDecision(result.decision || result.subtype);
+  const decision = normalizeDecision(result.decision || result.subtype || result.responseKind);
   LOG.debug(`[getGptSubtypeState]: decision="${decision}" (raw decision=${JSON.stringify(result.decision)}, raw subtype=${JSON.stringify(result.subtype)})`);
   if (decision === 'truly_unknown') {
     const out = { text: 'unknown', source: 'truly-unknown', condition: 'truly-unknown' };
@@ -696,6 +696,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [gptResults, setGptResults] = useState({});   // request_id -> { verdict, reasoning }
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
+  const [clearingEmptyGpt, setClearingEmptyGpt] = useState(false);
   const [translateState, setTranslateState] = useState({ running: false, field: null, done: 0, total: 0 });
   const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
@@ -739,12 +740,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       fetch(`/api/gpt-results?run_id=${runId}`)
         .then(r => r.json())
         .then(data => {
-          if (!data || typeof data !== 'object') return setGptResults({});
+          if (!data || typeof data !== 'object') return;
           const mapped = {};
           Object.entries(data).forEach(([requestId, value]) => {
             mapped[requestId] = normalizeGptResult(value);
           });
-          setGptResults(mapped);
+          setGptResults(prev => ({ ...prev, ...mapped }));
         })
         .catch(() => {});
     }
@@ -1617,6 +1618,26 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     if (Object.keys(bulkVerdicts).length > 0) onBulkVerdict(bulkVerdicts);
   };
 
+  const handleClearEmptyGptSubtype = async () => {
+    if (!runId) return;
+    setClearingEmptyGpt(true);
+    try {
+      const res = await fetch('/api/gpt-results/clean-empty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to clear empty GPT subtype');
+      setToast(`Cleared ${data.updated || 0} empty GPT subtype value(s)`);
+      if (onGptResultsUpdated) onGptResultsUpdated();
+    } catch (err) {
+      setToast(`Clear failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setClearingEmptyGpt(false);
+    }
+  };
+
   /* ── json rendering ── */
   const copyCellJson = (obj, label, cellKey) => {
     navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
@@ -1835,6 +1856,14 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
               ))}
             </div>
+            <button
+              className="export-csv-btn ask-gpt-btn"
+              disabled={clearingEmptyGpt}
+              title="Delete empty GPT subtype values from this run"
+              onClick={handleClearEmptyGptSubtype}
+            >
+              {clearingEmptyGpt ? 'Deleting…' : 'Delete empty GPT subtype'}
+            </button>
             <a
               className="export-csv-btn ask-gpt-btn"
               href={`/api/export-csv?run_id=${runId}`}

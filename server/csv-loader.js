@@ -1027,6 +1027,46 @@ function updateGptResults(runId, results) {
   });
 }
 
+function cleanEmptyGptSubtypes(runId) {
+  const data = loadData();
+  const run = data.runs.find(r => r.id === runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const fname = runFileName(run.benchmark_id, run.run_name);
+  const fpath = path.join(RUNS_DIR, fname);
+  if (!fs.existsSync(fpath)) throw new Error(`Run file not found: ${fname}`);
+
+  const records = csv.parse(fs.readFileSync(fpath, 'utf-8'), { columns: true, skip_empty_lines: true });
+  const baseHeaders = Object.keys(records[0] || {});
+  if (!baseHeaders.includes('gpt_subtype')) return 0;
+
+  let changed = 0;
+  const updated = records.map(r => {
+    const value = String(r.gpt_subtype || '');
+    if (value.trim() === '' && value !== '') {
+      changed += 1;
+      return { ...r, gpt_subtype: '' };
+    }
+    return r;
+  });
+
+  if (changed > 0) {
+    const csvContent = [
+      baseHeaders.join(','),
+      ...updated.map(r => baseHeaders.map(h => csvEscapeCell(r[h])).join(',')),
+    ].join('\n') + '\n';
+    fs.writeFileSync(fpath, csvContent, 'utf-8');
+  }
+
+  data.run_results.forEach(r => {
+    if (r.run_id !== runId) return;
+    const value = String(r.gpt_subtype || '');
+    if (value.trim() === '') r.gpt_subtype = null;
+  });
+
+  return changed;
+}
+
 /* ── Missing Subtype Decisions ───────────────────────────── */
 
 function updateMissingSubtypeDecision(runId, requestId, trueSubtype) {
@@ -1147,6 +1187,7 @@ module.exports = {
   updateGptResults,
   getMissingSubtypeGroups,
   updateMissingSubtypeDecision,
+  cleanEmptyGptSubtypes,
   exportRunCsv,
   publishRetagged,
 };
