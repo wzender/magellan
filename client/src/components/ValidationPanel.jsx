@@ -224,7 +224,7 @@ const VERDICTS = [
   { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
 ];
 
-const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_subtype: [] };
+const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_subtype: [], true_subtype: [] };
 
 const GPT_VERDICT_CONFIG = {
   unknown:  { label: 'Unknown',          cls: 'gpt-verdict-truly-unknown' },
@@ -750,6 +750,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     deferredColFilters.attributes,
     deferredColFilters.metadata,
     deferredColFilters.gpt_subtype,
+    deferredColFilters.true_subtype,
   ]);
 
   useEffect(() => {
@@ -798,6 +799,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const attributesFilter = deferredColFilters.attributes.toLowerCase();
   const metadataFilter = deferredColFilters.metadata.toLowerCase();
   const gptSubtypeFilter = Array.isArray(deferredColFilters.gpt_subtype) ? deferredColFilters.gpt_subtype : [];
+  const trueSubtypeFilter = Array.isArray(deferredColFilters.true_subtype) ? deferredColFilters.true_subtype : [];
 
   const gptSubtypeFilterOptions = useMemo(() => {
     let next = preparedRecords;
@@ -896,6 +898,110 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptResults,
   ]);
 
+  const trueSubtypeFilterOptions = useMemo(() => {
+    let next = preparedRecords;
+
+    if (gridFilter && (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)) {
+      next = next.filter(r => {
+        const trueSubtype = verdicts[r.request_id] ?? '';
+        const trueType = trueSubtype === '' ? NOT_RETAGGED_LABEL : (subtypeToType[trueSubtype] || '');
+
+        if (gridFilter.trueType !== null && gridFilter.trueType !== undefined && trueType !== gridFilter.trueType) return false;
+        if (gridFilter.trueSubtype !== null && gridFilter.trueSubtype !== undefined && trueSubtype !== gridFilter.trueSubtype) return false;
+        if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
+        if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
+        return true;
+      });
+    }
+
+    if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
+    if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
+    if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
+    if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (gptSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = getGptSubtype(gptResults[r.request_id]);
+        return gptSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+
+    if (verdictFilter !== 'all') {
+      if (verdictFilter === 'no_gpt_asked') {
+        next = next.filter(r => !gptResults[r.request_id]);
+      } else if (verdictFilter === 'unreviewed') {
+        next = next.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
+      } else if (isRetag && verdictFilter === 'untagged') {
+        next = next.filter(r => !verdicts[r.request_id]);
+      } else if (isRetag && verdictFilter === 'only_missing') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v !== '' && v !== 'none' && v !== 'unknown';
+        });
+      } else if (isRetag && verdictFilter === 'only_unknown') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v === '' || v === 'none' || v === 'unknown';
+        });
+      } else if (isRetag && verdictFilter === 'real_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
+      } else if (isRetag && verdictFilter === 'real_missing') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
+      } else if (isRetag && verdictFilter === 'false_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else if (isRetag && verdictFilter === 'gpt_error') {
+        next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
+      } else if (isRetag && verdictFilter === 'weak_signal') {
+        next = next.filter(r =>
+          (r.pred_subtype_2 || '') === PS2_MISSING &&
+          getGptResponseKind(gptResults[r.request_id]) === 'unknown'
+        );
+      } else if (isRetag && verdictFilter === 'false_missing') {
+        next = next.filter(r => {
+          const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
+          return isPredMissing && getGptResponseKind(gptResults[r.request_id]) === 'existing';
+        });
+      } else if (isRetag && verdictFilter === 'truly_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
+      } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
+      } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else if (isRetag && verdictFilter === 'wrong_subtype') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else {
+        next = next.filter(r => verdicts[r.request_id] === verdictFilter);
+      }
+    }
+
+    const counts = next.reduce((acc, record) => {
+      const subtype = String(verdicts[record.request_id] || '').trim();
+      const key = subtype ? subtype : '__EMPTY__';
+      acc.set(key, (acc.get(key) || 0) + 1);
+      return acc;
+    }, new Map());
+
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({
+        value,
+        count,
+        label: value === '__EMPTY__' ? NOT_RETAGGED_LABEL : value,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+  }, [
+    preparedRecords,
+    gridFilter,
+    verdicts,
+    subtypeToType,
+    requestIdFilter,
+    predSubtypeFilter,
+    attributesFilter,
+    metadataFilter,
+    gptSubtypeFilter,
+    verdictFilter,
+    isRetag,
+    gptResults,
+  ]);
+
   /* ── filtering + sorting (memoized for large datasets) ── */
   const filtered = useMemo(() => {
     let next = preparedRecords;
@@ -921,6 +1027,12 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       next = next.filter(r => {
         const subtype = getGptSubtype(gptResults[r.request_id]);
         return gptSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+    if (trueSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(verdicts[r.request_id] || '').trim();
+        return trueSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
       });
     }
 
@@ -1023,6 +1135,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     attributesFilter,
     metadataFilter,
     gptSubtypeFilter,
+    trueSubtypeFilter,
     verdictFilter,
     isRetag,
     gptResults,
@@ -1864,7 +1977,18 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   </div>
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                  True Subtype{sortIndicator('verdict')}
+                  <div className="header-cell">
+                    <span>True Subtype{sortIndicator('verdict')}</span>
+                    <ValueCountFilterDropdown
+                      values={colFilters.true_subtype}
+                      options={trueSubtypeFilterOptions}
+                      onChange={val => setColFilter('true_subtype', val)}
+                      allLabel="All true subtypes"
+                      emptyLabel={NOT_RETAGGED_LABEL}
+                      compact
+                      title="Filter true subtype"
+                    />
+                  </div>
                 </th>
               </tr>
             ) : (

@@ -26,6 +26,7 @@ const PS2_UNKNOWN = (process.env.PRED_SUBTYPE2_UNKNOWN || 'unknown').toLowerCase
 const PS2_MISSING = (process.env.PRED_SUBTYPE2_MISSING || 'missing').toLowerCase();
 const { query, pool } = require('./db');
 const idColumnCache = new Map();
+const tableColumnsCache = new Map();
 const SUBTYPES_FILE = path.join(__dirname, '../data/Subtypes.xlsx');
 const SUBTYPES_COUNTRIES_COLUMN = process.env.SUBTYPES_COUNTRIES_COLUMN || 'Countries';
 let subtypeVocabCache = null;
@@ -165,6 +166,22 @@ async function getIdColumn(tableName) {
   const columnName = result.rows[0].column_name;
   idColumnCache.set(tableName, columnName);
   return columnName;
+}
+
+async function getTableColumns(tableName) {
+  if (tableColumnsCache.has(tableName)) return tableColumnsCache.get(tableName);
+
+  const result = await query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = current_schema()
+       AND table_name = $1`,
+    [tableName]
+  );
+
+  const columns = new Set(result.rows.map(r => r.column_name));
+  tableColumnsCache.set(tableName, columns);
+  return columns;
 }
 
 // ── Run index (cached) ────────────────────────────────────────────────────────
@@ -313,10 +330,18 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
     row.gpt_reviewed = 0;
     if (!run || !row.table_exists) return;
     try {
+      const columns = await getTableColumns(run.run_name);
+      const humanExpr = columns.has('gpt_verdict')
+        ? `COUNT(*) FILTER (WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> '')`
+        : '0';
+      const gptExpr = columns.has('gpt_subtype')
+        ? `COUNT(*) FILTER (WHERE gpt_subtype IS NOT NULL AND gpt_subtype <> '')`
+        : '0';
+
       const result = await query(
         `SELECT
-           COUNT(*) FILTER (WHERE gpt_verdict IS NOT NULL AND gpt_verdict <> '') AS human_tagged,
-           COUNT(*) FILTER (WHERE gpt_subtype IS NOT NULL AND gpt_subtype <> '') AS gpt_reviewed
+           ${humanExpr} AS human_tagged,
+           ${gptExpr} AS gpt_reviewed
          FROM "${run.run_name}"`
       );
       row.human_tagged = parseInt(result.rows[0].human_tagged) || 0;
