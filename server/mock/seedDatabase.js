@@ -14,31 +14,19 @@ async function seedDatabase() {
   try {
     console.log('Starting database seeding...');
 
-    // Create benchmarks
     const benchmarks = [
-      { name: 'Benchmark Q1 2026' },
-      { name: 'Benchmark Q2 2026' },
-      { name: 'Test Benchmark' },
+      'Benchmark Q1 2026',
+      'Benchmark Q2 2026',
+      'Test Benchmark',
     ];
-
-    const benchmarkResults = await Promise.all(
-      benchmarks.map(b =>
-        query(
-          'INSERT INTO benchmarks (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id',
-          [b.name]
-        )
-      )
-    );
-
-    const benchmarkIds = benchmarkResults.map(r => r.rows[0].id);
 
     // Generate taxonomy once
     const taxonomy = generateTaxonomy();
     const { subtypeMap } = taxonomy;
 
     // Create runs and insert data for each benchmark
-    for (let bIdx = 0; bIdx < benchmarkIds.length; bIdx++) {
-      const benchmarkId = benchmarkIds[bIdx];
+    for (let bIdx = 0; bIdx < benchmarks.length; bIdx++) {
+      const benchmark = benchmarks[bIdx];
 
       // Create 2-3 runs per benchmark
       const runsPerBenchmark = bIdx === 2 ? 3 : 3;  // Test benchmark gets 3 runs too
@@ -50,8 +38,12 @@ async function seedDatabase() {
 
         // Insert run
         const runResult = await query(
-          'INSERT INTO runs (benchmark_id, run_name, model_version) VALUES ($1, $2, $3) RETURNING id',
-          [benchmarkId, runName, modelVersion]
+          `INSERT INTO runs (benchmark, run_name, model_version)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (benchmark, run_name)
+           DO UPDATE SET model_version = EXCLUDED.model_version
+           RETURNING id`,
+          [benchmark, runName, modelVersion]
         );
         const runId = runResult.rows[0].id;
 
@@ -69,7 +61,7 @@ async function seedDatabase() {
         const metrics = calculateMetrics(mockData);
 
         console.log(
-          `Inserting ${mockData.length} records for benchmark ${benchmarkId}, run ${runId}`
+          `Inserting ${mockData.length} records for benchmark ${benchmark}, run ${runId}`
         );
 
         // Batch insert results
@@ -102,21 +94,12 @@ async function seedDatabase() {
           );
         }
 
-        // Insert leaderboard metrics
-        await query(
-          `INSERT INTO leaderboard (run_id, benchmark_id, benchmark_length, subtype_accuracy, subtype_weighted_f1, type_weighted_f1)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            runId,
-            benchmarkId,
-            metrics.benchmark_length,
-            metrics.subtype_accuracy,
-            metrics.subtype_weighted_f1,
-            metrics.type_weighted_f1,
-          ]
-        );
 
-        console.log(`✓ Completed run ${runName} for benchmark ${benchmarkId}`);
+
+        console.log(
+          `✓ Completed run ${runName} for benchmark ${benchmark}` +
+          ` (f1=${metrics.subtype_weighted_f1})`
+        );
       }
     }
 

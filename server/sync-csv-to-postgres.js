@@ -45,7 +45,6 @@ async function ensureLeaderboardTable() {
     CREATE TABLE IF NOT EXISTS "leaderboard-table" (
       run_id           TEXT PRIMARY KEY,
       nof_items        INTEGER,
-      subtype_accuracy NUMERIC(10, 6),
       subtype_weighted_f1 NUMERIC(10, 6),
       type_weighted_f1 NUMERIC(10, 6),
       description      TEXT,
@@ -164,11 +163,10 @@ async function main() {
       }
 
       await client.query(
-        `INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_accuracy, subtype_weighted_f1, type_weighted_f1, description, benchmark)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_weighted_f1, type_weighted_f1, description, benchmark)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (run_id) DO UPDATE
            SET nof_items = EXCLUDED.nof_items,
-               subtype_accuracy = EXCLUDED.subtype_accuracy,
                subtype_weighted_f1 = EXCLUDED.subtype_weighted_f1,
                type_weighted_f1 = EXCLUDED.type_weighted_f1,
                description = EXCLUDED.description,
@@ -176,7 +174,6 @@ async function main() {
         [
           runTable,
           runRecords.length,
-          toNumOrNull(csvLb.subtype_accuracy),
           toNumOrNull(csvLb.subtype_weighted_f1),
           toNumOrNull(csvLb.type_weighted_f1),
           csvLb.run_name,

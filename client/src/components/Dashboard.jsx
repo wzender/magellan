@@ -35,6 +35,11 @@ function buildUnknownsCountryCandidates(run) {
     });
   };
 
+  // Prefer explicit layer (country) from leaderboard-table
+  if (run?.layer) {
+    const label = toCountryLabel(run.layer);
+    if (label) candidates.push(label);
+  }
   addCandidate(run?.run_name);
   addCandidate(run?.model_version);
   return candidates;
@@ -512,7 +517,10 @@ function Dashboard() {
       for (const candidate of unknownsCountryCandidates) {
         try {
           const response = await fetch(`/api/subtypes-by-country?country=${encodeURIComponent(candidate)}`);
-          if (!response.ok) continue;
+          if (!response.ok) {
+            console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" returned ${response.status} — trying next`);
+            continue;
+          }
           const data = await response.json();
           if (cancelled) return;
           if (Array.isArray(data) && data.length > 0) {
@@ -520,11 +528,13 @@ function Dashboard() {
             setUnknownsCountry(candidate);
             return;
           }
-        } catch {
-          // try next candidate
+          console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" returned empty array — trying next`);
+        } catch (err) {
+          console.warn(`⚠ FALLBACK: subtypes-by-country candidate "${candidate}" fetch failed: ${err.message} — trying next`);
         }
       }
 
+      console.warn(`⚠ FALLBACK: no valid country found from candidates [${unknownsCountryCandidates.join(', ')}] — using first as fallback`);
       if (!cancelled) {
         setCountrySubtypes([]);
         setUnknownsCountry(unknownsCountryCandidates[0] || null);

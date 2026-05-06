@@ -48,8 +48,8 @@ function calculateMetrics(records) {
 
 async function reseedRun(benchmarkName, runName, targetAccuracy) {
   const runRes = await query(
-    `SELECT r.id FROM runs r JOIN benchmarks b ON b.id = r.benchmark_id
-     WHERE b.name = $1 AND r.run_name = $2 LIMIT 1`,
+    `SELECT r.id FROM runs r
+     WHERE r.benchmark = $1 AND r.run_name = $2 LIMIT 1`,
     [benchmarkName, runName]
   );
   if (!runRes.rows.length) { console.warn(`⚠ Not found: ${benchmarkName} / ${runName}`); return; }
@@ -83,16 +83,16 @@ async function reseedRun(benchmarkName, runName, targetAccuracy) {
 
   const { accuracy, f1 } = calculateMetrics(updated);
   await query(
-    'UPDATE leaderboard SET subtype_accuracy = $1, subtype_weighted_f1 = $2 WHERE run_id = $3',
-    [accuracy, f1, runId]
+    'UPDATE \"leaderboard-table\" SET subtype_weighted_f1 = $1 WHERE run_id = $2',
+    [f1, runId]
   );
-  console.log(`✓ ${benchmarkName} / ${runName}: accuracy=${accuracy}  f1=${f1}  (target=${targetAccuracy})`);
+  console.log(`✓ ${benchmarkName} / ${runName}: f1=${f1}  (target=${targetAccuracy})`);
 }
 
 async function deletePerfectModel() {
   const runRes = await query(
-    `SELECT r.id FROM runs r JOIN benchmarks b ON b.id = r.benchmark_id
-     WHERE b.name = 'Test Benchmark' AND r.run_name = 'perfect model' LIMIT 1`
+    `SELECT r.id FROM runs r
+     WHERE r.benchmark = 'Test Benchmark' AND r.run_name = 'perfect model' LIMIT 1`
   );
   if (!runRes.rows.length) { console.log('ℹ perfect model not found in DB, skipping'); return; }
   const runId = runRes.rows[0].id;

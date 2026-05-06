@@ -41,7 +41,7 @@
   - On init, read `data/leaderboard.csv` into a pandas DataFrame. Assign sequential integer `run_id` (1-based, matching row order) to each leaderboard entry — this mirrors how `csv-loader.js` assigns `runId = i + 1`.
   - Parse `attributes` and `metadata` columns with `json.loads` for each run file at load time (cache per run_id).
   - Expose `get_benchmarks()` → list of `{id, name}` dicts (unique benchmark_id/benchmark_name pairs, preserving first-seen order).
-  - Expose `get_leaderboard(benchmark_id)` → list of dicts sorted by `subtype_f1_weighted` DESC, each row including: `run_id`, `run_name`, `model_version` (from `model_name` column), `subtype_accuracy`, `subtype_f1_weighted`, `benchmark_length` (count of records in the run file).
+  - Expose `get_leaderboard(benchmark_id)` → list of dicts sorted by `subtype_weighted_f1` DESC, each row including: `run_id`, `run_name`, `model_version` (from `model_name` column), `subtype_weighted_f1`, `benchmark_length` (count of records in the run file).
   - Expose `get_run_records(run_id)` → pandas DataFrame with columns: `request_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes` (parsed dict), `metadata` (parsed dict).
   - Run file path convention: `data/runs/{benchmark_id}_{sanitized_run_name}.csv` — apply the same sanitizer as `csv-loader.js`: lowercase, strip leading/trailing `_`, replace non-`[a-z0-9_-]` with `_`.
 

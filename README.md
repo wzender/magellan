@@ -341,9 +341,11 @@ The schema is documented and queried in [server/db-loader.js](server/db-loader.j
 | --- | --- | --- |
 | `run_id` | text | Name of the per-run table (e.g. `20261230-1445-Test-benchmark`) |
 | `nof_items` | integer | Number of records in the run |
-| `subtype_accuracy` | numeric | Overall subtype accuracy (0–1) |
+| `subtype_weighted_f1` | numeric | Weighted F1 score for subtype classification (0–1) |
+| `type_weighted_f1` | numeric | Weighted F1 score for type classification (0–1) |
 | `description` | text | Human-readable label shown in the leaderboard |
 | `benchmark` | text | Benchmark name shown in the UI benchmark selector |
+| `layer` | text | Country/layer name for the run |
 
 **Per-run tables** — one row per prediction, named `YYYYMMDD-HHMM-<benchmark-name>`:
 
@@ -369,7 +371,7 @@ If your environment uses different table or column names, the only file to edit 
    FROM "leaderboard-table"   // ← rename to match your table
    ```
 
-2. **Different leaderboard column names** — update the `SELECT` list and the field references in `getRunIndex` where it maps `row.run_id`, `row.nof_items`, `row.subtype_accuracy`, `row.description`.
+2. **Different leaderboard column names** — update the `SELECT` list and the field references in `getRunIndex` where it maps `row.run_id`, `row.nof_items`, `row.subtype_weighted_f1`, `row.type_weighted_f1`, `row.description`.
 
 3. **Different per-run table naming convention** — the `extractBenchmarkName` helper (line ~32) splits the table name on `-` and drops the first two segments (`YYYYMMDD` and `HHMM`). Adjust that function if your tables follow a different naming pattern.
 

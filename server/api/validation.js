@@ -49,4 +49,22 @@ router.put('/validation', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/clear-run-data
+ * Clears all GPT results and human validation tags for the given run.
+ * Body: { run_id }
+ */
+router.post('/clear-run-data', async (req, res) => {
+  const { run_id } = req.body;
+  if (!run_id) return res.status(400).json({ error: 'run_id is required' });
+
+  try {
+    const result = await dbLoader.clearRunData(parseInt(run_id, 10));
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('Failed to clear run data:', error);
+    res.status(500).json({ error: 'Failed to clear run data' });
+  }
+});
+
 module.exports = router;

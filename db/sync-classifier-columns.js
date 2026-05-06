@@ -58,12 +58,12 @@ async function main() {
     const idRes = await client.query(
       `SELECT column_name FROM information_schema.columns
        WHERE table_schema = $1 AND table_name = $2
-         AND column_name IN ('request_id', 'record_id')
-       ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+         AND column_name = 'request_id'
+       LIMIT 1`,
       [DB_SCHEMA, tableName]
     );
     if (idRes.rows.length === 0) {
-      console.warn(`  warning: no request_id/record_id column in "${tableName}", skipping`);
+      console.warn(`  warning: no request_id column in "${tableName}", skipping`);
       continue;
     }
     const idCol = idRes.rows[0].column_name;
@@ -74,7 +74,7 @@ async function main() {
       const sub1    = r.pred_subtype_1  || null;
       const sub2    = r.pred_subtype_2  || null;
       const missing = r.missing_subtype || null;
-      const rid     = r.request_id || r.record_id;
+      const rid     = r.request_id;
 
       const exists = await client.query(
         `SELECT 1 FROM "${tableName}" WHERE ${idCol} = $1 LIMIT 1`, [rid]

@@ -1,7 +1,7 @@
 /**
  * Migration: old schema → new schema
  *
- * Old: benchmarks, runs, leaderboard, run_results (flat)
+ * Old: runs, leaderboard, run_results (flat)
  * New: "leaderboard-table" + one table per run named YYYYMMDD-{run_id:04d}-benchmark_slug
  *
  * Usage:  node server/migrate-to-new-schema.js
@@ -26,10 +26,9 @@ async function migrate() {
 
   const runsResult = await query(`
     SELECT r.id, r.run_name, r.model_version, r.created_at,
-           b.name AS benchmark_name,
-           l.subtype_accuracy, l.benchmark_length
+           r.benchmark AS benchmark_name,
+           l.benchmark_length
     FROM runs r
-    JOIN benchmarks b ON r.benchmark_id = b.id
     JOIN leaderboard l ON l.run_id = r.id
     ORDER BY r.id
   `);
@@ -43,7 +42,6 @@ async function migrate() {
     CREATE TABLE "leaderboard-table" (
       run_id           TEXT PRIMARY KEY,
       nof_items        INTEGER,
-      subtype_accuracy NUMERIC(6,4),
       description      TEXT
     )
   `);
@@ -81,9 +79,9 @@ async function migrate() {
 
     // Insert leaderboard row
     await query(`
-      INSERT INTO "leaderboard-table" (run_id, nof_items, subtype_accuracy, description)
-      VALUES ($1, $2, $3, $4)
-    `, [tbl, run.benchmark_length, run.subtype_accuracy, run.run_name]);
+      INSERT INTO "leaderboard-table" (run_id, nof_items, description)
+      VALUES ($1, $2, $3)
+    `, [tbl, run.benchmark_length, run.run_name]);
   }
 
   console.log('\nMigration complete.');

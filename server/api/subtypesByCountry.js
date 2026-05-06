@@ -20,7 +20,11 @@ function countriesTextMatchesCountry(countriesValue, country) {
   if (text.includes(normalizedCountry)) return true;
 
   const baseCountry = normalizedCountry.split('_')[0];
-  return Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry);
+  if (Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry)) {
+    console.warn(`⚠ FALLBACK: country "${country}" not found in subtypes — matched via base country "${baseCountry}"`);
+    return true;
+  }
+  return false;
 }
 
 function load() {

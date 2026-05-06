@@ -14,7 +14,7 @@ async function main() {
 
   // Get runs in order (same logic as getRunIndex in db-loader.js)
   const result = await pool.query(
-    `SELECT run_id, nof_items, subtype_accuracy, description, benchmark
+    `SELECT run_id, nof_items, description, benchmark
      FROM "leaderboard-table"
      ORDER BY run_id ASC`
   );

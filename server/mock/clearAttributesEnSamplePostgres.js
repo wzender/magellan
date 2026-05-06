@@ -31,7 +31,7 @@ async function run() {
   // 1. run_results (old-style schema)
   try {
     const res = await query(
-      `UPDATE run_results SET en_attributes = NULL WHERE record_id = ANY($1)`,
+      `UPDATE run_results SET en_attributes = NULL WHERE request_id = ANY($1)`,
       [ids]
     );
     console.log(`✓ run_results: ${res.rowCount} rows cleared`);
@@ -57,11 +57,11 @@ async function run() {
       const colRes = await query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = current_schema() AND table_name = $1
-           AND column_name IN ('request_id','record_id')
-         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+           AND column_name = 'request_id'
+         LIMIT 1`,
         [tbl]
       );
-      if (colRes.rows.length === 0) { console.warn(`  ⚠ No id column for "${tbl}", skipping`); continue; }
+      if (colRes.rows.length === 0) { console.warn(`  ⚠ No request_id column for "${tbl}", skipping`); continue; }
       const idCol = colRes.rows[0].column_name;
       const res = await query(
         `UPDATE "${tbl}" SET en_attributes = NULL WHERE ${idCol} = ANY($1)`,

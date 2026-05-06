@@ -214,12 +214,6 @@ function ValueCountFilterDropdown({ values, options, onChange, allLabel = 'All v
   );
 }
 
-const VERDICTS = [
-  { value: 'justified', label: 'Justified', className: 'verdict-justified' },
-  { value: 'unjustified', label: 'Not Justified', className: 'verdict-unjustified' },
-  { value: 'unclear', label: 'Unclear', className: 'verdict-unclear' },
-];
-
 const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_subtype: [], true_subtype: [] };
 
 const GPT_VERDICT_CONFIG = {
@@ -679,7 +673,6 @@ function getJsonCellState(raw) {
 }
 
 function ValidationPanel({ runId, runName, country, countrySubtypes, records, verdicts, gridFilter, onClearGridFilter, onSetVerdict, onBulkVerdict, onGptResultsUpdated, publishState = 'idle', onPublishRetagged }) {
-  const isRetag = Boolean(country && countrySubtypes && countrySubtypes.length > 0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
@@ -687,7 +680,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [colFilters, setColFilters] = useState(EMPTY_COL_FILTERS);
   const deferredColFilters = useDeferredValue(colFilters);
   const [verdictFilter, setVerdictFilter] = useState('all');
-  const [selectedIds, setSelectedIds] = useState(new Set());
   const [attrLang, setAttrLang] = useState('original');
   const [metaLang, setMetaLang] = useState('original');
   const [toast, setToast] = useState(null);
@@ -697,6 +689,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const [gptRunning, setGptRunning] = useState(false);
   const [gptProgress, setGptProgress] = useState({ done: 0, total: 0 });
   const [clearingEmptyGpt, setClearingEmptyGpt] = useState(false);
+  const [clearingRunData, setClearingRunData] = useState(false);
   const [translateState, setTranslateState] = useState({ running: false, field: null, done: 0, total: 0 });
   const [translatedOverrides, setTranslatedOverrides] = useState({});
   const [askGptLoading, setAskGptLoading] = useState({});
@@ -728,7 +721,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   useEffect(() => {
     setCurrentPage(0);
-    setSelectedIds(new Set());
     setGptResults({});
     setGptRunning(false);
     setAskGptLoading({});
@@ -839,47 +831,43 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (verdictFilter !== 'all') {
-      if (verdictFilter === 'no_gpt_asked') {
-        next = next.filter(r => !gptResults[r.request_id]);
-      } else if (verdictFilter === 'unreviewed') {
-        next = next.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'untagged') {
+      if (verdictFilter === 'untagged') {
         next = next.filter(r => !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'only_missing') {
+      } else if (verdictFilter === 'only_missing') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v !== '' && v !== 'none' && v !== 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'only_unknown') {
+      } else if (verdictFilter === 'only_unknown') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v === '' || v === 'none' || v === 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'real_unknown') {
+      } else if (verdictFilter === 'real_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'real_missing') {
+      } else if (verdictFilter === 'real_missing') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'false_unknown') {
+      } else if (verdictFilter === 'false_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'gpt_error') {
+      } else if (verdictFilter === 'gpt_error') {
         next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
-      } else if (isRetag && verdictFilter === 'weak_signal') {
+      } else if (verdictFilter === 'weak_signal') {
         next = next.filter(r =>
           (r.pred_subtype_2 || '') === PS2_MISSING &&
           getGptResponseKind(gptResults[r.request_id]) === 'unknown'
         );
-      } else if (isRetag && verdictFilter === 'false_missing') {
+      } else if (verdictFilter === 'false_missing') {
         next = next.filter(r => {
           const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
           return isPredMissing && getGptResponseKind(gptResults[r.request_id]) === 'existing';
         });
-      } else if (isRetag && verdictFilter === 'truly_unknown') {
+      } else if (verdictFilter === 'truly_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+      } else if (verdictFilter === 'true_missing_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+      } else if (verdictFilter === 'missing_but_mappable') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'wrong_subtype') {
+      } else if (verdictFilter === 'wrong_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
       } else {
         next = next.filter(r => verdicts[r.request_id] === verdictFilter);
@@ -912,7 +900,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
-    isRetag,
     gptResults,
   ]);
 
@@ -944,47 +931,43 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (verdictFilter !== 'all') {
-      if (verdictFilter === 'no_gpt_asked') {
-        next = next.filter(r => !gptResults[r.request_id]);
-      } else if (verdictFilter === 'unreviewed') {
-        next = next.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'untagged') {
+      if (verdictFilter === 'untagged') {
         next = next.filter(r => !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'only_missing') {
+      } else if (verdictFilter === 'only_missing') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v !== '' && v !== 'none' && v !== 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'only_unknown') {
+      } else if (verdictFilter === 'only_unknown') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v === '' || v === 'none' || v === 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'real_unknown') {
+      } else if (verdictFilter === 'real_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'real_missing') {
+      } else if (verdictFilter === 'real_missing') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'false_unknown') {
+      } else if (verdictFilter === 'false_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'gpt_error') {
+      } else if (verdictFilter === 'gpt_error') {
         next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
-      } else if (isRetag && verdictFilter === 'weak_signal') {
+      } else if (verdictFilter === 'weak_signal') {
         next = next.filter(r =>
           (r.pred_subtype_2 || '') === PS2_MISSING &&
           getGptResponseKind(gptResults[r.request_id]) === 'unknown'
         );
-      } else if (isRetag && verdictFilter === 'false_missing') {
+      } else if (verdictFilter === 'false_missing') {
         next = next.filter(r => {
           const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
           return isPredMissing && getGptResponseKind(gptResults[r.request_id]) === 'existing';
         });
-      } else if (isRetag && verdictFilter === 'truly_unknown') {
+      } else if (verdictFilter === 'truly_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+      } else if (verdictFilter === 'true_missing_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+      } else if (verdictFilter === 'missing_but_mappable') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'wrong_subtype') {
+      } else if (verdictFilter === 'wrong_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
       } else {
         next = next.filter(r => verdicts[r.request_id] === verdictFilter);
@@ -1017,7 +1000,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
-    isRetag,
     gptResults,
   ]);
 
@@ -1056,47 +1038,43 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (verdictFilter !== 'all') {
-      if (verdictFilter === 'no_gpt_asked') {
-        next = next.filter(r => !gptResults[r.request_id]);
-      } else if (verdictFilter === 'unreviewed') {
-        next = next.filter(r => !gptResults[r.request_id] && !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'untagged') {
+      if (verdictFilter === 'untagged') {
         next = next.filter(r => !verdicts[r.request_id]);
-      } else if (isRetag && verdictFilter === 'only_missing') {
+      } else if (verdictFilter === 'only_missing') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v !== '' && v !== 'none' && v !== 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'only_unknown') {
+      } else if (verdictFilter === 'only_unknown') {
         next = next.filter(r => {
           const v = r.__missingSubtypeLower;
           return v === '' || v === 'none' || v === 'unknown';
         });
-      } else if (isRetag && verdictFilter === 'real_unknown') {
+      } else if (verdictFilter === 'real_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'real_missing') {
+      } else if (verdictFilter === 'real_missing') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'false_unknown') {
+      } else if (verdictFilter === 'false_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'gpt_error') {
+      } else if (verdictFilter === 'gpt_error') {
         next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
-      } else if (isRetag && verdictFilter === 'weak_signal') {
+      } else if (verdictFilter === 'weak_signal') {
         next = next.filter(r =>
           (r.pred_subtype_2 || '') === PS2_MISSING &&
           getGptResponseKind(gptResults[r.request_id]) === 'unknown'
         );
-      } else if (isRetag && verdictFilter === 'false_missing') {
+      } else if (verdictFilter === 'false_missing') {
         next = next.filter(r => {
           const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
           return isPredMissing && getGptResponseKind(gptResults[r.request_id]) === 'existing';
         });
-      } else if (isRetag && verdictFilter === 'truly_unknown') {
+      } else if (verdictFilter === 'truly_unknown') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
-      } else if (isRetag && verdictFilter === 'true_missing_subtype') {
+      } else if (verdictFilter === 'true_missing_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
-      } else if (isRetag && verdictFilter === 'missing_but_mappable') {
+      } else if (verdictFilter === 'missing_but_mappable') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
-      } else if (isRetag && verdictFilter === 'wrong_subtype') {
+      } else if (verdictFilter === 'wrong_subtype') {
         next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
       } else {
         next = next.filter(r => verdicts[r.request_id] === verdictFilter);
@@ -1156,7 +1134,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
-    isRetag,
     gptResults,
     sortConfig,
   ]);
@@ -1175,10 +1152,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   /* ── stats (single memoized pass) ── */
   const {
     total,
-    reviewed,
-    justifiedCount,
-    unjustifiedCount,
-    unclearCount,
     gptReviewedCount,
     retaggedCount,
     anyReviewedCount,
@@ -1191,10 +1164,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   } = useMemo(() => {
     const acc = {
       total: preparedRecords.length,
-      reviewed: 0,
-      justifiedCount: 0,
-      unjustifiedCount: 0,
-      unclearCount: 0,
       gptReviewedCount: 0,
       retaggedCount: 0,
       anyReviewedCount: 0,
@@ -1214,11 +1183,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
       const missing = r.__missingSubtypeLower;
 
       if (verdict) {
-        acc.reviewed++;
         acc.retaggedCount++;
-        if (verdict === 'justified') acc.justifiedCount++;
-        if (verdict === 'unjustified') acc.unjustifiedCount++;
-        if (verdict === 'unclear') acc.unclearCount++;
       } else {
         acc.untaggedCount++;
       }
@@ -1242,35 +1207,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
     return acc;
   }, [preparedRecords, verdicts, gptResults]);
-
-  /* ── bulk ── */
-  const allPageSelected = pageData.length > 0 && pageData.every(r => selectedIds.has(r.request_id));
-
-  const toggleSelectAll = () => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (allPageSelected) pageData.forEach(r => next.delete(r.request_id));
-      else pageData.forEach(r => next.add(r.request_id));
-      return next;
-    });
-  };
-
-  const toggleSelect = (requestId) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(requestId)) next.delete(requestId);
-      else next.add(requestId);
-      return next;
-    });
-  };
-
-  const handleBulkVerdict = (verdict) => {
-    if (selectedIds.size === 0) return;
-    const bulk = {};
-    selectedIds.forEach(id => { bulk[id] = verdict; });
-    onBulkVerdict(bulk);
-    setSelectedIds(new Set());
-  };
 
   /* ── sort ── */
   const handleSort = (key) => {
@@ -1638,6 +1574,28 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
   };
 
+  const handleClearRunData = async () => {
+    if (!runId) return;
+    if (!window.confirm('Clear ALL GPT results and human tags for this run? This cannot be undone.')) return;
+    setClearingRunData(true);
+    try {
+      const res = await fetch('/api/clear-run-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to clear run data');
+      setGptResults({});
+      if (onGptResultsUpdated) onGptResultsUpdated();
+      setToast(`Cleared ${data.gptCleared} GPT + ${data.humanCleared} human tags`);
+    } catch (err) {
+      setToast(`Clear failed: ${err.message || 'unknown error'}`);
+    } finally {
+      setClearingRunData(false);
+    }
+  };
+
   /* ── json rendering ── */
   const copyCellJson = (obj, label, cellKey) => {
     navigator.clipboard.writeText(JSON.stringify(obj, null, 2)).then(() => {
@@ -1728,16 +1686,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
 
   /* ── export ── */
   const doExport = (kind) => {
-    const headers = isRetag
-      ? ['request_id', 'pred_subtype_1', 'fewshots', 'gpt_verdict', 'gpt_reason', 'true_subtype', 'attributes', 'metadata']
-      : ['request_id', 'pred_type', 'pred_subtype', 'verdict', 'ask_gpt', 'attributes', 'metadata'];
+    const headers = ['request_id', 'pred_subtype_1', 'fewshots', 'gpt_verdict', 'gpt_reason', 'true_subtype', 'attributes', 'metadata'];
     const rows = filtered.map(r => {
-      const verdict = verdicts[r.request_id] || '';
       const gpt = gptResults[r.request_id];
       const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
-      return isRetag
-        ? [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), getGptResponseKind(gpt) || '', gpt?.reason || gpt?.text || '', verdicts[r.request_id] || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')]
-        : [r.request_id, r.pred_type, r.pred_subtype, verdict, getAskText(gpt), JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
+      return [r.request_id, stage1, (r.feshots || r.fewshots || []).join(', '), getGptResponseKind(gpt) || '', gpt?.reason || gpt?.text || '', verdicts[r.request_id] || '', JSON.stringify(r.attributes ?? ''), JSON.stringify(r.metadata ?? '')];
     });
 
     if (kind === 'csv') {
@@ -1767,17 +1720,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     <div className={`validation-panel row-level-table-panel row-height-${rowHeight}`} ref={panelRef}>
       {toast && <div className="copy-toast">{toast}</div>}
 
-      <div className={`validation-toolbar${isRetag ? ' validation-toolbar-retag' : ''}`} ref={toolbarRef}>
-        {/* Progress stats */}
-        {!isRetag && (
-          <div className="validation-stats">
-            <span className="validation-progress">{reviewed}/{total} reviewed</span>
-            <span className="validation-stat verdict-justified-bg">{justifiedCount} justified</span>
-            <span className="validation-stat verdict-unjustified-bg">{unjustifiedCount} not justified</span>
-            <span className="validation-stat verdict-unclear-bg">{unclearCount} unclear</span>
-          </div>
-        )}
-
+      <div className="validation-toolbar validation-toolbar-retag" ref={toolbarRef}>
         {hasGridFilter && (
           <div className="validation-grid-filter">
             <span className="validation-grid-filter-badge" title={gridFilterLabel}>
@@ -1794,166 +1737,101 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         )}
 
         {/* Filter */}
-        {isRetag ? (
-          <>
-            <div className="validation-verdict-tabs">
-              {[
-                { key: 'all',           label: 'all',           count: total,              title: 'All records in this run' },
-                { key: 'untagged',      label: 'Untagged',      count: untaggedCount,      title: 'Records that have not yet been assigned a true subtype by a human reviewer' },
-                { key: 'only_missing',  label: 'missing',       count: onlyMissingCount,   title: 'Records with a concrete missing subtype value (excluding empty/None/unknown)' },
-                { key: 'only_unknown',  label: 'unknowns',      count: onlyUnknownCount,   title: 'Records with missing subtype empty, None, or unknown' },
-                { key: 'false_unknown', label: 'False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
-                { key: 'false_missing', label: 'False Knowns',  count: falseMissingCount,  title: 'Records predicted as missing, but GPT judged them as belonging to an existing subtype' },
-                { key: 'gpt_error',     label: 'GPT errors',    count: gptErrorCount,      title: 'Records where GPT returned malformed or failed output and the review could not be parsed' },
-              ].map(t => (
-                <button
-                  key={t.key}
-                  title={t.title}
-                  className={`validation-verdict-tab${verdictFilter === t.key ? ' active' : ''}`}
-                  onClick={() => setVerdictFilter(t.key)}
-                >
-                  {t.label} <span className="validation-verdict-tab-count">{t.count}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="validation-filters">
-            <select
-              className="validation-verdict-filter"
-              value={verdictFilter}
-              onChange={e => setVerdictFilter(e.target.value)}
+        <div className="validation-verdict-tabs">
+          {[
+            { key: 'all',           label: 'all',           count: total,              title: 'All records in this run' },
+            { key: 'untagged',      label: 'Untagged',      count: untaggedCount,      title: 'Records that have not yet been assigned a true subtype by a human reviewer' },
+            { key: 'only_missing',  label: 'missing',       count: onlyMissingCount,   title: 'Records with a concrete missing subtype value (excluding empty/None/unknown)' },
+            { key: 'only_unknown',  label: 'unknowns',      count: onlyUnknownCount,   title: 'Records with missing subtype empty, None, or unknown' },
+            { key: 'false_unknown', label: 'False Unknowns', count: falseUnknownCount,  title: 'Classifier flagged these as low-signal unknowns, but GPT detected a recognisable content pattern — they may belong to an existing or mappable subtype' },
+            { key: 'false_missing', label: 'False Knowns',  count: falseMissingCount,  title: 'Records predicted as missing, but GPT judged them as belonging to an existing subtype' },
+            { key: 'gpt_error',     label: 'GPT errors',    count: gptErrorCount,      title: 'Records where GPT returned malformed or failed output and the review could not be parsed' },
+          ].map(t => (
+            <button
+              key={t.key}
+              title={t.title}
+              className={`validation-verdict-tab${verdictFilter === t.key ? ' active' : ''}`}
+              onClick={() => setVerdictFilter(t.key)}
             >
-              <option value="all">All</option>
-              <option value="no_gpt_asked">No GPT Asked</option>
-              <option value="unreviewed">Unreviewed</option>
-              <option value="justified">Justified</option>
-              <option value="unjustified">Not Justified</option>
-              <option value="unclear">Unclear</option>
-            </select>
-          </div>
-        )}
-
-        {/* Bulk actions — only for verdict mode */}
-        {!isRetag && selectedIds.size > 0 && (
-          <div className="validation-bulk">
-            <span className="validation-bulk-count">{selectedIds.size} selected</span>
-            {VERDICTS.map(v => (
-              <button key={v.value} className={`validation-bulk-btn ${v.className}`} onClick={() => handleBulkVerdict(v.value)}>
-                {v.label}
-              </button>
-            ))}
-            <button className="validation-bulk-btn validation-bulk-clear" onClick={() => setSelectedIds(new Set())}>Clear</button>
-          </div>
-        )}
+              {t.label} <span className="validation-verdict-tab-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Row height, export, ask gpt */}
-        {isRetag ? (
-          <>
-            <div className="row-height-control">
-              <span className="row-height-label">Row height:</span>
-              {ROW_HEIGHT_OPTIONS.map(opt => (
-                <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
-              ))}
-            </div>
-            <button
-              className="export-csv-btn ask-gpt-btn"
-              disabled={clearingEmptyGpt}
-              title="Delete empty GPT subtype values from this run"
-              onClick={handleClearEmptyGptSubtype}
-            >
-              {clearingEmptyGpt ? 'Deleting…' : 'Delete empty GPT subtype'}
-            </button>
-            <a
-              className="export-csv-btn ask-gpt-btn"
-              href={`/api/export-csv?run_id=${runId}`}
-              download
-              title="Download full run as CSV with updated true_subtype values"
-            >
-              CSV
-            </a>
-            <button
-              className="export-csv-btn ask-gpt-btn"
-              disabled={publishState === 'loading'}
-              title="Copy this run to Postgres as {name}_retagged"
-              onClick={onPublishRetagged}
-            >
-              {publishState === 'loading' ? 'POSTGRES…'
-                : publishState === 'done'    ? 'POSTGRES ✓'
-                : publishState === 'error'   ? 'POSTGRES ✗'
-                : 'POSTGRES'}
-            </button>
-            <button
-              className="export-csv-btn ask-gpt-btn"
-              onClick={() => handleBulkAcceptGpt(filtered)}
-              disabled={gptRunning || !hasAnyGptInFiltered}
-              title="Accept GPT suggestions for all reviewed records"
-            >
-              Accept GPT
-            </button>
-            <button
-              className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
-              onClick={() => askGptAll(filtered)}
-              disabled={gptRunning}
-            >
-              {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
-            </button>
-            {gptErrorCount > 0 && (
-              <button
-                className="export-csv-btn ask-gpt-btn ask-gpt-errors-btn"
-                onClick={() => askGptErrors(filtered)}
-                disabled={gptRunning}
-                title={`Re-run GPT for ${gptErrorCount} errored record(s)`}
-              >
-                Re-run Errors ({gptErrorCount})
-              </button>
-            )}
-            {gptRunning && (
-              <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
-                Cancel
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="validation-controls">
-            <div className="row-height-control">
-              <span className="row-height-label">Row height:</span>
-              {ROW_HEIGHT_OPTIONS.map(opt => (
-                <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
-              ))}
-            </div>
-            <button
-              className="export-csv-btn ask-gpt-btn"
-              onClick={() => handleBulkAcceptGpt(filtered)}
-              disabled={gptRunning || !hasAnyGptInFiltered}
-              title="Accept GPT suggestions for all reviewed records"
-            >
-              Accept GPT
-            </button>
-            <button
-              className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
-              onClick={() => askGptAll(filtered)}
-              disabled={gptRunning}
-            >
-              {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
-            </button>
-            {gptErrorCount > 0 && (
-              <button
-                className="export-csv-btn ask-gpt-btn ask-gpt-errors-btn"
-                onClick={() => askGptErrors(filtered)}
-                disabled={gptRunning}
-                title={`Re-run GPT for ${gptErrorCount} errored record(s)`}
-              >
-                Re-run Errors ({gptErrorCount})
-              </button>
-            )}
-            {gptRunning && (
-              <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
-                Cancel
-              </button>
-            )}
+        <>
+          <div className="row-height-control">
+            <span className="row-height-label">Row height:</span>
+            {ROW_HEIGHT_OPTIONS.map(opt => (
+              <button key={opt} className={`row-height-btn${rowHeight === opt ? ' active' : ''}`} onClick={() => setRowHeight(opt)}>{opt}</button>
+            ))}
           </div>
-        )}
+          <button
+            className="export-csv-btn ask-gpt-btn"
+            disabled={clearingEmptyGpt}
+            title="Delete empty GPT subtype values from this run"
+            onClick={handleClearEmptyGptSubtype}
+          >
+            {clearingEmptyGpt ? 'Deleting…' : 'Delete empty GPT subtype'}
+          </button>
+          <button
+            className="export-csv-btn ask-gpt-btn"
+            disabled={clearingRunData}
+            title="Clear all GPT results and human tags for this run"
+            onClick={handleClearRunData}
+          >
+            {clearingRunData ? 'Clearing…' : 'Clear All Data'}
+          </button>
+          <a
+            className="export-csv-btn ask-gpt-btn"
+            href={`/api/export-csv?run_id=${runId}`}
+            download
+            title="Download full run as CSV with updated true_subtype values"
+          >
+            CSV
+          </a>
+          <button
+            className="export-csv-btn ask-gpt-btn"
+            disabled={publishState === 'loading'}
+            title="Copy this run to Postgres as {name}_retagged"
+            onClick={onPublishRetagged}
+          >
+            {publishState === 'loading' ? 'POSTGRES…'
+              : publishState === 'done'    ? 'POSTGRES ✓'
+              : publishState === 'error'   ? 'POSTGRES ✗'
+              : 'POSTGRES'}
+          </button>
+          <button
+            className="export-csv-btn ask-gpt-btn"
+            onClick={() => handleBulkAcceptGpt(filtered)}
+            disabled={gptRunning || !hasAnyGptInFiltered}
+            title="Accept GPT suggestions for all reviewed records"
+          >
+            Accept GPT
+          </button>
+          <button
+            className={`export-csv-btn ask-gpt-btn${gptRunning ? ' loading' : ''}`}
+            onClick={() => askGptAll(filtered)}
+            disabled={gptRunning}
+          >
+            {gptRunning ? `GPT ${gptProgress.done}/${gptProgress.total}…` : 'Ask GPT'}
+          </button>
+          {gptErrorCount > 0 && (
+            <button
+              className="export-csv-btn ask-gpt-btn ask-gpt-errors-btn"
+              onClick={() => askGptErrors(filtered)}
+              disabled={gptRunning}
+              title={`Re-run GPT for ${gptErrorCount} errored record(s)`}
+            >
+              Re-run Errors ({gptErrorCount})
+            </button>
+          )}
+          {gptRunning && (
+            <button className="export-csv-btn ask-gpt-cancel-btn" onClick={() => { gptCancelledRef.current = true; }}>
+              Cancel
+            </button>
+          )}
+        </>
       </div>
 
       {/* Table */}
@@ -1961,8 +1839,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         <table className="validation-table records-table">
           <thead>
             {/* Column headers */}
-            {isRetag ? (
-              <tr>
+            <tr>
                 <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
                   Request ID{sortIndicator('request_id')}
                 </th>
@@ -2038,85 +1915,16 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   </div>
                 </th>
               </tr>
-            ) : (
-              <tr>
-                <th style={{ width: 40 }}>
-                  <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} />
-                </th>
-                <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
-                  Request ID{sortIndicator('request_id')}
-                </th>
-                <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('pred_subtype_1')}>
-                  Pred Subtype 1{sortIndicator('pred_subtype_1')}
-                </th>
-                <th style={{ width: 250 }}>
-                  <div className="header-cell">
-                    Attributes
-                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                      <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
-                      <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
-                      <button
-                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'attributes' ? ' active' : ''}`}
-                        onClick={() => translateFilteredField('attributes')}
-                        disabled={translateState.running}
-                        title="Translate filtered Attributes with GPT"
-                      >
-                        {translateState.running && translateState.field === 'attributes'
-                          ? `GPT ${translateState.done}/${translateState.total}`
-                          : 'GPT'}
-                      </button>
-                    </div>
-                  </div>
-                </th>
-                <th style={{ width: 250 }}>
-                  <div className="header-cell">
-                    Metadata
-                    <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
-                      <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
-                      <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
-                      <button
-                        className={`attr-lang-btn attr-lang-gpt-btn${translateState.running && translateState.field === 'metadata' ? ' active' : ''}`}
-                        onClick={() => translateFilteredField('metadata')}
-                        disabled={translateState.running}
-                        title="Translate filtered Metadata with GPT"
-                      >
-                        {translateState.running && translateState.field === 'metadata'
-                          ? `GPT ${translateState.done}/${translateState.total}`
-                          : 'GPT'}
-                      </button>
-                    </div>
-                  </div>
-                </th>
-                <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                  Verdict{sortIndicator('verdict')}
-                </th>
-                <th style={{ width: 320, cursor: 'pointer' }} onClick={() => handleSort('ask_gpt')}>
-                  Ask GPT{sortIndicator('ask_gpt')}
-                </th>
-              </tr>
-            )}
             {/* Column filters */}
-            {isRetag ? (
-              <tr className="col-filter-row">
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
-                <th />
-                <th />
-                <th />
-                <th />
-              </tr>
-            ) : (
-              <tr className="col-filter-row">
-                <th />
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.pred_subtype} onChange={e => setColFilter('pred_subtype', e.target.value)} /></th>
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
-                <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
-                <th />
-                <th />
-              </tr>
-            )}
+            <tr className="col-filter-row">
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
+              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
+              <th />
+              <th />
+              <th />
+              <th />
+            </tr>
           </thead>
           <tbody>
             {pageData.map(r => {
@@ -2150,95 +1958,55 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                 : r.metadata;
               const stage1 = r.pred_subtype_1 || r.pred_subtype || '';
 
-              if (isRetag) {
-                return (
-                  <tr key={r.request_id}>
-                    <td className="cell-request-id">{r.request_id}</td>
-                    <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
-                    <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
-                    <td>{String(r.missing_subtype || '').trim() || 'None'}</td>
-                    <td className="cell-gpt-verdict">
-                      {gptDisplayObject ? renderExpandableResultFields(gptDisplayObject, 'GPT Verdict') : <div className="json-empty">(empty)</div>}
-                      <button
-                        className="ask-gpt-row-btn"
-                        disabled={Boolean(askGptLoading[r.request_id])}
-                        onClick={e => { e.stopPropagation(); askGptForRecord(r); }}
-                      >
-                        {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
-                      </button>
-                    </td>
-                    <td className="cell-gpt-subtype">
-                      {gptSubtypeText ? (
-                        <button
-                          type="button"
-                          className={`gpt-subtype-pill is-${gptSubtypeLegendClass}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
-                          disabled={!canAcceptGpt}
-                          onClick={() => {
-                            if (!canAcceptGpt) return;
-                            if (gptSuggestedVerdict === 'Missing') {
-                              onSetVerdict(r.request_id, 'Missing');
-                              return;
-                            }
-                            onSetVerdict(r.request_id, isGptAccepted ? '' : gptSuggestedVerdict);
-                          }}
-                          title={canAcceptGpt
-                            ? isGptAccepted
-                              ? 'GPT subtype is applied. Click to clear it.'
-                              : `Click to apply GPT subtype: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt?.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
-                            : 'No GPT review available'}
-                        >
-                          {gptSubtypeText}
-                        </button>
-                      ) : (
-                        <span className="gpt-subtype-pill is-empty">—</span>
-                      )}
-                    </td>
-                    <td className="cell-verdict cell-retag">
-                      <ValidationRecordDecisionControls
-                        requestId={r.request_id}
-                        verdict={verdict}
-                        countrySubtypes={countrySubtypes}
-                        onSetVerdict={onSetVerdict}
-                      />
-                    </td>
-                  </tr>
-                );
-              }
-
               return (
-                <tr key={r.request_id} className={verdict ? `validation-row-${verdict}` : ''}>
-                  <td>
-                    <input type="checkbox" checked={selectedIds.has(r.request_id)} onChange={() => toggleSelect(r.request_id)} />
-                  </td>
+                <tr key={r.request_id}>
                   <td className="cell-request-id">{r.request_id}</td>
-                  <td><strong>{stage1}</strong></td>
                   <td className="cell-json">{renderPrettyJson(attrData, `attr-${r.request_id}`, 'Attributes')}</td>
                   <td className="cell-json">{renderPrettyJson(metaData, `meta-${r.request_id}`, 'Metadata')}</td>
-                  <td className="cell-verdict">
-                    <div className="verdict-buttons">
-                      {VERDICTS.map(v => (
-                        <button
-                          key={v.value}
-                          className={`verdict-btn ${v.className}${verdict === v.value ? ' active' : ''}`}
-                          onClick={() => onSetVerdict(r.request_id, verdict === v.value ? '' : v.value)}
-                          title={v.label}
-                        >
-                          {v.value === 'justified' ? '✓' : v.value === 'unjustified' ? '✗' : '?'}
-                        </button>
-                      ))}
-                    </div>
+                  <td>{String(r.missing_subtype || '').trim() || 'None'}</td>
+                  <td className="cell-gpt-verdict">
+                    {gptDisplayObject ? renderExpandableResultFields(gptDisplayObject, 'GPT Verdict') : <div className="json-empty">(empty)</div>}
+                    <button
+                      className="ask-gpt-row-btn"
+                      disabled={Boolean(askGptLoading[r.request_id])}
+                      onClick={e => { e.stopPropagation(); askGptForRecord(r); }}
+                    >
+                      {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
+                    </button>
                   </td>
-                  <td className="ask-gpt-td">
-                    <div className="ask-gpt-cell">
-                      <div className="ask-gpt-placeholder">{getAskText(gpt)}</div>
+                  <td className="cell-gpt-subtype">
+                    {gptSubtypeText ? (
                       <button
-                        className="ask-gpt-row-btn"
-                        disabled={Boolean(askGptLoading[r.request_id])}
-                        onClick={e => { e.stopPropagation(); askGptForRecord(r); }}
+                        type="button"
+                        className={`gpt-subtype-pill is-${gptSubtypeLegendClass}${canAcceptGpt ? ' is-clickable' : ''}${isGptAccepted ? ' is-applied' : ''}`}
+                        disabled={!canAcceptGpt}
+                        onClick={() => {
+                          if (!canAcceptGpt) return;
+                          if (gptSuggestedVerdict === 'Missing') {
+                            onSetVerdict(r.request_id, 'Missing');
+                            return;
+                          }
+                          onSetVerdict(r.request_id, isGptAccepted ? '' : gptSuggestedVerdict);
+                        }}
+                        title={canAcceptGpt
+                          ? isGptAccepted
+                            ? 'GPT subtype is applied. Click to clear it.'
+                            : `Click to apply GPT subtype: ${gptSuggestedVerdict === 'unknown' ? 'unknown (weak signal)' : gptSuggestedVerdict === 'Missing' ? `missing – "${String(gpt?.suggestedMissingSubtype || '').trim()}"` : gptSuggestedVerdict}`
+                          : 'No GPT review available'}
                       >
-                        {askGptLoading[r.request_id] ? 'Asking…' : 'Ask GPT'}
+                        {gptSubtypeText}
                       </button>
-                    </div>
+                    ) : (
+                      <span className="gpt-subtype-pill is-empty">—</span>
+                    )}
+                  </td>
+                  <td className="cell-verdict cell-retag">
+                    <ValidationRecordDecisionControls
+                      requestId={r.request_id}
+                      verdict={verdict}
+                      countrySubtypes={countrySubtypes}
+                      onSetVerdict={onSetVerdict}
+                    />
                   </td>
                 </tr>
               );

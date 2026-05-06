@@ -98,7 +98,7 @@ To provide an all-in-one, modern dashboard for robust evaluation, benchmarking, 
 
 **CSV (primary)**
 
-- `data/leaderboard.csv` — one row per run: `benchmark_id`, `benchmark_name`, `run_name`, `model_name`, `subtype_accuracy`, `subtype_f1_weighted`, `run_date`
+- `data/leaderboard.csv` — one row per run: `benchmark_id`, `benchmark_name`, `run_name`, `model_name`, `subtype_weighted_f1`, `type_weighted_f1`, `run_date`
 - `data/runs/{benchmark_id}_{run_name}.csv` — per-run prediction records: `benchmark_id`, `rec_id`, `true_type`, `true_subtype`, `pred_type`, `pred_subtype`, `attributes` (JSON), `metadata` (JSON)
 - All CSV data is parsed and cached in memory on server startup; `attributes` and `metadata` are parsed from JSON strings at load time
 

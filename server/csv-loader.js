@@ -32,7 +32,11 @@ function countriesTextMatchesCountry(countriesValue, country) {
   if (text.includes(normalizedCountry)) return true;
 
   const baseCountry = normalizedCountry.split('_')[0];
-  return Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry);
+  if (Boolean(baseCountry) && baseCountry !== normalizedCountry && text.includes(baseCountry)) {
+    console.warn(`⚠ FALLBACK: country "${country}" not found in subtypes — matched via base country "${baseCountry}"`);
+    return true;
+  }
+  return false;
 }
 
 // Builds { all: Set<string>, rows: Array<{ subtype, countriesText }> } from Subtypes.xlsx
@@ -99,7 +103,11 @@ function tryParseJson(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch {
-    try { return JSON.parse(value.replace(/'/g, '"')); } catch { return value; }
+    try {
+      const parsed = JSON.parse(value.replace(/'/g, '"'));
+      console.warn(`⚠ FALLBACK: JSON field had single-quotes instead of double-quotes — auto-fixed`);
+      return parsed;
+    } catch { return value; }
   }
 }
 
@@ -147,7 +155,6 @@ function loadData() {
       benchmark_id:        benchmarkId,
       run_name:            row.run_name,
       model_version:       row.model_name,
-      subtype_accuracy:    parseFloat(row.subtype_accuracy),
       subtype_weighted_f1: parseFloat(row.subtype_weighted_f1),
       type_weighted_f1:    parseFloat(row.type_weighted_f1),
       benchmark_length:    0,

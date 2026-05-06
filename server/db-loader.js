@@ -5,13 +5,13 @@
  * Schema
  * ------
  * "leaderboard-table" columns:
- *   run_id (text, the actual run table name), nof_items, subtype_accuracy,
- *   subtype_weighted_f1,
+ *   run_id (text, the actual run table name), nof_items,
+ *   subtype_weighted_f1, type_weighted_f1,
  *   description, benchmark (text, explicit benchmark name)
  *
  * Per-run tables named: "{YYYYMMDD}-{HHMM}-{benchmark_name}"
  *   e.g. "20261230-1445-Test-benchmark"
- *   columns: request_id or record_id, true_type, true_subtype, pred_type,
+ *   columns: request_id, true_type, true_subtype, pred_type,
  *            pred_subtype,
  *            attributes, metadata
  *
@@ -37,7 +37,11 @@ function tryParseJson(value) {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string') return value;
   try { return JSON.parse(value); } catch {
-    try { return JSON.parse(value.replace(/'/g, '"')); } catch { return value; }
+    try {
+      const parsed = JSON.parse(value.replace(/'/g, '"'));
+      console.warn(`⚠ FALLBACK: JSON field had single-quotes instead of double-quotes — auto-fixed`);
+      return parsed;
+    } catch { return value; }
   }
 }
 
@@ -153,14 +157,13 @@ async function getIdColumn(tableName) {
      FROM information_schema.columns
      WHERE table_schema = current_schema()
        AND table_name = $1
-       AND column_name IN ('request_id', 'record_id')
-     ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END
+       AND column_name = 'request_id'
      LIMIT 1`,
     [tableName]
   );
 
   if (result.rows.length === 0) {
-    throw new Error(`No request identifier column found for table "${tableName}"`);
+    throw new Error(`No request_id column found for table "${tableName}"`);
   }
 
   const columnName = result.rows[0].column_name;
@@ -195,7 +198,7 @@ async function getRunIndex() {
   try {
     // Try new column names first
     result = await query(
-      `SELECT run_id, nof_items, subtype_accuracy, subtype_weighted_f1, type_weighted_f1, description, benchmark
+      `SELECT run_id, nof_items, subtype_weighted_f1, type_weighted_f1, description, benchmark, layer
        FROM "leaderboard-table"
        ORDER BY run_id ASC`
     );
@@ -206,20 +209,22 @@ async function getRunIndex() {
       // Try old column names with type_f1_weighted
       columnMapping = { subtype: 'subtype_f1_weighted', type: 'type_f1_weighted' };
       result = await query(
-        `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, type_f1_weighted, description, benchmark
+        `SELECT run_id, nof_items, subtype_f1_weighted, type_f1_weighted, description, benchmark, layer
          FROM "leaderboard-table"
          ORDER BY run_id ASC`
       );
+      console.warn('⚠ FALLBACK: leaderboard-table missing columns subtype_weighted_f1/type_weighted_f1 — using subtype_f1_weighted/type_f1_weighted');
     } catch (err2) {
       if (err2.code !== '42703') throw err2;
       
       // Final fallback: old column names without type_f1_weighted
       columnMapping = { subtype: 'subtype_f1_weighted', type: null };
       result = await query(
-        `SELECT run_id, nof_items, subtype_accuracy, subtype_f1_weighted, description, benchmark
+        `SELECT run_id, nof_items, subtype_f1_weighted, description, benchmark, layer
          FROM "leaderboard-table"
          ORDER BY run_id ASC`
       );
+      console.warn('⚠ FALLBACK: leaderboard-table missing columns subtype_weighted_f1/type_weighted_f1/type_f1_weighted — using subtype_f1_weighted only (no type metric)');
     }
   }
 
@@ -238,7 +243,7 @@ async function getRunIndex() {
   result.rows.forEach((row, i) => {
     const syntheticRunId = i + 1;
     const tableName      = row.run_id;
-    const benchmarkName  = row.benchmark || row.run_id.replace(/^\d{8}-\d{4}-/, '').replace(/-/g, ' ');
+    const benchmarkName  = row.benchmark || (() => { console.warn(`⚠ FALLBACK: run_id="${row.run_id}" has no benchmark column — deriving name from run_id`); return row.run_id.replace(/^\d{8}-\d{4}-/, '').replace(/-/g, ' '); })();
 
     if (!seenBenchmarks.has(benchmarkName)) {
       const newId = seenBenchmarks.size + 1;
@@ -254,6 +259,7 @@ async function getRunIndex() {
       benchmark_name: benchmarkName,
       run_name:      tableName,
       model_version: row.description || '',
+      layer:         row.layer || '',
     });
 
     // Map old column names to new column names for compatibility
@@ -266,11 +272,11 @@ async function getRunIndex() {
       benchmark_id:        benchmarkId,
       run_name:            tableName,
       model_version:       row.description || '',
-      subtype_accuracy:    parseFloat(row.subtype_accuracy) || 0,
       subtype_weighted_f1: subtypeWeightedF1,
       type_weighted_f1:    typeWeightedF1,
       benchmark_length:    parseInt(row.nof_items) || 0,
       table_exists:        existingTables.has(tableName),
+      layer:               row.layer || '',
     });
   });
 
@@ -778,8 +784,8 @@ async function updateTranslation(requestId, attrsEn) {
       const colRes = await query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = current_schema() AND table_name = $1
-           AND column_name IN ('request_id','record_id')
-         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+           AND column_name = 'request_id'
+         LIMIT 1`,
         [tbl]
       );
       if (colRes.rows.length === 0) return;
@@ -792,7 +798,7 @@ async function updateTranslation(requestId, attrsEn) {
 
   // Legacy run_results table (best-effort — silence missing-table noise)
   try {
-    await pool.query(`UPDATE run_results SET en_attributes = $1 WHERE record_id = $2`, [json, requestId]);
+    await pool.query(`UPDATE run_results SET en_attributes = $1 WHERE request_id = $2`, [json, requestId]);
   } catch { /* table may not exist in this schema */ }
 }
 
@@ -813,8 +819,8 @@ async function updateMetadataTranslation(requestId, metaEn) {
       const colRes = await query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = current_schema() AND table_name = $1
-           AND column_name IN ('request_id','record_id')
-         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+           AND column_name = 'request_id'
+         LIMIT 1`,
         [tbl]
       );
       if (colRes.rows.length === 0) return;
@@ -826,7 +832,7 @@ async function updateMetadataTranslation(requestId, metaEn) {
   }));
 
   try {
-    await pool.query(`UPDATE run_results SET en_metadata = $1 WHERE record_id = $2`, [json, requestId]);
+    await pool.query(`UPDATE run_results SET en_metadata = $1 WHERE request_id = $2`, [json, requestId]);
   } catch { /* table may not exist in this schema */ }
 }
 
@@ -1471,6 +1477,22 @@ async function getMissingSubtypeGroups(runId) {
     .sort((a, b) => b.count - a.count);
 }
 
+async function clearRunData(runId) {
+  const { runs } = await getRunIndex();
+  const run = runById(runs, runId);
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  const tbl = run.run_name;
+  const [gptResult, humanResult] = await Promise.all([
+    query(`UPDATE "${tbl}" SET gpt_verdict = NULL, gpt_reasoning = NULL, gpt_subtype = NULL
+           WHERE gpt_verdict IS NOT NULL OR gpt_reasoning IS NOT NULL OR gpt_subtype IS NOT NULL`),
+    query(`UPDATE "${tbl}" SET true_subtype = ''
+           WHERE true_subtype IS NOT NULL AND true_subtype <> ''
+             AND (pred_subtype_2 IS NULL OR LOWER(TRIM(pred_subtype_2)) IN ('${PS2_UNKNOWN}', '${PS2_MISSING}'))`),
+  ]);
+  return { gptCleared: gptResult.rowCount || 0, humanCleared: humanResult.rowCount || 0 };
+}
+
 module.exports = {
   getAllBenchmarks,
   getBenchmark,
@@ -1487,6 +1509,7 @@ module.exports = {
   updateMetadataTranslation,
   getValidationValues,
   updateTrueSubtypes,
+  clearRunData,
   getTypeHealthSummary,
   getSubtypeConfusionMatrix,
   getCompareTypeHealth,

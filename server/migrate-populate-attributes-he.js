@@ -93,11 +93,11 @@ async function migrate() {
       const colRes = await query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = current_schema() AND table_name = $1
-           AND column_name IN ('request_id','record_id')
-         ORDER BY CASE column_name WHEN 'request_id' THEN 0 ELSE 1 END LIMIT 1`,
+           AND column_name = 'request_id'
+         LIMIT 1`,
         [tbl]
       );
-      if (colRes.rows.length === 0) { console.warn(`  ⚠ No id column for "${tbl}", skipping`); continue; }
+      if (colRes.rows.length === 0) { console.warn(`  ⚠ No request_id column for "${tbl}", skipping`); continue; }
       await migrateTable(tbl, colRes.rows[0].column_name);
     } catch (err) {
       if (err.code === '42P01') console.warn(`  ⚠ Table "${tbl}" not found, skipping`);

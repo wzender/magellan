@@ -57,8 +57,7 @@ async function reseedRun({ benchmarkName, runName, subtypeAccuracy }) {
   const runRes = await query(
     `SELECT r.id AS run_id
      FROM runs r
-     JOIN benchmarks b ON b.id = r.benchmark_id
-     WHERE b.name = $1 AND r.run_name = $2
+     WHERE r.benchmark = $1 AND r.run_name = $2
      LIMIT 1`,
     [benchmarkName, runName]
   );
@@ -110,15 +109,13 @@ async function reseedRun({ benchmarkName, runName, subtypeAccuracy }) {
   // Recompute and update leaderboard
   const { accuracy, f1 } = calculateMetrics(updated);
   await query(
-    `UPDATE leaderboard SET
-       subtype_accuracy    = $1,
-       subtype_weighted_f1 = $2,
-       benchmark_length    = $3
-     WHERE run_id = $4`,
-    [accuracy, f1, updated.length, runId]
+    `UPDATE "leaderboard-table" SET
+       subtype_weighted_f1 = $1
+     WHERE run_id = $2`,
+    [f1, runId]
   );
 
-  console.log(`✓ ${benchmarkName} / ${runName}: accuracy=${accuracy}  f1=${f1}  (target=${subtypeAccuracy})`);
+  console.log(`✓ ${benchmarkName} / ${runName}: f1=${f1}  (target=${subtypeAccuracy})`);
 }
 
 (async () => {

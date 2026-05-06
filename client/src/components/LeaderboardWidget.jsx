@@ -160,13 +160,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
   const unknownsSummary = isUnknowns
     ? summaryRows.reduce((acc, row) => {
       const unknownsTotal = row.benchmark_length || 0;
-      const missingTotal = row.missing_candidates_total ?? 0;
-      const total = unknownsTotal + missingTotal;
-      const unknownsReviewed = row.reviewed_count || 0;
-      const missingReviewed = row.missing_candidates_total != null
-        ? (row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)
-        : 0;
-      const reviewed = unknownsReviewed + missingReviewed;
+      const total = unknownsTotal;
+      const reviewed = row.reviewed_count || 0;
       const existing = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
       const missingTag = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
       const unknownTag = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
@@ -259,13 +254,8 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               const date = parseRunDate(row.run_name);
               const country = extractCountryName(row.run_name);
               const unknownsTotal    = row.benchmark_length || 0;
-              const missingTotal     = row.missing_candidates_total ?? 0;
-              const total            = unknownsTotal + missingTotal;
-              const unknownsReviewed = row.reviewed_count || 0;
-              const missingReviewed  = row.missing_candidates_total != null
-                ? (row.missing_candidates_total ?? 0) - (row.missing_candidates_unreviewed ?? 0)
-                : 0;
-              const reviewed         = unknownsReviewed + missingReviewed;
+              const total            = unknownsTotal;
+              const reviewed         = row.reviewed_count || 0;
               const existing         = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
               const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
               const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
@@ -273,7 +263,7 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
               const gptUnknownAgreeBase = row.unknowns_count ?? unknownsTotal;
               const hastyUnknown     = row.hasty_unknown_count ?? 0;
               const falseMissingGpt  = row.false_missing_gpt_count ?? 0;
-              const missingBase      = row.missing_count ?? missingTotal;
+              const missingBase      = row.missing_count ?? (row.missing_candidates_total ?? 0);
               const isSelected       = selectedRuns[0] === row.run_id;
               return (
                 <tr

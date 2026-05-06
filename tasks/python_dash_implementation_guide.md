@@ -191,11 +191,9 @@ LEADERBOARD_COLUMNS = [
     {"name": "Run",                 "id": "run_name"},
     {"name": "Model Version",       "id": "model_version"},
     {"name": "Date",                "id": "date_display"},       # pre-formatted DD/MM/YYYY + relative
-    {"name": "Subtype Acc",         "id": "subtype_accuracy",   "type": "numeric",
-     "format": dash_table.FormatTemplate.percentage(1)},
-    {"name": "Subtype F1",          "id": "subtype_f1_weighted","type": "numeric",
+    {"name": "Subtype F1",          "id": "subtype_weighted_f1","type": "numeric",
      "format": dash_table.Format(precision=4, scheme=dash_table.Format.Scheme.fixed)},
-    {"name": "Type F1",             "id": "type_f1_weighted",   "type": "numeric",
+    {"name": "Type F1",             "id": "type_weighted_f1",   "type": "numeric",
      "format": dash_table.Format(precision=4, scheme=dash_table.Format.Scheme.fixed)},
     {"name": "Size",                "id": "benchmark_length",   "type": "numeric"},
 ]
