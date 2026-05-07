@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 const JSON_KEYS = ['attributes', 'en_attributes', 'metadata', 'en_metadata'];
-const NON_FILTER_SORT_KEYS = new Set(['ask_gpt']);
+const NON_FILTER_SORT_KEYS = new Set([]);
 
-function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, runId = null }) {
+function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run1Name = 'Run 1', run2Name = 'Run 2', onExport, onAddToRetag, retagIds, runId = null, gptResults = null, onAskGpt = null, askGptLoading = null }) {
   const [currentPage, setCurrentPage] = useState(0);
+  const [gptFilter, setGptFilter] = useState('all'); // 'all' | 'has_gpt' | 'no_gpt' | 'gpt_disagrees'
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [pageSize, setPageSize] = useState(20);
   const [rowHeight, setRowHeight] = useState('3');
@@ -22,8 +23,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { label: 'Actual', colspan: 2, isGroup: true },
             { label: run1Label, colspan: 2, isGroup: true },
             { label: run2Label, colspan: 2, isGroup: true },
-            { label: 'Details', colspan: 2, isGroup: true },
-            { label: 'LLM', colspan: 1, isGroup: true }
+            { label: 'Details', colspan: 2, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
@@ -34,8 +34,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'run2_pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'run2_pred_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false },
-            { key: 'ask_gpt', label: 'Ask GPT', width: 260, isGroup: false }
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
           ]
         ],
         columns: [
@@ -47,19 +46,30 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'run2_pred_type', label: 'Predicted Type', width: 100 },
           { key: 'run2_pred_subtype', label: 'Predicted Subtype', width: 120 },
           { key: 'attributes', label: 'Attributes', width: '25vw' },
-          { key: 'metadata', label: 'Metadata', width: '25vw' },
-          { key: 'ask_gpt', label: 'Ask GPT', width: 260 }
+          { key: 'metadata', label: 'Metadata', width: '25vw' }
         ]
       };
     } else {
+      const hasGpt = !!onAskGpt;
+      const gptHeaderCols = hasGpt ? [
+        { label: 'GPT', colspan: 2, isGroup: true }
+      ] : [];
+      const gptSubHeaderCols = hasGpt ? [
+        { key: 'gpt_subtype', label: 'GPT Subtype', width: 130, isGroup: false },
+        { key: 'gpt_actions', label: '', width: 80, isGroup: false }
+      ] : [];
+      const gptCols = hasGpt ? [
+        { key: 'gpt_subtype', label: 'GPT Subtype', width: 130 },
+        { key: 'gpt_actions', label: 'Ask GPT', width: 80 }
+      ] : [];
       return {
         headerRows: [
           [
             { label: '', colspan: 1, isGroup: false },
             { label: 'Actual', colspan: 2, isGroup: true },
             { label: 'Predicted', colspan: 2, isGroup: true },
-            { label: 'Details', colspan: 2, isGroup: true },
-            { label: 'LLM', colspan: 1, isGroup: true }
+            ...gptHeaderCols,
+            { label: 'Details', colspan: 2, isGroup: true }
           ],
           [
             { key: 'request_id', label: 'Request ID', width: 100, isGroup: false },
@@ -67,9 +77,9 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             { key: 'true_subtype', label: 'Subtype', width: 120, isGroup: false },
             { key: 'pred_type', label: 'Type', width: 100, isGroup: false },
             { key: 'pred_subtype', label: 'Subtype', width: 120, isGroup: false },
+            ...gptSubHeaderCols,
             { key: 'attributes', label: 'Attributes', width: '25vw', isGroup: false },
-            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false },
-            { key: 'ask_gpt', label: 'Ask GPT', width: 260, isGroup: false }
+            { key: 'metadata', label: 'Metadata', width: '25vw', isGroup: false }
           ]
         ],
         columns: [
@@ -78,9 +88,9 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
           { key: 'true_subtype', label: 'Actual Subtype', width: 120 },
           { key: 'pred_type', label: 'Predicted Type', width: 100 },
           { key: 'pred_subtype', label: 'Predicted Subtype', width: 120 },
+          ...gptCols,
           { key: 'attributes', label: 'Attributes', width: '25vw' },
-          { key: 'metadata', label: 'Metadata', width: '25vw' },
-          { key: 'ask_gpt', label: 'Ask GPT', width: 260 }
+          { key: 'metadata', label: 'Metadata', width: '25vw' }
         ]
       };
     }
@@ -90,7 +100,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
 
   useEffect(() => {
     setColumns(getDefaultColumns(showRun2Columns, run1Name, run2Name));
-  }, [showRun2Columns, run1Name, run2Name]);
+  }, [showRun2Columns, run1Name, run2Name, onAskGpt]);
 
   useEffect(() => {
     setCurrentPage(0);
@@ -99,28 +109,6 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     setColumnFilters({});
     setExpandedJsonCells({});
   }, [data]);
-
-  useEffect(() => {
-    if (!runId) {
-      setAskGptByRequest({});
-      return;
-    }
-    fetch(`/api/gpt-results?run_id=${runId}`)
-      .then(r => r.json())
-      .then(saved => {
-        const mapped = {};
-        Object.entries(saved || {}).forEach(([requestId, value]) => {
-          mapped[requestId] = {
-            text: '',
-            subtype: value?.verdict || null,
-            reason: value?.reasoning || null,
-            error: null,
-          };
-        });
-        setAskGptByRequest(mapped);
-      })
-      .catch(() => setAskGptByRequest({}));
-  }, [runId]);
 
   const [attrLang, setAttrLang] = useState('original');
   const [metaLang, setMetaLang] = useState('original');
@@ -132,8 +120,6 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
   const [copiedCell, setCopiedCell] = useState(null);
   const [exporting, setExporting] = useState(false); // 'csv' | 'excel' | false
   const [addingAllToRetag, setAddingAllToRetag] = useState(false);
-  const [askGptByRequest, setAskGptByRequest] = useState({});
-  const [askGptLoading, setAskGptLoading] = useState({});
   const tableRef = useRef(null);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
@@ -162,11 +148,27 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     });
   };
 
-  const sortedData = getSortedData().filter(record =>
-    Object.entries(columnFilters).every(([key, val]) =>
+  const sortedData = getSortedData().filter(record => {
+    // Column text filters
+    const passesColumnFilters = Object.entries(columnFilters).every(([key, val]) =>
       !val || String(record[key] ?? '').toLowerCase().includes(val.toLowerCase())
-    )
-  );
+    );
+    if (!passesColumnFilters) return false;
+    // GPT tab filter
+    if (gptFilter !== 'all' && gptResults) {
+      const gptEntry = gptResults[record.request_id];
+      const hasGptResult = !!(gptEntry && gptEntry.gpt_subtype);
+      if (gptFilter === 'has_gpt' && !hasGptResult) return false;
+      if (gptFilter === 'no_gpt' && hasGptResult) return false;
+      if (gptFilter === 'gpt_disagrees') {
+        if (!hasGptResult) return false;
+        const gptSub = (gptEntry.gpt_subtype || '').trim().toLowerCase();
+        const trueSub = (record.true_subtype || '').trim().toLowerCase();
+        if (gptSub === trueSub) return false;
+      }
+    }
+    return true;
+  });
   const effectivePageSize = pageSize === 'All' ? sortedData.length : pageSize;
   const pageData = sortedData.slice(currentPage * effectivePageSize, (currentPage + 1) * effectivePageSize);
   const totalPages = pageSize === 'All' ? 1 : Math.ceil(sortedData.length / effectivePageSize);
@@ -426,71 +428,6 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
     XLSX.writeFile(wb, `${tableTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.xlsx`);
   };
 
-  const getAskText = (requestId) => {
-    const v = askGptByRequest[requestId];
-    if (!v) return 'Prompt output will appear here';
-    if (v.error) return `Error: ${v.error}`;
-    if (v.subtype) {
-      const subtype = v.subtype ? `SUBTYPE: ${v.subtype}` : '';
-      const reason = v.reason ? `REASON: ${v.reason}` : '';
-      return [subtype, reason].filter(Boolean).join(' | ');
-    }
-    if (v.reason) return v.reason;
-    return v.text || 'No response text';
-  };
-
-  const handleAskGpt = async (record) => {
-    const requestId = record.request_id;
-    setAskGptLoading(prev => ({ ...prev, [requestId]: true }));
-    try {
-      const res = await fetch('/api/ask-gpt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          attributes: record.attributes,
-          metadata: record.metadata,
-        }),
-      });
-      const payload = await res.json();
-      if (!res.ok || payload.error) {
-        throw new Error(payload.error || `Request failed (${res.status})`);
-      }
-      setAskGptByRequest(prev => ({
-        ...prev,
-        [requestId]: {
-          text: payload.text || '',
-          subtype: payload.subtype || null,
-          reason: payload.reason || null,
-          error: null,
-        },
-      }));
-
-      if (runId) {
-        const persisted = {
-          verdict: payload.subtype || '',
-          reasoning: payload.reason || payload.text || '',
-        };
-        fetch('/api/gpt-results', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ run_id: runId, results: { [requestId]: persisted } }),
-        }).catch(() => {});
-      }
-    } catch (err) {
-      setAskGptByRequest(prev => ({
-        ...prev,
-        [requestId]: {
-          text: '',
-          subtype: null,
-          reason: null,
-          error: err.message || 'Failed to ask GPT',
-        },
-      }));
-    } finally {
-      setAskGptLoading(prev => ({ ...prev, [requestId]: false }));
-    }
-  };
-
   return (
     <div className="row-level-table-panel" ref={panelRef}>
       <div className="table-toolbar" ref={toolbarRef}>
@@ -531,6 +468,24 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
             </button>
           ))}
         </div>
+        {onAskGpt && (
+          <div className="gpt-filter-tabs">
+            {[
+              { key: 'all', label: 'הכל' },
+              { key: 'has_gpt', label: 'יש GPT' },
+              { key: 'no_gpt', label: 'אין GPT' },
+              { key: 'gpt_disagrees', label: 'GPT חולק' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                className={`gpt-filter-btn${gptFilter === tab.key ? ' active' : ''}`}
+                onClick={() => { setGptFilter(tab.key); setCurrentPage(0); }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="table-wrapper" ref={tableRef}>
         {toast && <div className="toast-message">{toast}</div>}
@@ -653,6 +608,34 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                     case 'pred_subtype':   return <td key={`${record.id}-pred_subtype`}>{record.pred_subtype}</td>;
                     case 'run2_pred_type': return <td key={`${record.id}-run2_pred_type`}>{record.run2_pred_type || '-'}</td>;
                     case 'run2_pred_subtype': return <td key={`${record.id}-run2_pred_subtype`}>{record.run2_pred_subtype || '-'}</td>;
+                    case 'gpt_subtype': {
+                      const gptEntry = gptResults && gptResults[record.request_id];
+                      const gptSub = gptEntry?.gpt_subtype || '';
+                      const trueSub = (record.true_subtype || '').trim().toLowerCase();
+                      const agrees = gptSub && gptSub.trim().toLowerCase() === trueSub;
+                      const clsName = !gptSub ? 'gpt-subtype-empty' : agrees ? 'gpt-subtype-agrees' : 'gpt-subtype-disagrees';
+                      return (
+                        <td key={`${record.id}-gpt_subtype`} className={`gpt-subtype-cell ${clsName}`} title={gptEntry?.reasoning || ''}>
+                          {gptSub || '-'}
+                        </td>
+                      );
+                    }
+                    case 'gpt_actions': {
+                      const isLoading = askGptLoading && askGptLoading[record.request_id];
+                      return (
+                        <td key={`${record.id}-gpt_actions`}>
+                          {onAskGpt && (
+                            <button
+                              className="ask-gpt-row-btn"
+                              disabled={isLoading}
+                              onClick={e => { e.stopPropagation(); onAskGpt(record); }}
+                            >
+                              {isLoading ? '…' : 'GPT'}
+                            </button>
+                          )}
+                        </td>
+                      );
+                    }
                     case 'attributes': {
                       const attrsObj = attrLang === 'en' ? record.en_attributes : record.attributes;
                       return <td key={`${record.id}-attributes`} className="json-td">{renderPrettyJson(attrsObj, `${record.id}-attributes`, 'Attributes', { filterEmpty: true })}</td>;
@@ -661,26 +644,7 @@ function RowLevelTable({ data, showRun2Columns = false, selectedCell = null, run
                       const metaObj = metaLang === 'en' ? record.en_metadata : record.metadata;
                       return <td key={`${record.id}-metadata`} className="json-td">{renderPrettyJson(metaObj, `${record.id}-metadata`, 'Metadata', { filterEmpty: true })}</td>;
                     }
-                    case 'ask_gpt': {
-                      const loading = !!askGptLoading[record.request_id];
-                      return (
-                        <td key={`${record.id}-ask_gpt`} className="ask-gpt-td">
-                          <div className="ask-gpt-cell">
-                            <div className="ask-gpt-placeholder">{getAskText(record.request_id)}</div>
-                            <button
-                              className="ask-gpt-row-btn"
-                              disabled={loading}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAskGpt(record);
-                              }}
-                            >
-                              {loading ? 'Asking…' : 'Ask GPT'}
-                            </button>
-                          </div>
-                        </td>
-                      );
-                    }
+
                     default:
                       return <td key={`${record.id}-${col.key}`}>-</td>;
                   }

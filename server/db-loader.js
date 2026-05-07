@@ -325,7 +325,7 @@ async function getLeaderboardByBenchmarkId(benchmarkId) {
       if (!run) return;
       try {
         const result = await query(
-          `SELECT COUNT(*) AS cnt FROM "${run.run_name}"${unknownsProgressClause}`
+          `SELECT COUNT(*) AS cnt FROM "${run.run_name}"`
         );
         row.benchmark_length = parseInt(result.rows[0].cnt) || 0;
       } catch (err) {

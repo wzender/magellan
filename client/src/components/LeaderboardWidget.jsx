@@ -69,10 +69,11 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         { key: 'benchmark_length', label: 'Total', width: 80 },
         { key: 'unknowns_count', label: 'Unknowns', width: 80 },
         { key: 'missing_count', label: 'Missing', width: 80 },
-        { key: 'real_unknown_count', label: 'Real Unknown', width: 100 },
-        { key: 'real_missing_count', label: 'Real Missing', width: 100 },
-        { key: 'false_unknown_count', label: 'False Unknown', width: 110 },
-        { key: 'false_missing_count', label: 'False Missing', width: 110 },
+        { key: 'true_unknowns_count', label: 'True Unknowns', width: 100 },
+        { key: 'false_unknowns_count', label: 'False Unknowns', width: 110 },
+        { key: 'false_knowns_count', label: 'False Knowns', width: 100 },
+        { key: 'existing_missed_count', label: 'Existing Missed', width: 110 },
+        { key: 'true_missing_count', label: 'True Missing', width: 100 },
         { key: 'reviewed_count', label: 'Reviewed', width: 80 },
       ];
     }
@@ -169,14 +170,14 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
       acc.unknowns += unknownsTotal;
       acc.gptTagged += reviewed;
       acc.taggingRemaining += untagged;
-      acc.falseUnknown += (row.false_unknown_count ?? 0);
+      acc.falseUnknowns += (row.false_unknowns_count ?? 0);
       return acc;
     }, {
       total: 0,
       unknowns: 0,
       gptTagged: 0,
       taggingRemaining: 0,
-      falseUnknown: 0,
+      falseUnknowns: 0,
     })
     : null;
 
@@ -236,12 +237,17 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             <tr className="unknowns-leaderboard-group-row">
               <th rowSpan={2} style={{ width: 180 }} title="Run country">Country</th>
               <th rowSpan={2} style={{ width: 250 }} title="Blue = GPT reviewed, green = human retagged">Progress</th>
-              <th colSpan={2} className="unknowns-conflict-subheader" title="Records where model and GPT disagree on signal strength or subtype existence">Model vs GPT</th>
+              <th colSpan={2} className="unknowns-conflict-subheader" title="pred_subtype_2 = unknown">Unknown</th>
+              <th colSpan={3} className="unknowns-known-subheader" title="pred_subtype_2 = missing">Known</th>
+              <th className="unknowns-acceptance-subheader" rowSpan={2} style={{ width: 90 }} title="Human agrees with GPT verdict">Acceptance</th>
               <th colSpan={3} className="unknowns-retagged-subheader" title="Reviewer-applied tags">Retagged</th>
             </tr>
             <tr>
-              <th style={{ width: 90 }} title="Model said unknown but GPT said known (missing or existing)" className="th-conflict">False Unknowns</th>
-              <th style={{ width: 90 }} title="Model said missing/existing but GPT said unknown" className="th-conflict">False Knowns</th>
+              <th style={{ width: 90 }} title="GPT says unknown, model said unknown" className="th-conflict">True Unknowns</th>
+              <th style={{ width: 90 }} title="GPT says known (existing/missing), model said unknown" className="th-conflict">False Unknowns</th>
+              <th style={{ width: 90 }} title="GPT says unknown, model said missing (known)" className="th-known">False Knowns</th>
+              <th style={{ width: 90 }} title="GPT says existing (in allowed list), model said missing" className="th-known">Existing Missed</th>
+              <th style={{ width: 90 }} title="GPT says missing (not in allowed list), model said missing" className="th-known">True Missing</th>
               <th style={{ width: 70 }} title="Retagged to an existing subtype" className="th-existing">Existing</th>
               <th style={{ width: 70 }} title="Retagged as Missing" className="th-missing">Missing</th>
               <th style={{ width: 70 }} title="Retagged as unknown" className="th-unknown">Unknown</th>
@@ -251,17 +257,24 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
             {sortedData.map(row => {
               const date = parseRunDate(row.run_name);
               const country = extractCountryName(row.run_name);
-              const unknownsTotal    = row.benchmark_length || 0;
-              const total            = unknownsTotal;
+              const total            = row.benchmark_length || 0;
               const reviewed         = row.reviewed_count || 0;
               const humanTagged      = row.human_tagged || 0;
               const existing         = (row.retagged_mapped_count ?? 0) + (row.missing_candidates_accepted ?? 0);
               const missingTag       = (row.retagged_suggested_count ?? 0) + (row.missing_candidates_mapped ?? 0);
               const unknownTag       = (row.retagged_unknown_count ?? 0) + (row.missing_candidates_unknown ?? 0);
-              const gptUnknownAgreeBase = row.unknowns_count ?? unknownsTotal;
-              const hastyUnknown     = row.hasty_unknown_count ?? 0;
-              const falseMissingGpt  = row.false_missing_gpt_count ?? 0;
-              const missingBase      = row.missing_count ?? (row.missing_candidates_total ?? 0);
+              // Category: Unknown
+              const unknownBase      = row.unknowns_count ?? 0;
+              const trueUnknowns     = row.true_unknowns_count ?? 0;
+              const falseUnknowns    = row.false_unknowns_count ?? 0;
+              // Category: Known
+              const knownBase        = row.missing_count ?? 0;
+              const falseKnowns      = row.false_knowns_count ?? 0;
+              const existingMissed   = row.existing_missed_count ?? 0;
+              const trueMissing      = row.true_missing_count ?? 0;
+              // Category: Acceptance
+              const acceptanceMatch  = row.acceptance_match ?? 0;
+              const acceptanceTotal  = row.acceptance_total ?? 0;
               const isSelected       = selectedRuns[0] === row.run_id;
               return (
                 <tr
@@ -287,8 +300,12 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
                       total={total}
                     />
                   </td>
-                  <td className="metric metric-conflict" title={`${hastyUnknown} of ${gptUnknownAgreeBase} unknown records where GPT found a signal`}>{hastyUnknown}/{gptUnknownAgreeBase}</td>
-                  <td className="metric metric-conflict" title={`${falseMissingGpt} of ${missingBase} missing-subtype records where GPT found no signal`}>{falseMissingGpt}/{missingBase}</td>
+                  <td className="metric metric-conflict" title={`${trueUnknowns} of ${unknownBase} unknown records where GPT also says unknown`}>{trueUnknowns}/{unknownBase}</td>
+                  <td className="metric metric-conflict" title={`${falseUnknowns} of ${unknownBase} unknown records where GPT found a signal`}>{falseUnknowns}/{unknownBase}</td>
+                  <td className="metric metric-known" title={`${falseKnowns} of ${knownBase} missing records where GPT says unknown`}>{falseKnowns}/{knownBase}</td>
+                  <td className="metric metric-known" title={`${existingMissed} of ${knownBase} missing records where GPT found existing subtype`}>{existingMissed}/{knownBase}</td>
+                  <td className="metric metric-known" title={`${trueMissing} of ${knownBase} missing records where GPT confirms missing`}>{trueMissing}/{knownBase}</td>
+                  <td className="metric metric-acceptance" title={`${acceptanceMatch} of ${acceptanceTotal} records where human agrees with GPT`}>{acceptanceMatch}/{acceptanceTotal}</td>
                   <td className="metric metric-existing">{existing}</td>
                   <td className="metric metric-missing">{missingTag}</td>
                   <td className="metric metric-unknown">{unknownTag}</td>

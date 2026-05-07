@@ -70,74 +70,99 @@ function computeUnknownsLeaderboardStats(records, gptResultsByRequestId) {
   const missingCount = rows.filter(r => (r.pred_subtype_2 || '') === PS2_MISSING).length;
   const humanTaggedCount = rows.filter(r => String(r.true_subtype || '').trim() !== '').length;
 
+  // Helper to derive GPT response_kind from a saved GPT result
+  function getResponseKind(saved) {
+    if (!saved) return '';
+    const payload = parseGptReasoningPayload(saved.reasoning || '') || {};
+    const raw = String(payload.decision || saved.response_kind || saved.verdict || '').trim().toLowerCase();
+    if (raw === 'existing' || raw === 'missing' || raw === 'unknown') return raw;
+    if (raw === 'truly_unknown') return 'unknown';
+    if (raw === 'true_missing_subtype') return 'missing';
+    if (raw === 'missing_but_mappable' || raw === 'wrong_subtype') return 'existing';
+    return '';
+  }
+
+  // Helper to get GPT suggested subtype text
+  function getGptSubtypeText(saved) {
+    if (!saved) return '';
+    const payload = parseGptReasoningPayload(saved.reasoning || '') || {};
+    return String(payload.mapped_allowed_subtype || payload.suggested_missing_subtype || saved.gpt_subtype || '').trim();
+  }
+
   let reviewedCount = 0;
-  let realUnknownCount = 0;
-  let realMissingCount = 0;
-  let falseUnknownCount = 0;
-  let falseMissingCount = 0;
-  let trulyUnknownCount = 0;
-  let wrongSubtypeCount = 0;
-  let mappableCount = 0;
-  // Model vs GPT disagreement categories
-  let hastyUnknownCount = 0;    // model=unknown, GPT found a signal
-  let falseMissingGptCount = 0; // model=missing, GPT says no signal
-  let mappableMissingCount = 0; // model=missing, GPT says existing label works
+
+  // Category: Unknown (pred_subtype_2 = 'unknown')
+  let trueUnknownsCount = 0;   // GPT response_kind = 'unknown' & pred_subtype_2 = 'unknown'
+  let falseUnknownsCount = 0;  // GPT response_kind ≠ 'unknown' & pred_subtype_2 = 'unknown'
+
+  // Category: Known (pred_subtype_2 = 'missing')
+  let falseKnownsCount = 0;    // GPT response_kind = 'unknown' & pred_subtype_2 = 'missing'
+  let existingMissedCount = 0;  // GPT response_kind = 'existing' & pred_subtype_2 = 'missing'
+  let trueMissingCount = 0;     // GPT response_kind = 'missing' & pred_subtype_2 = 'missing'
+
+  // Category: Acceptance
+  let acceptanceTotal = 0;      // records with both true_subtype and GPT result
+  let acceptanceMatch = 0;      // true_subtype agrees with GPT verdict
 
   rows.forEach(r => {
     const status = String(r.pred_subtype_2 || '').trim().toLowerCase();
-    if (status !== PS2_UNKNOWN && status !== PS2_MISSING) return;
-
     const saved = gpt[r.request_id];
     if (!saved) return;
 
-    const payload = parseGptReasoningPayload(saved.reasoning || '') || {};
-    const mappedSubtype = String(payload.mapped_allowed_subtype || '').trim();
-    const suggestedSubtype = String(payload.suggested_missing_subtype || '').trim();
-    const hasGptSubtype = Boolean(mappedSubtype || suggestedSubtype);
-    const decision = String(payload.decision || saved.verdict || '').trim();
+    const responseKind = getResponseKind(saved);
+    if (!responseKind) return;
 
-    // Count reviewed for any non-empty GPT result
     reviewedCount++;
 
+    // Category: Unknown
     if (status === PS2_UNKNOWN) {
-      if (hasGptSubtype) falseUnknownCount++;
-      else if (saved.verdict) realUnknownCount++;
-      // Model abstained but GPT found a classifiable signal
-      if (decision && decision !== 'truly_unknown') hastyUnknownCount++;
+      if (responseKind === 'unknown') trueUnknownsCount++;
+      else falseUnknownsCount++;
     }
 
+    // Category: Known
     if (status === PS2_MISSING) {
-      if (suggestedSubtype) realMissingCount++;
-      else if (mappedSubtype || saved.verdict) falseMissingCount++;
-      // Model invented a new subtype but GPT says there is no signal
-      if (decision === 'truly_unknown') falseMissingGptCount++;
-      // Model said new subtype needed but GPT says an existing label works
-      if (decision === 'wrong_subtype' || decision === 'missing_but_mappable') mappableMissingCount++;
+      if (responseKind === 'unknown') falseKnownsCount++;
+      else if (responseKind === 'existing') existingMissedCount++;
+      else if (responseKind === 'missing') trueMissingCount++;
     }
 
-    if (decision === 'truly_unknown') trulyUnknownCount++;
-    else if (decision === 'wrong_subtype') wrongSubtypeCount++;
-    else if (decision === 'missing_but_mappable') mappableCount++;
+    // Category: Acceptance
+    const trueSubtype = String(r.true_subtype || '').trim();
+    if (trueSubtype) {
+      acceptanceTotal++;
+      if (responseKind === 'unknown' && trueSubtype.toLowerCase() === 'unknown') {
+        acceptanceMatch++;
+      } else if (responseKind === 'existing') {
+        const gptSubtype = getGptSubtypeText(saved);
+        if (gptSubtype && trueSubtype.toLowerCase() === gptSubtype.toLowerCase()) {
+          acceptanceMatch++;
+        }
+      } else if (responseKind === 'missing') {
+        // Human agrees if they tagged any non-empty, non-'unknown' value (out-of-vocab)
+        if (trueSubtype.toLowerCase() !== 'unknown') {
+          acceptanceMatch++;
+        }
+      }
+    }
   });
 
   return {
-    benchmark_length: unknownsCount,
+    benchmark_length: rows.length,
     unknowns_count: unknownsCount,
     missing_count: missingCount,
     reviewed_count: reviewedCount,
     human_tagged: humanTaggedCount,
-    real_unknown_count: realUnknownCount,
-    real_missing_count: realMissingCount,
-    false_unknown_count: falseUnknownCount,
-    false_missing_count: falseMissingCount,
-    truly_unknown_count: trulyUnknownCount,
-    gpt_unknown_agree_count: trulyUnknownCount,
-    gpt_unknown_agree_rate: unknownsCount > 0 ? (trulyUnknownCount / unknownsCount) : 0,
-    wrong_subtype_count: wrongSubtypeCount,
-    mappable_count: mappableCount,
-    hasty_unknown_count: hastyUnknownCount,
-    false_missing_gpt_count: falseMissingGptCount,
-    mappable_missing_count: mappableMissingCount,
+    // Category: Unknown
+    true_unknowns_count: trueUnknownsCount,
+    false_unknowns_count: falseUnknownsCount,
+    // Category: Known
+    false_knowns_count: falseKnownsCount,
+    existing_missed_count: existingMissedCount,
+    true_missing_count: trueMissingCount,
+    // Category: Acceptance
+    acceptance_match: acceptanceMatch,
+    acceptance_total: acceptanceTotal,
   };
 }
 
@@ -331,6 +356,10 @@ function Dashboard() {
   const [recordsExpanded, setRecordsExpanded] = useState(true);
   const [loading, setLoading]           = useState(false);
   const [correctnessFilter, setCorrectnessFilter] = useState(new Set()); // Set of 'correct' | 'same_type' | 'cross_type'
+
+  /* ── GPT evaluation state (for benchmark records) ── */
+  const [evalGptResults, setEvalGptResults] = useState({}); // { request_id: { verdict, reasoning, gpt_subtype } }
+  const [evalAskGptLoading, setEvalAskGptLoading] = useState({}); // { request_id: true }
 
   /* ── Unknowns validation state ── */
   const [validationRecords, setValidationRecords] = useState([]);
@@ -893,6 +922,60 @@ function Dashboard() {
     refetch();
   }, [compareFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── GPT evaluation: fetch results when run changes ── */
+  useEffect(() => {
+    if (!selectedRunIds[0] || isUnknownsBenchmark) {
+      setEvalGptResults({});
+      return;
+    }
+    const runId = selectedRunIds[0];
+    fetch(`/api/gpt-results?run_id=${runId}`)
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setEvalGptResults(data || {}))
+      .catch(() => setEvalGptResults({}));
+  }, [selectedRunIds[0], isUnknownsBenchmark]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── GPT evaluation: ask GPT for a single record ── */
+  const handleEvalAskGpt = useCallback(async (record) => {
+    const requestId = record.request_id;
+    const runId = selectedRunIds[0];
+    if (!runId || !requestId) return;
+
+    setEvalAskGptLoading(prev => ({ ...prev, [requestId]: true }));
+    try {
+      const attributes = typeof record.attributes === 'string' ? JSON.parse(record.attributes) : record.attributes;
+      const metadata = typeof record.metadata === 'string' ? JSON.parse(record.metadata) : record.metadata;
+
+      const res = await fetch('/api/ask-gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attributes, metadata }),
+      });
+      const data = await res.json();
+      const gptSubtype = data.subtype || data.suggested_subtype || '';
+      const reasoning = data.reason || data.reasoning || data.text || '';
+
+      // Persist to backend
+      await fetch('/api/gpt-results', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          run_id: runId,
+          results: { [requestId]: { verdict: '', reasoning, gpt_subtype: gptSubtype } },
+        }),
+      });
+
+      setEvalGptResults(prev => ({
+        ...prev,
+        [requestId]: { verdict: '', reasoning, gpt_subtype: gptSubtype },
+      }));
+    } catch (err) {
+      console.error('[eval-ask-gpt]', err);
+    } finally {
+      setEvalAskGptLoading(prev => ({ ...prev, [requestId]: false }));
+    }
+  }, [selectedRunIds]);
+
   /* ── run names for summary bar ── */
   const run1Entry = leaderboard.find(e => sameRunId(e.run_id, selectedRunIds[0]));
   const run2Entry = leaderboard.find(e => sameRunId(e.run_id, selectedRunIds[1]));
@@ -1126,6 +1209,9 @@ function Dashboard() {
                       run2Name={run2Name}
                       showRun2Columns={!!recordQuery?.runId2}
                       onExport={handleExportRecords}
+                      gptResults={!isUnknownsBenchmark ? evalGptResults : null}
+                      onAskGpt={!isUnknownsBenchmark && !recordQuery?.runId2 ? handleEvalAskGpt : null}
+                      askGptLoading={evalAskGptLoading}
                     />
                   )}
                 </div>

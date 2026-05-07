@@ -185,13 +185,7 @@ function loadData() {
     const isUnknownsRun = run.benchmark_id === unknownsBenchmarkId;
     const lbEntry = leaderboard.find(l => l.run_id === run.id);
     if (lbEntry) {
-      if (isUnknownsRun) {
-        lbEntry.benchmark_length = records.filter(r =>
-          String(r.pred_subtype_2 || '').trim().toLowerCase() === PS2_UNKNOWN
-        ).length;
-      } else {
-        lbEntry.benchmark_length = records.length;
-      }
+      lbEntry.benchmark_length = records.length;
     }
 
     records.forEach((r, idx) => {
