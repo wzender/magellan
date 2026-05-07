@@ -3862,6 +3862,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .validation-table-wrap {
+  position: relative;
   overflow: auto;
   max-height: 60vh;
   border: 1px solid var(--border);
@@ -3871,6 +3872,8 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .validation-table-wrap:has(.validation-tag-dropdown.open) {
   overflow: visible;
+  min-height: 300px;
+  z-index: 50;
 }
 
 .gpt-recent-update {
@@ -3931,7 +3934,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .validation-table thead:has(.validation-tag-dropdown.open) th {
-  z-index: 210;
+  z-index: 260;
 }
 
 .validation-table thead th {
@@ -3960,6 +3963,24 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
 
 .validation-table tbody tr:hover {
+  background: var(--surface);
+}
+
+.validation-header-cell {
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.validation-header-cell > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.validation-no-rows {
+  height: 180px;
+  text-align: center;
+  color: var(--text-muted);
   background: var(--surface);
 }
 
@@ -4688,6 +4709,41 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   left: auto;
   right: 0;
   min-width: 240px;
+}
+
+.validation-text-filter-dropdown {
+  left: auto;
+  right: 0;
+  min-width: 230px;
+}
+
+.validation-text-filter-title {
+  padding: 8px 10px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.validation-text-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.validation-text-filter-clear {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.validation-text-filter-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .validation-tag-list {

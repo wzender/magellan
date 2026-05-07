@@ -214,7 +214,84 @@ function ValueCountFilterDropdown({ values, options, onChange, allLabel = 'All v
   );
 }
 
-const EMPTY_COL_FILTERS = { request_id: '', pred_subtype: '', attributes: '', metadata: '', gpt_subtype: [], true_subtype: [] };
+function TextCriteriaFilterDropdown({ value, onChange, placeholder = 'Contains...', title = 'Filter column' }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const active = Boolean(String(value || '').trim());
+
+  useEffect(() => {
+    if (menuOpen && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  return (
+    <div className="validation-tag-subtype-wrap" ref={dropdownRef}>
+      <button
+        type="button"
+        className={`validation-tag-trigger validation-tag-trigger-compact${menuOpen ? ' open' : ''}${active ? ' is-filter-active' : ''}`}
+        onClick={e => {
+          e.stopPropagation();
+          setMenuOpen(prev => !prev);
+        }}
+        title={title}
+      >
+        <span className="validation-filter-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="12" height="12">
+            <path d="M2 3h12l-4.8 5.2v3.9l-2.4 1.3V8.2L2 3z" fill="currentColor" />
+          </svg>
+        </span>
+      </button>
+      <div className={`validation-tag-dropdown validation-text-filter-dropdown${menuOpen ? ' open' : ''}`} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+        <div className="validation-text-filter-title">Text contains</div>
+        <input
+          ref={inputRef}
+          className="validation-tag-search"
+          placeholder={placeholder}
+          value={value || ''}
+          onChange={e => onChange(e.target.value)}
+          autoComplete="off"
+        />
+        <div className="validation-text-filter-actions">
+          <button
+            type="button"
+            className="validation-text-filter-clear"
+            disabled={!active}
+            onMouseDown={e => {
+              e.preventDefault();
+              onChange('');
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const EMPTY_COL_FILTERS = {
+  request_id: '',
+  attributes: '',
+  metadata: '',
+  missing_subtype: [],
+  gpt_verdict: '',
+  gpt_subtype: [],
+  true_subtype: [],
+};
 
 const GPT_VERDICT_CONFIG = {
   unknown:  { label: 'Unknown',          cls: 'gpt-verdict-truly-unknown' },
@@ -253,6 +330,14 @@ function getAskText(result) {
     return [subtype, reason].filter(Boolean).join(' | ');
   }
   return 'No response text';
+}
+
+function getGptVerdictFilterText(result) {
+  if (!result) return 'unreviewed';
+  if (result.error) return `error ${explainGptError(result.error)} ${result.error}`;
+  const kind = getGptResponseKind(result);
+  const label = GPT_VERDICT_CONFIG[kind]?.label || result.responseKind || result.decision || 'Unreviewed';
+  return `${label} ${kind || ''} ${result.reason || ''} ${result.text || ''}`;
 }
 
 function explainGptError(rawError) {
@@ -790,9 +875,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   }, [
     verdictFilter,
     deferredColFilters.request_id,
-    deferredColFilters.pred_subtype,
     deferredColFilters.attributes,
     deferredColFilters.metadata,
+    deferredColFilters.missing_subtype,
+    deferredColFilters.gpt_verdict,
     deferredColFilters.gpt_subtype,
     deferredColFilters.true_subtype,
   ]);
@@ -839,11 +925,118 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const gridFilterLabel = gridFilterParts.join(' | ');
 
   const requestIdFilter = deferredColFilters.request_id.toLowerCase();
-  const predSubtypeFilter = deferredColFilters.pred_subtype.toLowerCase();
   const attributesFilter = deferredColFilters.attributes.toLowerCase();
   const metadataFilter = deferredColFilters.metadata.toLowerCase();
+  const missingSubtypeFilter = Array.isArray(deferredColFilters.missing_subtype) ? deferredColFilters.missing_subtype : [];
+  const gptVerdictFilter = deferredColFilters.gpt_verdict.toLowerCase();
   const gptSubtypeFilter = Array.isArray(deferredColFilters.gpt_subtype) ? deferredColFilters.gpt_subtype : [];
   const trueSubtypeFilter = Array.isArray(deferredColFilters.true_subtype) ? deferredColFilters.true_subtype : [];
+
+  const missingSubtypeFilterOptions = useMemo(() => {
+    let next = preparedRecords;
+
+    if (gridFilter && (gridFilter.trueType !== null || gridFilter.trueSubtype !== null || gridFilter.predSubtype !== null)) {
+      next = next.filter(r => {
+        const trueSubtype = verdicts[r.request_id] ?? '';
+        const trueType = trueSubtype === '' ? NOT_RETAGGED_LABEL : (subtypeToType[trueSubtype] || '');
+
+        if (gridFilter.trueType !== null && gridFilter.trueType !== undefined && trueType !== gridFilter.trueType) return false;
+        if (gridFilter.trueSubtype !== null && gridFilter.trueSubtype !== undefined && trueSubtype !== gridFilter.trueSubtype) return false;
+        if (gridFilter.predSubtype === '__cross_type__' && r.pred_type === trueType) return false;
+        if (gridFilter.predSubtype && gridFilter.predSubtype !== '__cross_type__' && r.pred_subtype !== gridFilter.predSubtype) return false;
+        return true;
+      });
+    }
+
+    if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
+    if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
+    if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (gptVerdictFilter) next = next.filter(r => getGptVerdictFilterText(gptResults[r.request_id]).toLowerCase().includes(gptVerdictFilter));
+    if (gptSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = getGptSubtype(gptResults[r.request_id]);
+        return gptSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+    if (trueSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(verdicts[r.request_id] || '').trim();
+        return trueSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+
+    if (verdictFilter !== 'all') {
+      if (verdictFilter === 'untagged') {
+        next = next.filter(r => !verdicts[r.request_id]);
+      } else if (verdictFilter === 'only_missing') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v !== '' && v !== 'none' && v !== 'unknown';
+        });
+      } else if (verdictFilter === 'only_unknown') {
+        next = next.filter(r => {
+          const v = r.__missingSubtypeLower;
+          return v === '' || v === 'none' || v === 'unknown';
+        });
+      } else if (verdictFilter === 'real_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
+      } else if (verdictFilter === 'real_missing') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
+      } else if (verdictFilter === 'false_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else if (verdictFilter === 'gpt_error') {
+        next = next.filter(r => Boolean(gptResults[r.request_id]?.error));
+      } else if (verdictFilter === 'weak_signal') {
+        next = next.filter(r =>
+          (r.pred_subtype_2 || '') === PS2_MISSING &&
+          getGptResponseKind(gptResults[r.request_id]) === 'unknown'
+        );
+      } else if (verdictFilter === 'false_missing') {
+        next = next.filter(r => {
+          const isPredMissing = (r.pred_subtype_2 || '') === PS2_MISSING;
+          return isPredMissing && getGptResponseKind(gptResults[r.request_id]) === 'existing';
+        });
+      } else if (verdictFilter === 'truly_unknown') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'unknown');
+      } else if (verdictFilter === 'true_missing_subtype') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'missing');
+      } else if (verdictFilter === 'missing_but_mappable') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else if (verdictFilter === 'wrong_subtype') {
+        next = next.filter(r => getGptResponseKind(gptResults[r.request_id]) === 'existing');
+      } else {
+        next = next.filter(r => verdicts[r.request_id] === verdictFilter);
+      }
+    }
+
+    const counts = next.reduce((acc, record) => {
+      const subtype = String(record.missing_subtype || '').trim();
+      const key = subtype ? subtype : '__EMPTY__';
+      acc.set(key, (acc.get(key) || 0) + 1);
+      return acc;
+    }, new Map());
+
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({
+        value,
+        count,
+        label: value === '__EMPTY__' ? 'None' : value,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [
+    preparedRecords,
+    gridFilter,
+    verdicts,
+    subtypeToType,
+    requestIdFilter,
+    attributesFilter,
+    metadataFilter,
+    gptVerdictFilter,
+    gptSubtypeFilter,
+    trueSubtypeFilter,
+    verdictFilter,
+    gptResults,
+  ]);
 
   const gptSubtypeFilterOptions = useMemo(() => {
     let next = preparedRecords;
@@ -862,9 +1055,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
-    if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
     if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
     if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (missingSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(r.missing_subtype || '').trim();
+        return missingSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+    if (gptVerdictFilter) next = next.filter(r => getGptVerdictFilterText(gptResults[r.request_id]).toLowerCase().includes(gptVerdictFilter));
     if (trueSubtypeFilter.length > 0) {
       next = next.filter(r => {
         const subtype = String(verdicts[r.request_id] || '').trim();
@@ -936,9 +1135,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     verdicts,
     subtypeToType,
     requestIdFilter,
-    predSubtypeFilter,
     attributesFilter,
     metadataFilter,
+    missingSubtypeFilter,
+    gptVerdictFilter,
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
@@ -962,9 +1162,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
-    if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
     if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
     if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (missingSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(r.missing_subtype || '').trim();
+        return missingSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+    if (gptVerdictFilter) next = next.filter(r => getGptVerdictFilterText(gptResults[r.request_id]).toLowerCase().includes(gptVerdictFilter));
     if (gptSubtypeFilter.length > 0) {
       next = next.filter(r => {
         const subtype = getGptSubtype(gptResults[r.request_id]);
@@ -1036,9 +1242,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     verdicts,
     subtypeToType,
     requestIdFilter,
-    predSubtypeFilter,
     attributesFilter,
     metadataFilter,
+    missingSubtypeFilter,
+    gptVerdictFilter,
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
@@ -1063,9 +1270,15 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
 
     if (requestIdFilter) next = next.filter(r => r.__requestIdLower.includes(requestIdFilter));
-    if (predSubtypeFilter) next = next.filter(r => r.__stage1Lower.includes(predSubtypeFilter));
     if (attributesFilter) next = next.filter(r => r.__attributesLower.includes(attributesFilter));
     if (metadataFilter) next = next.filter(r => r.__metadataLower.includes(metadataFilter));
+    if (missingSubtypeFilter.length > 0) {
+      next = next.filter(r => {
+        const subtype = String(r.missing_subtype || '').trim();
+        return missingSubtypeFilter.some(selected => selected === '__EMPTY__' ? !subtype : subtype === selected);
+      });
+    }
+    if (gptVerdictFilter) next = next.filter(r => getGptVerdictFilterText(gptResults[r.request_id]).toLowerCase().includes(gptVerdictFilter));
     if (gptSubtypeFilter.length > 0) {
       next = next.filter(r => {
         const subtype = getGptSubtype(gptResults[r.request_id]);
@@ -1182,9 +1395,10 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     verdicts,
     subtypeToType,
     requestIdFilter,
-    predSubtypeFilter,
     attributesFilter,
     metadataFilter,
+    missingSubtypeFilter,
+    gptVerdictFilter,
     gptSubtypeFilter,
     trueSubtypeFilter,
     verdictFilter,
@@ -2045,11 +2259,19 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
             {/* Column headers */}
             <tr>
                 <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
-                  Request ID{sortIndicator('request_id')}
+                  <div className="header-cell validation-header-cell">
+                    <span>Request ID{sortIndicator('request_id')}</span>
+                    <TextCriteriaFilterDropdown
+                      value={colFilters.request_id}
+                      onChange={val => setColFilter('request_id', val)}
+                      placeholder="Contains request ID..."
+                      title="Filter request ID"
+                    />
+                  </div>
                 </th>
                 <th style={{ width: 250 }}>
-                  <div className="header-cell">
-                    Attributes
+                  <div className="header-cell validation-header-cell">
+                    <span>Attributes</span>
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${attrLang === 'original' ? ' active' : ''}`} onClick={() => setAttrLang('original')}>orig</button>
                       <button className={`attr-lang-btn${attrLang === 'en' ? ' active' : ''}`} onClick={() => setAttrLang('en')}>EN</button>
@@ -2064,11 +2286,17 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                           : 'GPT'}
                       </button>
                     </div>
+                    <TextCriteriaFilterDropdown
+                      value={colFilters.attributes}
+                      onChange={val => setColFilter('attributes', val)}
+                      placeholder="Contains attributes..."
+                      title="Filter attributes"
+                    />
                   </div>
                 </th>
                 <th style={{ width: 250 }}>
-                  <div className="header-cell">
-                    Metadata
+                  <div className="header-cell validation-header-cell">
+                    <span>Metadata</span>
                     <div className="attr-lang-toggle" onClick={e => e.stopPropagation()}>
                       <button className={`attr-lang-btn${metaLang === 'original' ? ' active' : ''}`} onClick={() => setMetaLang('original')}>orig</button>
                       <button className={`attr-lang-btn${metaLang === 'en' ? ' active' : ''}`} onClick={() => setMetaLang('en')}>EN</button>
@@ -2083,16 +2311,40 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                           : 'GPT'}
                       </button>
                     </div>
+                    <TextCriteriaFilterDropdown
+                      value={colFilters.metadata}
+                      onChange={val => setColFilter('metadata', val)}
+                      placeholder="Contains metadata..."
+                      title="Filter metadata"
+                    />
                   </div>
                 </th>
                 <th style={{ width: 170, cursor: 'pointer' }} onClick={() => handleSort('missing_subtype')}>
-                  Missing Subtype{sortIndicator('missing_subtype')}
+                  <div className="header-cell validation-header-cell">
+                    <span>Missing Subtype{sortIndicator('missing_subtype')}</span>
+                    <ValueCountFilterDropdown
+                      values={colFilters.missing_subtype}
+                      options={missingSubtypeFilterOptions}
+                      onChange={val => setColFilter('missing_subtype', val)}
+                      allLabel="All missing subtypes"
+                      compact
+                      title="Filter missing subtype"
+                    />
+                  </div>
                 </th>
                 <th style={{ width: 360, cursor: 'pointer' }} onClick={() => handleSort('gpt_verdict')}>
-                  GPT Verdict{sortIndicator('gpt_verdict')}
+                  <div className="header-cell validation-header-cell">
+                    <span>GPT Verdict{sortIndicator('gpt_verdict')}</span>
+                    <TextCriteriaFilterDropdown
+                      value={colFilters.gpt_verdict}
+                      onChange={val => setColFilter('gpt_verdict', val)}
+                      placeholder="Contains verdict..."
+                      title="Filter GPT verdict"
+                    />
+                  </div>
                 </th>
                 <th style={{ width: 110, cursor: 'pointer' }} onClick={() => handleSort('gpt_subtype')}>
-                  <div className="header-cell">
+                  <div className="header-cell validation-header-cell">
                     <span>GPT Subtype{sortIndicator('gpt_subtype')}</span>
                     <ValueCountFilterDropdown
                       values={colFilters.gpt_subtype}
@@ -2105,7 +2357,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   </div>
                 </th>
                 <th style={{ width: 160, cursor: 'pointer' }} onClick={() => handleSort('verdict')}>
-                  <div className="header-cell">
+                  <div className="header-cell validation-header-cell">
                     <span>True Subtype{sortIndicator('verdict')}</span>
                     <ValueCountFilterDropdown
                       values={colFilters.true_subtype}
@@ -2121,6 +2373,11 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
               </tr>
           </thead>
           <tbody>
+            {pageData.length === 0 && (
+              <tr>
+                <td className="validation-no-rows" colSpan={7}>No rows match the current filters.</td>
+              </tr>
+            )}
             {pageData.map(r => {
               const verdict = verdicts[r.request_id] || '';
               const gpt = gptResults[r.request_id];

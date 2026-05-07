@@ -425,14 +425,11 @@ function LeaderboardWidget({ data, onRunSelect, onRunToggle, selectedRuns = [], 
         </table>
       )}
       </div>
-      <div className="leaderboard-hint">
-        {isUnknowns
-          ? 'Click a row to review records and manage missing subtype decisions for that country.'
-          : <>
-              Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
-            </>
-        }
-      </div>
+      {!isUnknowns && (
+        <div className="leaderboard-hint">
+          Click a row to view its <strong>Accuracy Breakdown</strong>. Use the <strong>Compare</strong> checkboxes to select 2 runs and see <strong>What Changed</strong> between them.
+        </div>
+      )}
     </div>
   );
 }
