@@ -710,8 +710,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
   const trueSubtypeSortHoldTimerRef = useRef(null);
   const toolbarRef = useRef(null);
   const panelRef = useRef(null);
-  const theadFirstRowRef = useRef(null);
-  const filterRowRef = useRef(null);
 
   const PAGE_SIZE_OPTIONS = [20, 50, 'All'];
   const ROW_HEIGHT_OPTIONS = ['1', '2', '3', 'Auto'];
@@ -733,24 +731,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
     }
     window.addEventListener('resize', updateToolbarHeight);
     return () => window.removeEventListener('resize', updateToolbarHeight);
-  }, []);
-
-  useEffect(() => {
-    const row = theadFirstRowRef.current;
-    const filterRow = filterRowRef.current;
-    if (!row || !filterRow) return;
-    const update = () => {
-      const h = `${row.getBoundingClientRect().height}px`;
-      filterRow.querySelectorAll('th').forEach(th => { th.style.top = h; });
-    };
-    update();
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(update);
-      observer.observe(row);
-      return () => observer.disconnect();
-    }
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
   }, []);
 
   useEffect(() => () => {
@@ -2063,7 +2043,7 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
         <table className="validation-table records-table">
           <thead>
             {/* Column headers */}
-            <tr ref={theadFirstRowRef}>
+            <tr>
                 <th style={{ width: 120, cursor: 'pointer' }} onClick={() => handleSort('request_id')}>
                   Request ID{sortIndicator('request_id')}
                 </th>
@@ -2139,16 +2119,6 @@ function ValidationPanel({ runId, runName, country, countrySubtypes, records, ve
                   </div>
                 </th>
               </tr>
-            {/* Column filters */}
-            <tr className="col-filter-row" ref={filterRowRef}>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.request_id} onChange={e => setColFilter('request_id', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.attributes} onChange={e => setColFilter('attributes', e.target.value)} /></th>
-              <th><input className="col-filter-input" placeholder="filter…" value={colFilters.metadata} onChange={e => setColFilter('metadata', e.target.value)} /></th>
-              <th />
-              <th />
-              <th />
-              <th />
-            </tr>
           </thead>
           <tbody>
             {pageData.map(r => {
